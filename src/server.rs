@@ -36,7 +36,7 @@ struct Listener {
     ///
     /// When handlers complete processing a connection, the permit is returned
     /// to the semaphore.
-    limit_connections: Arc<Semaphore>,
+    // limit_connections: Arc<Semaphore>,
 
     /// Broadcasts a shutdown signal to all active connections.
     ///
@@ -89,7 +89,7 @@ struct Handler {
     /// When the handler is dropped, a permit is returned to this semaphore. If
     /// the listener is waiting for connections to close, it will be notified of
     /// the newly available permit and resume accepting connections.
-    limit_connections: Arc<Semaphore>,
+    // limit_connections: Arc<Semaphore>,
 
     /// Listen for shutdown notifications.
     ///
@@ -117,7 +117,7 @@ struct Handler {
 /// production (you'd think that all the disclaimers would make it obvious that
 /// this is not a serious project... but I thought that about mini-http as
 /// well).
-const MAX_CONNECTIONS: usize = 250;
+const MAX_CONNECTIONS: usize = 5000;
 
 /// Run the mini-redis server.
 ///
@@ -141,7 +141,7 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) {
     let mut server = Listener {
         listener,
         db_holder: DbDropGuard::new(),
-        limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
+        // limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
         notify_shutdown,
         shutdown_complete_tx,
         shutdown_complete_rx,
@@ -240,7 +240,7 @@ impl Listener {
             //
             // `acquire()` returns `Err` when the semaphore has been closed. We
             // don't ever close the sempahore, so `unwrap()` is safe.
-            self.limit_connections.acquire().await.unwrap().forget();
+            // self.limit_connections.acquire().await.unwrap().forget();
 
             // Accept a new socket. This will attempt to perform error handling.
             // The `accept` method internally attempts to recover errors, so an
@@ -259,7 +259,7 @@ impl Listener {
                 // The connection state needs a handle to the max connections
                 // semaphore. When the handler is done processing the
                 // connection, a permit is added back to the semaphore.
-                limit_connections: self.limit_connections.clone(),
+                // limit_connections: self.limit_connections.clone(),
 
                 // Receive shutdown notifications.
                 shutdown: Shutdown::new(self.notify_shutdown.subscribe()),
@@ -274,6 +274,7 @@ impl Listener {
             tokio::spawn(async move {
                 // Process the connection. If an error is encountered, log it.
                 if let Err(err) = handler.run().await {
+                    println!("Connection Error: {:?}", &err);
                     error!(cause = ?err, "connection error");
                 }
             });
@@ -297,6 +298,7 @@ impl Listener {
             match self.listener.accept().await {
                 Ok((socket, _)) => return Ok(socket),
                 Err(err) => {
+                    println!("Accept Error! {:?}", &err);
                     if backoff > 64 {
                         // Accept has failed too many times. Return the error.
                         return Err(err.into());
@@ -393,6 +395,7 @@ impl Drop for Handler {
         // If `add_permit` was called at the end of the `run` function and some
         // bug causes a panic. The permit would never be returned to the
         // semaphore.
-        self.limit_connections.add_permits(1);
+        // self.limit_connections.add_permits(1);
+        println!("Drop Handler")
     }
 }

@@ -38,7 +38,7 @@ impl Connection {
             // this is fine. However, real applications will want to tune this
             // value to their specific use case. There is a high likelihood that
             // a larger read buffer will work better.
-            buffer: BytesMut::with_capacity(4 * 1024),
+            buffer: BytesMut::with_capacity(32 * 1024),
         }
     }
 
@@ -72,8 +72,10 @@ impl Connection {
                 // there is, this means that the peer closed the socket while
                 // sending a frame.
                 if self.buffer.is_empty() {
+                    println!("Buffer empty, return None");
                     return Ok(None);
                 } else {
+                    println!("Connect reset by peer, reads 0 bytes");
                     return Err("connection reset by peer".into());
                 }
             }

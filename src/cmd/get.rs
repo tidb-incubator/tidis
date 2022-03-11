@@ -1,4 +1,4 @@
-use crate::{Connection, Db, Frame, Parse};
+use crate::{Connection, Db, Frame, Parse, tikv::string::do_async_rawkv_get};
 
 use bytes::Bytes;
 use tracing::{debug, instrument};
@@ -63,6 +63,7 @@ impl Get {
     #[instrument(skip(self, db, dst))]
     pub(crate) async fn apply(self, db: &Db, dst: &mut Connection) -> crate::Result<()> {
         // Get the value from the shared database state
+        /*
         let response = if let Some(value) = db.get(&self.key) {
             // If a value is present, it is written to the client in "bulk"
             // format.
@@ -70,6 +71,11 @@ impl Get {
         } else {
             // If there is no value, `Null` is written.
             Frame::Null
+        };
+        */
+        let response = match do_async_rawkv_get(&self.key).await {
+            Ok(val) => val,
+            Err(e) => Frame::Error(e.to_string()),
         };
 
         debug!(?response);

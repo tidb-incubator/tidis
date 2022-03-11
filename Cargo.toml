@@ -30,6 +30,9 @@ tokio-stream = "0.1"
 tracing = "0.1.13"
 tracing-futures = { version = "0.2.3" }
 tracing-subscriber = "0.2.2"
+tikv-client = { git = "https://github.com/blacktear23/client-rust.git", branch = "try-optimize" }
+lazy_static = "1.4.0"
+thiserror = "1"
 
 [dev-dependencies]
 # Enable test-utilities in dev mode only. This is mostly for tests.

@@ -1,4 +1,5 @@
 use crate::cmd::{Parse, ParseError};
+use crate::tikv::string::do_async_rawkv_put;
 use crate::{Connection, Db, Frame};
 
 use bytes::Bytes;
@@ -126,11 +127,17 @@ impl Set {
     /// to execute a received command.
     #[instrument(skip(self, db, dst))]
     pub(crate) async fn apply(self, db: &Db, dst: &mut Connection) -> crate::Result<()> {
+        /*
         // Set the value in the shared database state.
         db.set(self.key, self.value, self.expire);
-
         // Create a success response and write it to `dst`.
         let response = Frame::Simple("OK".to_string());
+        */
+        let val = String::from_utf8(self.value.to_vec())?;
+        let response = match do_async_rawkv_put(&self.key, &val).await {
+            Ok(val) => val,
+            Err(e) => Frame::Error(e.to_string()),
+        };
         debug!(?response);
         dst.write_frame(&response).await?;
 

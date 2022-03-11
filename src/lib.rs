@@ -25,6 +25,10 @@
 //!   intermediate representation between a "command" and the byte
 //!   representation.
 
+#[macro_use]
+extern crate lazy_static;
+extern crate thiserror;
+
 pub mod blocking_client;
 pub mod client;
 
@@ -51,6 +55,10 @@ pub use buffer::{buffer, Buffer};
 
 mod shutdown;
 use shutdown::Shutdown;
+
+mod tikv;
+pub use tikv::set_instance_id;
+pub use tikv::do_async_raw_connect;
 
 /// Default port that a redis server listens on.
 ///

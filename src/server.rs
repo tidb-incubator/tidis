@@ -3,13 +3,14 @@
 //! Provides an async `run` function that listens for inbound connections,
 //! spawning a task per connection.
 
+use crate::metrics::{CURRENT_CONNECTION_COUNTER, REQUEST_CMD_HANDLE_TIME, REQUEST_CMD_FINISH_COUNTER, REQUEST_CMD_COUNTER, REQUEST_COUNTER};
 use crate::{Command, Connection, Db, DbDropGuard, Shutdown};
 
 use std::future::Future;
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, Semaphore};
-use tokio::time::{self, Duration};
+use tokio::time::{self, Duration, Instant};
 use tracing::{debug, error, info, instrument};
 
 /// Server listener state. Created in the `run` call. It includes a `run` method
@@ -273,6 +274,7 @@ impl Listener {
             // asynchronous green threads and are executed concurrently.
             tokio::spawn(async move {
                 // Process the connection. If an error is encountered, log it.
+                CURRENT_CONNECTION_COUNTER.inc();
                 if let Err(err) = handler.run().await {
                     println!("Connection Error: {:?}", &err);
                     error!(cause = ?err, "connection error");
@@ -356,6 +358,10 @@ impl Handler {
             // error if the frame is not a valid redis command or it is an
             // unsupported command.
             let cmd = Command::from_frame(frame)?;
+            let cmd_name = cmd.get_name().to_owned().clone();
+            let start_at = Instant::now();
+            REQUEST_COUNTER.inc();
+            REQUEST_CMD_COUNTER.with_label_values(&[&cmd_name]).inc();
 
             // Logs the `cmd` object. The syntax here is a shorthand provided by
             // the `tracing` crate. It can be thought of as similar to:
@@ -377,10 +383,19 @@ impl Handler {
             // peer.
             cmd.apply(&self.db, &mut self.connection, &mut self.shutdown)
                 .await?;
+            let duration = Instant::now() - start_at;
+            REQUEST_CMD_HANDLE_TIME.with_label_values(&[&cmd_name]).observe(duration_to_sec(duration));
+            REQUEST_CMD_FINISH_COUNTER.with_label_values(&[&cmd_name]).inc();
         }
 
         Ok(())
     }
+}
+
+#[inline]
+pub fn duration_to_sec(d: Duration) -> f64 {
+    let nanos = f64::from(d.subsec_nanos());
+    d.as_secs() as f64 + (nanos / 1_000_000_000.0)
 }
 
 impl Drop for Handler {
@@ -396,6 +411,7 @@ impl Drop for Handler {
         // bug causes a panic. The permit would never be returned to the
         // semaphore.
         // self.limit_connections.add_permits(1);
-        println!("Drop Handler")
+        // println!("Drop Handler")
+        CURRENT_CONNECTION_COUNTER.dec();
     }
 }

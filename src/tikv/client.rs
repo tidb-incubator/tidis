@@ -1,5 +1,7 @@
 use tikv_client::{RawClient, Value, Key, Error, BoundRange, KvPair, ColumnFamily};
 
+use crate::metrics::TIKV_CLIENT_RETRIES;
+
 use super::sleep;
 
 
@@ -21,13 +23,17 @@ impl RawClientWrapper {
     }
 
     fn error_retryable(&self, err: &Error) -> bool {
-        match err {
+        let ret = match err {
             Error::RegionError(_) => true,
             Error::EntryNotFoundInRegionCache => true,
             Error::KvError { message: _ } => true,
             Error::MultipleKeyErrors(_) => true,
             _ => false,
+        };
+        if ret {
+            TIKV_CLIENT_RETRIES.inc();
         }
+        ret
     }
 
     pub async fn get(&self, key: Key) -> Result<Option<Value>, Error> {

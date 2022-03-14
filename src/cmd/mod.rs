@@ -53,7 +53,6 @@ impl Command {
         // is read and converted to lower cases in order to do case sensitive
         // matching.
         let command_name = parse.next_string()?.to_lowercase();
-
         // Match the command name, delegating the rest of the parsing to the
         // specific command.
         let command = match &command_name[..] {

@@ -27,7 +27,11 @@
 
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate prometheus;
+
 extern crate thiserror;
+extern crate hyper;
 
 pub mod blocking_client;
 pub mod client;
@@ -55,6 +59,9 @@ pub use buffer::{buffer, Buffer};
 
 mod shutdown;
 use shutdown::Shutdown;
+
+mod metrics;
+pub use metrics::PrometheusServer;
 
 mod tikv;
 pub use tikv::set_instance_id;

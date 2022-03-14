@@ -72,10 +72,10 @@ impl Connection {
                 // there is, this means that the peer closed the socket while
                 // sending a frame.
                 if self.buffer.is_empty() {
-                    println!("Buffer empty, return None");
+                    // println!("Buffer empty, return None");
                     return Ok(None);
                 } else {
-                    println!("Connect reset by peer, reads 0 bytes");
+                    // println!("Connect reset by peer, reads 0 bytes");
                     return Err("connection reset by peer".into());
                 }
             }

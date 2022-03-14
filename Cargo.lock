@@ -831,7 +831,9 @@ dependencies = [
  "async-stream",
  "atoi",
  "bytes",
+ "hyper",
  "lazy_static",
+ "prometheus 0.13.0",
  "structopt",
  "thiserror",
  "tikv-client",
@@ -1190,6 +1192,21 @@ dependencies = [
  "procfs",
  "protobuf",
  "reqwest",
+ "thiserror",
+]
+
+[[package]]
+name = "prometheus"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7f64969ffd5dd8f39bd57a68ac53c163a095ed9d0fb707146da1b27025a3504"
+dependencies = [
+ "cfg-if",
+ "fnv",
+ "lazy_static",
+ "memchr",
+ "parking_lot 0.11.2",
+ "protobuf",
  "thiserror",
 ]
 
@@ -1783,7 +1800,7 @@ dependencies = [
  "grpcio",
  "lazy_static",
  "log",
- "prometheus",
+ "prometheus 0.12.0",
  "rand 0.8.5",
  "regex",
  "semver",

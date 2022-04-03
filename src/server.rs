@@ -7,8 +7,7 @@ use crate::metrics::{CURRENT_CONNECTION_COUNTER, REQUEST_CMD_HANDLE_TIME, REQUES
 use crate::{Command, Connection, Db, DbDropGuard, Shutdown};
 
 use std::future::Future;
-use std::sync::Arc;
-use tokio::net::{TcpListener, TcpStream};
+use async_std::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, Semaphore};
 use tokio::time::{self, Duration, Instant};
 use tracing::{debug, error, info, instrument};

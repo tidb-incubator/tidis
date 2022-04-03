@@ -9,7 +9,7 @@
 use mini_redis::{server, DEFAULT_PORT, set_instance_id, do_async_raw_connect, PrometheusServer};
 
 use structopt::StructOpt;
-use tokio::net::TcpListener;
+use async_std::net::TcpListener;
 use tokio::signal;
 
 #[tokio::main]

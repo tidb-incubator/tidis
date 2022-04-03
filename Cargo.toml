@@ -35,6 +35,7 @@ lazy_static = "1.4.0"
 thiserror = "1"
 prometheus = "0.13.0"
 hyper = { version = "0.14.17", features = ["full"] }
+async-std = { version = "1.11.0", features = ["unstable"] }
 
 [dev-dependencies]
 # Enable test-utilities in dev mode only. This is mostly for tests.

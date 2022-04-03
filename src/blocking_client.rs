@@ -4,7 +4,7 @@
 
 use bytes::Bytes;
 use std::time::Duration;
-use tokio::net::ToSocketAddrs;
+use async_std::net::ToSocketAddrs;
 use tokio::runtime::Runtime;
 
 pub use crate::client::Message;

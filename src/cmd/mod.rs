@@ -13,6 +13,8 @@ pub use publish::Publish;
 mod set;
 pub use set::Set;
 
+mod setnx;
+pub use setnx::SetNX;
 
 mod subscribe;
 pub use subscribe::{Subscribe, Unsubscribe};
@@ -34,6 +36,7 @@ pub enum Command {
     Mget(Mget),
     Publish(Publish),
     Set(Set),
+    SetNX(SetNX),
     Mset(Mset),
     Subscribe(Subscribe),
     Unsubscribe(Unsubscribe),
@@ -68,6 +71,7 @@ impl Command {
             "get" => Command::Get(Get::parse_frames(&mut parse)?),
             "publish" => Command::Publish(Publish::parse_frames(&mut parse)?),
             "set" => Command::Set(Set::parse_frames(&mut parse)?),
+            "setnx" => Command::SetNX(SetNX::parse_frames(&mut parse)?),
             "subscribe" => Command::Subscribe(Subscribe::parse_frames(&mut parse)?),
             "unsubscribe" => Command::Unsubscribe(Unsubscribe::parse_frames(&mut parse)?),
             "ping" => Command::Ping(Ping::parse_frames(&mut parse)?),
@@ -109,6 +113,7 @@ impl Command {
             Get(cmd) => cmd.apply(db, dst).await,
             Publish(cmd) => cmd.apply(db, dst).await,
             Set(cmd) => cmd.apply(db, dst).await,
+            SetNX(cmd) => cmd.apply(db, dst).await,
             Subscribe(cmd) => cmd.apply(db, dst, shutdown).await,
             Ping(cmd) => cmd.apply(dst).await,
             Mget(cmd) => cmd.apply(dst).await,
@@ -126,6 +131,7 @@ impl Command {
             Command::Get(_) => "get",
             Command::Publish(_) => "pub",
             Command::Set(_) => "set",
+            Command::SetNX(_) => "setnx",
             Command::Subscribe(_) => "subscribe",
             Command::Unsubscribe(_) => "unsubscribe",
             Command::Ping(_) => "ping",

@@ -49,3 +49,14 @@ pub async fn do_async_rawkv_batch_put(kvs: Vec<KvPair>) -> AsyncResult<Frame> {
     let _ = client.batch_put(kvs).await?;
     Ok(Frame::Integer(num_keys as u64))
 }
+
+pub async fn do_async_rawkv_put_not_exists(key: &str, value: Bytes) -> AsyncResult<Frame> {
+    let client = get_client()?;
+    let ekey = KeyEncoder::new().encode_string(key);
+    let (_, swapped) = client.compare_and_swap(ekey, None.into(), value.to_vec()).await?;
+    if swapped {
+        Ok(Frame::Integer(1))
+    } else {
+        Ok(Frame::Integer(0))
+    } 
+}

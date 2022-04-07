@@ -1,5 +1,5 @@
 use crate::cmd::{Parse, ParseError};
-use crate::tikv::string::do_async_rawkv_put;
+use crate::tikv::string::{do_async_rawkv_put,do_async_rawkv_put_not_exists};
 use crate::{Connection, Db, Frame};
 
 use bytes::Bytes;
@@ -137,16 +137,20 @@ impl Set {
     /// to execute a received command.
     #[instrument(skip(self, db, dst))]
     pub(crate) async fn apply(self, db: &Db, dst: &mut Connection) -> crate::Result<()> {
-        /*
-        // Set the value in the shared database state.
-        db.set(self.key, self.value, self.expire);
-        // Create a success response and write it to `dst`.
-        let response = Frame::Simple("OK".to_string());
-        */
-        let val = String::from_utf8(self.value.to_vec())?;
-        let response = match do_async_rawkv_put(&self.key, self.value).await {
-            Ok(val) => val,
-            Err(e) => Frame::Error(e.to_string()),
+        
+        let response = match self.nx {
+            Some(_) => {
+                match do_async_rawkv_put_not_exists(&self.key, self.value).await {
+                    Ok(val) => val,
+                    Err(e) => Frame::Error(e.to_string()),
+                }
+            },
+            None => {
+                match do_async_rawkv_put(&self.key, self.value).await {
+                    Ok(val) => val,
+                    Err(e) => Frame::Error(e.to_string()),
+                }
+            },
         };
         debug!(?response);
         dst.write_frame(&response).await?;
@@ -154,25 +158,8 @@ impl Set {
         Ok(())
     }
 
-    /// Converts the command into an equivalent `Frame`.
-    ///
-    /// This is called by the client when encoding a `Set` command to send to
-    /// the server.
     pub(crate) fn into_frame(self) -> Frame {
         let mut frame = Frame::array();
-        frame.push_bulk(Bytes::from("set".as_bytes()));
-        frame.push_bulk(Bytes::from(self.key.into_bytes()));
-        frame.push_bulk(self.value);
-        if let Some(ms) = self.expire {
-            // Expirations in Redis procotol can be specified in two ways
-            // 1. SET key value EX seconds
-            // 2. SET key value PX milliseconds
-            // We the second option because it allows greater precision and
-            // src/bin/cli.rs parses the expiration argument as milliseconds
-            // in duration_from_ms_str()
-            frame.push_bulk(Bytes::from("px".as_bytes()));
-            frame.push_int(ms.as_millis() as u64);
-        }
         frame
     }
 }

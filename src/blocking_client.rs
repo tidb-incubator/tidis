@@ -200,7 +200,7 @@ impl BlockingClient {
     ///     println!("Got = {:?}", val);
     /// }
     /// ```
-    pub fn publish(&mut self, channel: &str, message: Bytes) -> crate::Result<u64> {
+    pub fn publish(&mut self, channel: &str, message: Bytes) -> crate::Result<i64> {
         self.rt.block_on(self.inner.publish(channel, message))
     }
 

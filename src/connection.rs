@@ -170,7 +170,7 @@ impl Connection {
                 self.w.write_all(b"*").await?;
 
                 // Encode the length of the array.
-                self.write_decimal(val.len() as u64).await?;
+                self.write_decimal(val.len() as i64).await?;
 
                 // Iterate and encode each entry in the array.
                 for entry in &**val {
@@ -211,7 +211,7 @@ impl Connection {
                 let len = val.len();
 
                 self.w.write_all(b"$").await?;
-                self.write_decimal(len as u64).await?;
+                self.write_decimal(len as i64).await?;
                 self.w.write_all(val).await?;
                 self.w.write_all(b"\r\n").await?;
             }
@@ -226,7 +226,7 @@ impl Connection {
     }
 
     /// Write a decimal frame to the stream
-    async fn write_decimal(&mut self, val: u64) -> io::Result<()> {
+    async fn write_decimal(&mut self, val: i64) -> io::Result<()> {
         use std::io::Write;
 
         // Convert the value to a string

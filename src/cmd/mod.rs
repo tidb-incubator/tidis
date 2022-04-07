@@ -16,11 +16,20 @@ pub use set::Set;
 mod setnx;
 pub use setnx::SetNX;
 
+mod setex;
+pub use setex::SetEX;
+
+mod ttl;
+pub use ttl::TTL;
+
 mod subscribe;
 pub use subscribe::{Subscribe, Unsubscribe};
 
 mod ping;
 pub use ping::Ping;
+
+mod expire;
+pub use expire::Expire;
 
 mod unknown;
 pub use unknown::Unknown;
@@ -37,10 +46,13 @@ pub enum Command {
     Publish(Publish),
     Set(Set),
     SetNX(SetNX),
+    SetEX(SetEX),
     Mset(Mset),
     Subscribe(Subscribe),
     Unsubscribe(Unsubscribe),
     Ping(Ping),
+    TTL(TTL),
+    Expire(Expire),
     Unknown(Unknown),
 }
 
@@ -72,11 +84,14 @@ impl Command {
             "publish" => Command::Publish(Publish::parse_frames(&mut parse)?),
             "set" => Command::Set(Set::parse_frames(&mut parse)?),
             "setnx" => Command::SetNX(SetNX::parse_frames(&mut parse)?),
+            "setex" => Command::SetEX(SetEX::parse_frames(&mut parse)?),
             "subscribe" => Command::Subscribe(Subscribe::parse_frames(&mut parse)?),
             "unsubscribe" => Command::Unsubscribe(Unsubscribe::parse_frames(&mut parse)?),
             "ping" => Command::Ping(Ping::parse_frames(&mut parse)?),
             "mget" => Command::Mget(Mget::parse_frames(&mut parse)?),
             "mset" => Command::Mset(Mset::parse_frames(&mut parse)?),
+            "ttl" => Command::TTL(TTL::parse_frames(&mut parse)?),
+            "expire" => Command::Expire(Expire::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -114,10 +129,13 @@ impl Command {
             Publish(cmd) => cmd.apply(db, dst).await,
             Set(cmd) => cmd.apply(db, dst).await,
             SetNX(cmd) => cmd.apply(db, dst).await,
+            SetEX(cmd) => cmd.apply(dst).await,
             Subscribe(cmd) => cmd.apply(db, dst, shutdown).await,
             Ping(cmd) => cmd.apply(dst).await,
             Mget(cmd) => cmd.apply(dst).await,
             Mset(cmd) => cmd.apply(dst).await,
+            TTL(cmd) => cmd.apply(dst).await,
+            Expire(cmd) => cmd.apply(dst).await,
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
             // context of a `Subscribe` command.
@@ -132,11 +150,14 @@ impl Command {
             Command::Publish(_) => "pub",
             Command::Set(_) => "set",
             Command::SetNX(_) => "setnx",
+            Command::SetEX(_) => "setex",
             Command::Subscribe(_) => "subscribe",
             Command::Unsubscribe(_) => "unsubscribe",
             Command::Ping(_) => "ping",
             Command::Mget(_) => "mget",
             Command::Mset(_) => "mset",
+            Command::TTL(_) => "ttl",
+            Command::Expire(_) => "expire",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

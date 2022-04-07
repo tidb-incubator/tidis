@@ -119,13 +119,13 @@ impl RawClientWrapper {
         key: Key, 
         prev_val: Option<Value>, 
         val: Value,
-        ttl: u64,
+        ttl: i64,
     ) -> Result<(Option<Value>, bool), Error> {
         let mut last_err: Option<Error> = None;
         for i in 0..self.retries {
             match self.client
                 .with_atomic_for_cas()
-                .compare_and_swap_with_ttl(key.clone(), prev_val.clone(), val.to_owned(), ttl)
+                .compare_and_swap_with_ttl(key.clone(), prev_val.clone(), val.to_owned(), ttl as u64)
                 .await
             {
                 Ok((val, swapped)) => {

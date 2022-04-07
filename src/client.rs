@@ -257,7 +257,7 @@ impl Client {
     /// }
     /// ```
     #[instrument(skip(self))]
-    pub async fn publish(&mut self, channel: &str, message: Bytes) -> crate::Result<u64> {
+    pub async fn publish(&mut self, channel: &str, message: Bytes) -> crate::Result<i64> {
         // Convert the `Publish` command into a frame
         let frame = Publish::new(channel, message).into_frame();
 

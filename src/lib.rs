@@ -67,6 +67,8 @@ mod tikv;
 pub use tikv::set_instance_id;
 pub use tikv::do_async_raw_connect;
 
+mod utils;
+
 /// Default port that a redis server listens on.
 ///
 /// Used if no port is specified.

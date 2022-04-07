@@ -2,10 +2,11 @@ use crate::Frame;
 use std::collections::HashMap;
 use tikv_client::{Key, Value, KvPair};
 use super::{
-    encoding::{KeyEncoder}, errors::AsyncResult,
+    encoding::{KeyEncoder}, errors::AsyncResult, errors::RTError,
 };
 use bytes::Bytes;
 use super::get_client;
+use crate::utils::{sleep, resp_err, resp_int};
 
 pub async fn do_async_rawkv_get(key: &str) -> AsyncResult<Frame> {
     let client = get_client()?;
@@ -47,7 +48,7 @@ pub async fn do_async_rawkv_batch_put(kvs: Vec<KvPair>) -> AsyncResult<Frame> {
     let client = get_client()?;
     let num_keys = kvs.len();
     let _ = client.batch_put(kvs).await?;
-    Ok(Frame::Integer(num_keys as u64))
+    Ok(Frame::Integer(num_keys as i64))
 }
 
 pub async fn do_async_rawkv_put_not_exists(key: &str, value: Bytes) -> AsyncResult<Frame> {
@@ -59,4 +60,48 @@ pub async fn do_async_rawkv_put_not_exists(key: &str, value: Bytes) -> AsyncResu
     } else {
         Ok(Frame::Integer(0))
     } 
+}
+
+pub async fn do_async_rawkv_expire(key: &str, value: Option<Bytes>, ttl: i64) ->AsyncResult<Frame> {
+    let client = get_client()?;
+    let ekey = KeyEncoder::new().encode_string(&key.clone());
+    let mut swapped = false;
+    for i in 0..2000 {
+        let prev_val = client.get(ekey.clone()).await?;
+        let expect_val = match &value {
+            Some(v) => Some(v.to_vec()),
+            None => {
+                prev_val.clone()
+            },
+        };
+        if let None = expect_val {
+            return Ok(resp_int(0));
+        }
+        
+        let (val, ret) = client.compare_and_swap_with_ttl(ekey.clone(), prev_val.clone(), expect_val.unwrap(), ttl).await?;
+        if ret {
+            swapped = true;
+            break;
+        } else {
+            if let Some(data) = val {
+                if data.eq(&prev_val.unwrap()) {
+                    swapped = true;
+                    break;
+                }
+            } 
+        }
+        sleep(std::cmp::min(i, 200)).await;
+    }
+    if !swapped {
+        Err(RTError::StringError("Cannot swapped".to_owned()))
+    } else {
+        Ok(Frame::Integer(1))
+    }
+}
+
+pub async fn do_async_rawkv_get_ttl(key: &String) -> AsyncResult<Frame> {
+    let client = get_client()?;
+    let ekey = KeyEncoder::new().encode_string(&key);
+    let val = client.get_ttl(ekey).await?;
+    Ok(resp_int(val as i64))
 }

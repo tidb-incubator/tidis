@@ -68,7 +68,9 @@ impl Connection {
             //
             // On success, the number of bytes is returned. `0` indicates "end
             // of stream".
-            if 0 == self.r.read(&mut self.buffer).await? {
+            let mut buf = vec![0; 1024];
+            let len = self.r.read(&mut buf).await?;
+            if 0 == len {
                 // The remote closed the connection. For this to be a clean
                 // shutdown, there should be no data in the read buffer. If
                 // there is, this means that the peer closed the socket while
@@ -81,6 +83,7 @@ impl Connection {
                     return Err("connection reset by peer".into());
                 }
             }
+            self.buffer.extend_from_slice(&mut buf[..len]);
         }
     }
 

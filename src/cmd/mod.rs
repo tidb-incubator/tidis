@@ -1,11 +1,18 @@
 mod get;
 pub use get::Get;
 
+mod mget;
+pub use mget::Mget;
+
+mod mset;
+pub use mset::Mset;
+
 mod publish;
 pub use publish::Publish;
 
 mod set;
 pub use set::Set;
+
 
 mod subscribe;
 pub use subscribe::{Subscribe, Unsubscribe};
@@ -24,8 +31,10 @@ use crate::{Connection, Db, Frame, Parse, ParseError, Shutdown};
 #[derive(Debug)]
 pub enum Command {
     Get(Get),
+    Mget(Mget),
     Publish(Publish),
     Set(Set),
+    Mset(Mset),
     Subscribe(Subscribe),
     Unsubscribe(Unsubscribe),
     Ping(Ping),
@@ -62,6 +71,8 @@ impl Command {
             "subscribe" => Command::Subscribe(Subscribe::parse_frames(&mut parse)?),
             "unsubscribe" => Command::Unsubscribe(Unsubscribe::parse_frames(&mut parse)?),
             "ping" => Command::Ping(Ping::parse_frames(&mut parse)?),
+            "mget" => Command::Mget(Mget::parse_frames(&mut parse)?),
+            "mset" => Command::Mset(Mset::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -100,6 +111,8 @@ impl Command {
             Set(cmd) => cmd.apply(db, dst).await,
             Subscribe(cmd) => cmd.apply(db, dst, shutdown).await,
             Ping(cmd) => cmd.apply(dst).await,
+            Mget(cmd) => cmd.apply(dst).await,
+            Mset(cmd) => cmd.apply(dst).await,
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
             // context of a `Subscribe` command.
@@ -116,6 +129,8 @@ impl Command {
             Command::Subscribe(_) => "subscribe",
             Command::Unsubscribe(_) => "unsubscribe",
             Command::Ping(_) => "ping",
+            Command::Mget(_) => "mget",
+            Command::Mset(_) => "mset",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

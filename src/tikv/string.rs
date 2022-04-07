@@ -1,5 +1,6 @@
 use crate::Frame;
-
+use std::collections::HashMap;
+use tikv_client::{Key, Value, KvPair};
 use super::{
     encoding::{KeyEncoder}, errors::AsyncResult,
 };
@@ -19,4 +20,31 @@ pub async fn do_async_rawkv_put(key: &str, val: &str) -> AsyncResult<Frame> {
     let ekey = KeyEncoder::new().encode_string(key);
     let _ = client.put(ekey, val).await?;
     Ok(Frame::Integer(1))
+}
+
+pub async fn do_async_rawkv_batch_get(keys: Vec<String>) -> AsyncResult<Frame> {
+    let client = get_client()?;
+    let ekeys = KeyEncoder::new().encode_strings(keys);
+    let result = client.batch_get(ekeys.clone()).await?;
+    let ret: HashMap<Key, Value> = result.into_iter()
+    .map(|pair| (pair.0, pair.1))
+    .collect();
+
+    let values: Vec<Frame> = ekeys
+    .into_iter()
+    .map(|k| {
+        let data = ret.get(k.as_ref());
+        match data {
+            Some(val) => Frame::Bulk(val.to_owned().into()),
+            None => Frame::Null,
+        }
+    }).collect();
+    Ok(Frame::Array(values))
+}
+
+pub async fn do_async_rawkv_batch_put(kvs: Vec<KvPair>) -> AsyncResult<Frame> {
+    let client = get_client()?;
+    let num_keys = kvs.len();
+    let _ = client.batch_put(kvs).await?;
+    Ok(Frame::Integer(num_keys as u64))
 }

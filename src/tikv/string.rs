@@ -4,6 +4,7 @@ use tikv_client::{Key, Value, KvPair};
 use super::{
     encoding::{KeyEncoder}, errors::AsyncResult,
 };
+use bytes::Bytes;
 use super::get_client;
 
 pub async fn do_async_rawkv_get(key: &str) -> AsyncResult<Frame> {
@@ -15,10 +16,10 @@ pub async fn do_async_rawkv_get(key: &str) -> AsyncResult<Frame> {
     }
 }
 
-pub async fn do_async_rawkv_put(key: &str, val: &str) -> AsyncResult<Frame> {
+pub async fn do_async_rawkv_put(key: &str, val: Bytes) -> AsyncResult<Frame> {
     let client = get_client()?;
     let ekey = KeyEncoder::new().encode_string(key);
-    let _ = client.put(ekey, val).await?;
+    let _ = client.put(ekey, val.to_vec()).await?;
     Ok(Frame::Integer(1))
 }
 

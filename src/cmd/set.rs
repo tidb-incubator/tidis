@@ -28,6 +28,9 @@ pub struct Set {
 
     /// When to expire the key
     expire: Option<Duration>,
+
+    /// Set if key is not present
+    nx: Option<bool>,
 }
 
 impl Set {
@@ -40,6 +43,7 @@ impl Set {
             key: key.to_string(),
             value,
             expire,
+            nx: None,
         }
     }
 
@@ -91,6 +95,8 @@ impl Set {
         // `None`.
         let mut expire = None;
 
+        let mut nx = None;
+
         // Attempt to parse another string.
         match parse.next_string() {
             Ok(s) if s.to_uppercase() == "EX" => {
@@ -105,6 +111,10 @@ impl Set {
                 let ms = parse.next_int()?;
                 expire = Some(Duration::from_millis(ms));
             }
+            Ok(s) if s.to_uppercase() == "NX" => {
+                // Only set if key not present
+                nx = Some(true);
+            }
             // Currently, mini-redis does not support any of the other SET
             // options. An error here results in the connection being
             // terminated. Other connections will continue to operate normally.
@@ -118,7 +128,7 @@ impl Set {
             Err(err) => return Err(err.into()),
         }
 
-        Ok(Set { key, value, expire })
+        Ok(Set { key, value, expire, nx })
     }
 
     /// Apply the `Set` command to the specified `Db` instance.
@@ -134,7 +144,7 @@ impl Set {
         let response = Frame::Simple("OK".to_string());
         */
         let val = String::from_utf8(self.value.to_vec())?;
-        let response = match do_async_rawkv_put(&self.key, &val).await {
+        let response = match do_async_rawkv_put(&self.key, self.value).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };

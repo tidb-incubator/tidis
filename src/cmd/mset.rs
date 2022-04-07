@@ -7,14 +7,8 @@ use crate::tikv::{
 use bytes::Bytes;
 use tracing::{debug, instrument};
 
-/// Get the value of key.
-///
-/// If the key does not exist the special value nil is returned. An error is
-/// returned if the value stored at key is not a string, because GET only
-/// handles string values.
 #[derive(Debug)]
 pub struct Mset {
-    /// Name of the keys to get
     keys: Vec<String>,
     vals: Vec<Bytes>,
 }
@@ -70,7 +64,7 @@ impl Mset {
         for (idx, key) in self.keys.iter().enumerate() {
             let val = &self.vals[idx];
             let ekey = KeyEncoder::new().encode_string(&key);
-            let kvpair = KvPair::from((ekey, String::from_utf8(val.to_vec()).unwrap()));
+            let kvpair = KvPair::from((ekey, val.to_vec()));
             kvs.push(kvpair);
         }
         let response = match do_async_rawkv_batch_put(kvs).await {

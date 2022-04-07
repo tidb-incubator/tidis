@@ -59,7 +59,7 @@ impl RawClientWrapper {
         }
     }
 
-    pub async fn put(&self, key: Key, val: &str) -> Result<(), Error> {
+    pub async fn put(&self, key: Key, val: Value) -> Result<(), Error> {
         let mut last_err: Option<Error> = None;
         for i in 0..self.retries {
             match self.client.put(key.clone(), val.to_owned()).await {

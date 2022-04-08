@@ -31,6 +31,9 @@ pub use ping::Ping;
 mod expire;
 pub use expire::Expire;
 
+mod exists;
+pub use exists::Exists;
+
 mod unknown;
 pub use unknown::Unknown;
 
@@ -53,6 +56,7 @@ pub enum Command {
     Ping(Ping),
     TTL(TTL),
     Expire(Expire),
+    Exists(Exists),
     Unknown(Unknown),
 }
 
@@ -92,6 +96,7 @@ impl Command {
             "mset" => Command::Mset(Mset::parse_frames(&mut parse)?),
             "ttl" => Command::TTL(TTL::parse_frames(&mut parse)?),
             "expire" => Command::Expire(Expire::parse_frames(&mut parse)?),
+            "exists" => Command::Exists(Exists::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -125,10 +130,10 @@ impl Command {
         use Command::*;
 
         match self {
-            Get(cmd) => cmd.apply(db, dst).await,
+            Get(cmd) => cmd.apply(dst).await,
             Publish(cmd) => cmd.apply(db, dst).await,
-            Set(cmd) => cmd.apply(db, dst).await,
-            SetNX(cmd) => cmd.apply(db, dst).await,
+            Set(cmd) => cmd.apply(dst).await,
+            SetNX(cmd) => cmd.apply(dst).await,
             SetEX(cmd) => cmd.apply(dst).await,
             Subscribe(cmd) => cmd.apply(db, dst, shutdown).await,
             Ping(cmd) => cmd.apply(dst).await,
@@ -136,6 +141,7 @@ impl Command {
             Mset(cmd) => cmd.apply(dst).await,
             TTL(cmd) => cmd.apply(dst).await,
             Expire(cmd) => cmd.apply(dst).await,
+            Exists(cmd) => cmd.apply(dst).await,
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
             // context of a `Subscribe` command.
@@ -158,6 +164,7 @@ impl Command {
             Command::Mset(_) => "mset",
             Command::TTL(_) => "ttl",
             Command::Expire(_) => "expire",
+            Command::Exists(_) => "exists",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

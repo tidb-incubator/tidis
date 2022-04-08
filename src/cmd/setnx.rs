@@ -83,8 +83,8 @@ impl SetNX {
     ///
     /// The response is written to `dst`. This is called by the server in order
     /// to execute a received command.
-    #[instrument(skip(self, db, dst))]
-    pub(crate) async fn apply(self, db: &Db, dst: &mut Connection) -> crate::Result<()> {
+    #[instrument(skip(self, dst))]
+    pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         
         let response = match do_async_rawkv_put_not_exists(&self.key, self.value).await {
                     Ok(val) => val,

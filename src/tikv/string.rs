@@ -105,3 +105,11 @@ pub async fn do_async_rawkv_get_ttl(key: &String) -> AsyncResult<Frame> {
     let val = client.get_ttl(ekey).await?;
     Ok(resp_int(val as i64))
 }
+
+pub async fn do_async_rawkv_exists(keys: Vec<String>) -> AsyncResult<Frame> {
+    let client = get_client()?;
+    let ekeys = KeyEncoder::new().encode_strings(keys);
+    let result = client.batch_get(ekeys).await?;
+    let num_items = result.len();
+    Ok(resp_int(num_items as i64))
+}

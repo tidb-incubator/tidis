@@ -34,6 +34,12 @@ pub use expire::Expire;
 mod exists;
 pub use exists::Exists;
 
+mod incr;
+pub use incr::Incr;
+
+mod decr;
+pub use decr::Decr;
+
 mod unknown;
 pub use unknown::Unknown;
 
@@ -57,6 +63,8 @@ pub enum Command {
     TTL(TTL),
     Expire(Expire),
     Exists(Exists),
+    Incr(Incr),
+    Decr(Decr),
     Unknown(Unknown),
 }
 
@@ -97,6 +105,8 @@ impl Command {
             "ttl" => Command::TTL(TTL::parse_frames(&mut parse)?),
             "expire" => Command::Expire(Expire::parse_frames(&mut parse)?),
             "exists" => Command::Exists(Exists::parse_frames(&mut parse)?),
+            "incr" => Command::Incr(Incr::parse_frames(&mut parse)?),
+            "decr" => Command::Decr(Decr::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -142,6 +152,8 @@ impl Command {
             TTL(cmd) => cmd.apply(dst).await,
             Expire(cmd) => cmd.apply(dst).await,
             Exists(cmd) => cmd.apply(dst).await,
+            Incr(cmd) => cmd.apply(dst).await,
+            Decr(cmd) => cmd.apply(dst).await,
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
             // context of a `Subscribe` command.
@@ -165,6 +177,8 @@ impl Command {
             Command::TTL(_) => "ttl",
             Command::Expire(_) => "expire",
             Command::Exists(_) => "exists",
+            Command::Incr(_) => "incr",
+            Command::Decr(_) => "decr",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

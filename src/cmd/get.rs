@@ -1,7 +1,10 @@
-use crate::{Connection, Db, Frame, Parse, tikv::string::do_async_rawkv_get};
-
+use crate::tikv::errors::AsyncResult;
+use crate::{Connection, Db, Frame, Parse};
+use crate::tikv::string::{do_async_txnkv_get,do_async_rawkv_get};
 use bytes::Bytes;
 use tracing::{debug, instrument};
+
+use crate::config::{is_use_txn_api};
 
 /// Get the value of key.
 ///
@@ -63,17 +66,7 @@ impl Get {
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         // Get the value from the shared database state
-        /*
-        let response = if let Some(value) = db.get(&self.key) {
-            // If a value is present, it is written to the client in "bulk"
-            // format.
-            Frame::Bulk(value)
-        } else {
-            // If there is no value, `Null` is written.
-            Frame::Null
-        };
-        */
-        let response = match do_async_rawkv_get(&self.key).await {
+        let response = match self.get(&self.key).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
@@ -84,6 +77,14 @@ impl Get {
         dst.write_frame(&response).await?;
 
         Ok(())
+    }
+
+    async fn get(&self, key: &str) ->AsyncResult<Frame> {
+        if is_use_txn_api() {
+            do_async_txnkv_get(key).await
+        } else {
+            do_async_rawkv_get(key).await
+        }
     }
 
     /// Converts the command into an equivalent `Frame`.

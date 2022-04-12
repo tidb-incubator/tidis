@@ -1,5 +1,7 @@
+use crate::tikv::errors::AsyncResult;
 use crate::{Connection, Db, Frame, Parse};
-use crate::tikv::string::{do_async_rawkv_batch_get};
+use crate::tikv::string::{do_async_rawkv_batch_get,do_async_txnkv_batch_get};
+use crate::config::is_use_txn_api;
 use tracing::{debug, instrument};
 
 /// Get the value of key.
@@ -45,7 +47,7 @@ impl Mget {
 
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        let response = match do_async_rawkv_batch_get(self.keys).await {
+        let response = match self.batch_get(&self.keys).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
@@ -56,6 +58,14 @@ impl Mget {
         dst.write_frame(&response).await?;
 
         Ok(())
+    }
+
+    async fn batch_get(&self, keys: &Vec<String>) -> AsyncResult<Frame> {
+        if is_use_txn_api() {
+            do_async_txnkv_batch_get(keys).await
+        } else {
+            do_async_rawkv_batch_get(keys).await
+        }
     }
 
     /// Converts the command into an equivalent `Frame`.

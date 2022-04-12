@@ -13,10 +13,6 @@ larger example of an idiomatic Tokio application.
 """
 
 [[bin]]
-name = "mini-redis-cli"
-path = "src/bin/cli.rs"
-
-[[bin]]
 name = "mini-redis-server"
 path = "src/bin/server.rs"
 
@@ -36,6 +32,9 @@ thiserror = "1"
 prometheus = "0.13.0"
 hyper = { version = "0.14.17", features = ["full"] }
 async-std = { version = "1.11.0", features = ["unstable"] }
+toml = { version = "0.5.8" }
+serde = { version = "1.0", features = ["derive"] }
+futures = { version = "0.3", default-features = false }
 
 [dev-dependencies]
 # Enable test-utilities in dev mode only. This is mostly for tests.

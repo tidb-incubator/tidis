@@ -4,6 +4,8 @@ use std::time::Duration;
 use tikv_client::{RawClient, Transaction, TransactionClient};
 
 use self::client::RawClientWrapper;
+use self::client::TxnClientWrapper;
+
 use self::errors::{RTError, AsyncResult};
 
 pub mod string;
@@ -21,6 +23,11 @@ lazy_static! {
 
 pub static mut TIKV_RAW_CLIENT: Option<RawClient> = None;
 pub static mut TIKV_RAW_CLIENT_2: Option<RawClient> = None;
+
+// TODO manage configurable tikv client pool
+pub static mut TIKV_TXN_CLIENT: Option<TransactionClient> = None;
+pub static mut TIKV_TXN_CLIENT_2: Option<TransactionClient> = None;
+
 pub static mut CLIENT_COUNTER: u64 = 0;
 
 pub static mut INSTANCE_ID: u64 = 0;
@@ -56,6 +63,26 @@ pub fn get_client() -> Result<RawClientWrapper, RTError> {
     Ok(ret)
 }
 
+pub fn get_txn_client() -> Result<TxnClientWrapper<'static>, RTError> {
+    if unsafe {TIKV_RAW_CLIENT.is_none() } {
+        return Err(RTError::StringError(String::from("Not Connected")))
+    }
+    let idx: u64;
+    let ret: TxnClientWrapper;
+    unsafe {
+        CLIENT_COUNTER += 1;
+        idx = CLIENT_COUNTER;
+    }
+    if idx % 2 == 0 {
+        let client = unsafe {TIKV_TXN_CLIENT.as_ref().unwrap() };
+        ret = TxnClientWrapper::new(client);
+    } else {
+        let client = unsafe {TIKV_TXN_CLIENT_2.as_ref().unwrap() };
+        ret = TxnClientWrapper::new(client);
+    }
+    Ok(ret)
+}
+
 pub async fn sleep(ms: u32) {
     tokio::time::sleep(Duration::from_millis(ms as u64)).await;
 }
@@ -63,6 +90,15 @@ pub async fn sleep(ms: u32) {
 
 pub async fn do_async_txn_connect(addrs: Vec<String>) -> AsyncResult<()> {
     PD_ADDRS.write().unwrap().replace(addrs.clone());
+
+    let client = TransactionClient::new(addrs.clone(), None).await?;
+    unsafe {
+        TIKV_TXN_CLIENT.replace(client);
+    }
+    let client_2 = TransactionClient::new(addrs, None).await?;
+    unsafe {
+        TIKV_TXN_CLIENT_2.replace(client_2);
+    }
     Ok(())
 }
 

@@ -1,9 +1,12 @@
+use crate::tikv::errors::AsyncResult;
 use crate::{Connection, Db, Frame, Parse};
-use crate::tikv::string::{do_async_rawkv_batch_put};
+use crate::tikv::string::{do_async_rawkv_batch_put, do_async_txnkv_batch_put};
 use tikv_client::{Key, Value, KvPair};
 use crate::tikv::{
     encoding::{KeyEncoder}
 };
+use crate::config::is_use_txn_api;
+
 use bytes::Bytes;
 use tracing::{debug, instrument};
 
@@ -67,7 +70,7 @@ impl Mset {
             let kvpair = KvPair::from((ekey, val.to_vec()));
             kvs.push(kvpair);
         }
-        let response = match do_async_rawkv_batch_put(kvs).await {
+        let response = match self.batch_put(kvs).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
@@ -80,6 +83,13 @@ impl Mset {
         Ok(())
     }
 
+    async fn batch_put(&self, kvs: Vec<KvPair>) -> AsyncResult<Frame> {
+        if is_use_txn_api() {
+            do_async_txnkv_batch_put(kvs).await
+        } else {
+            do_async_rawkv_batch_put(kvs).await
+        }
+    }
     /// Converts the command into an equivalent `Frame`.
     ///
     /// This is called by the client when encoding a `Get` command to send to

@@ -1,9 +1,84 @@
 use tikv_client::{RawClient, Value, Key, Error, BoundRange, KvPair, ColumnFamily};
 
+use tikv_client::{
+    TransactionClient,
+    Timestamp,
+    Result as TiKVResult,
+    Snapshot,
+    TransactionOptions,
+    Transaction
+};
+
+use std::future::Future;
+use super::{errors::AsyncResult};
+use futures::future::{BoxFuture, FutureExt};
+
 use crate::metrics::TIKV_CLIENT_RETRIES;
 
 use super::sleep;
 
+pub struct TxnClientWrapper<'a> {
+    client: &'a TransactionClient,
+    retries: u32,
+}
+
+impl TxnClientWrapper<'static> {
+    pub fn new(c: &'static TransactionClient) -> Self {
+        TxnClientWrapper {
+            client: c,
+            retries: 2000,
+        }
+    }
+
+    pub async fn current_timestamp(&self) -> TiKVResult<Timestamp> {
+        self.client.current_timestamp().await
+    }
+
+    pub async fn snapshot(&self, timestamp: Timestamp, options: TransactionOptions) -> Snapshot {
+        self.client.snapshot(timestamp, options)
+    }
+
+    pub async fn newest_snapshot(&self) -> Snapshot {
+        let options = TransactionOptions::new_pessimistic();
+        let current_timestamp = self.current_timestamp().await.unwrap();
+        self.snapshot(current_timestamp, options).await
+    }
+
+    pub async fn begin(&self) -> TiKVResult<Transaction> {
+        // use pessimistic transaction for now
+        self.client.begin_pessimistic().await
+        //self.client.begin_optimistic().await
+    }
+
+    
+    /// Auto begin new txn, call f with the txn, commit or callback due to the result
+    pub async fn exec_in_txn<T, F>(&self, f: F) -> AsyncResult<T> where 
+    F: FnOnce(&mut Transaction) -> BoxFuture<'_, AsyncResult<T>>,
+    {
+        // TODO: add retry policy
+
+        // begin new transaction
+        let mut txn = self.begin().await?;
+
+        // call f
+        let result = f(&mut txn).await;
+        match result {
+            Ok(res) => { 
+                txn.commit().await?;
+                Ok(res)
+            },
+            Err(err) => {
+                // log and rollback
+                txn.rollback().await?;
+                Err(err)
+            }
+        }
+
+    }
+
+
+
+}
 
 pub struct RawClientWrapper {
     client: Box<RawClient>,

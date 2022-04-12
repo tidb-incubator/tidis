@@ -35,7 +35,7 @@ impl KeyEncoder {
         ret.into()
     }
 
-    pub fn encode_strings(&self, keys: Vec<String>) -> Vec<Key> {
+    pub fn encode_strings(&self, keys: &Vec<String>) -> Vec<Key> {
         let prefix = self.get_prefix(DataType::String);
         keys.into_iter()
             .map(|val| format!("{}_{}", prefix, val).into())

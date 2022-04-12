@@ -6,11 +6,14 @@
 //!
 //! The `clap` crate is used for parsing arguments.
 
-use mini_redis::{server, DEFAULT_PORT, set_instance_id, do_async_raw_connect, PrometheusServer};
+use mini_redis::{server, DEFAULT_PORT, set_instance_id, do_async_raw_connect, do_async_connect, PrometheusServer};
+use mini_redis::{Config, set_global_config};
 
 use structopt::StructOpt;
 use async_std::net::TcpListener;
 use tokio::signal;
+use std::fs;
+use std::process::exit;
 
 #[tokio::main]
 pub async fn main() -> mini_redis::Result<()> {
@@ -19,6 +22,36 @@ pub async fn main() -> mini_redis::Result<()> {
     tracing_subscriber::fmt::try_init()?;
 
     let cli = Cli::from_args();
+
+    let mut config: Option<Config> = None;
+
+    match cli.config {
+        Some(config_file_name) => {
+            let config_content = fs::read_to_string(config_file_name)
+            .expect("Failed to read config file");
+
+            println!("{:?}", config_content);
+
+            // deserialize toml config
+            config = match toml::from_str(&config_content) {
+                Ok(d) => Some(d),
+                Err(e) => {
+                    println!("Unable to load config file {}", e.to_string());
+                    exit(1);
+                }
+            };
+        },
+        None => (),
+    };
+
+    match &config {
+        Some(c) => {
+            println!("{:?}", c);
+            set_global_config(c.clone())
+        }
+        None => (),
+    }
+
     let port = cli.port.as_deref().unwrap_or(DEFAULT_PORT);
     let listen_addr = cli.listen_addr.as_deref().unwrap_or("0.0.0.0");
     let pd_addrs = cli.pd_addrs.as_deref().unwrap_or("127.0.0.1:2379");
@@ -37,7 +70,10 @@ pub async fn main() -> mini_redis::Result<()> {
     pd_addrs.split(",").for_each(|s| {
         addrs.push(s.to_string());
     });
-    do_async_raw_connect(addrs).await?;
+
+    //do_async_raw_connect(addrs).await?;
+    //do_async_txn_connect(addrs).await?;
+    do_async_connect(addrs).await?;
 
     let server = PrometheusServer::new(format!("{}:{}", &prom_listen, prom_port), instance_id as i64);
     tokio::spawn(async move {
@@ -73,4 +109,8 @@ struct Cli {
 
     #[structopt(name = "promport", long = "--promport")]
     prom_port: Option<String>,
+
+    #[structopt(name = "config", long = "--config")]
+    config: Option<String>,
 }
+

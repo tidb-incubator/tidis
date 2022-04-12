@@ -66,8 +66,18 @@ pub use metrics::PrometheusServer;
 mod tikv;
 pub use tikv::set_instance_id;
 pub use tikv::do_async_raw_connect;
+pub use tikv::do_async_txn_connect;
+pub use tikv::do_async_connect;
 
 mod utils;
+
+mod config;
+pub use config::Config;
+pub use config::set_global_config;
+pub use config::get_global_config;
+pub use config::is_try_one_pc_commit;
+pub use config::is_use_async_commit;
+pub use config::is_use_txn_api;
 
 /// Default port that a redis server listens on.
 ///

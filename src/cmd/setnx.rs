@@ -1,9 +1,10 @@
 use crate::cmd::{Parse, ParseError};
-use crate::tikv::string::{do_async_rawkv_put,do_async_rawkv_put_not_exists};
+use crate::tikv::string::{do_async_txnkv_put_not_exists, do_async_rawkv_put_not_exists};
 use crate::{Connection, Db, Frame};
+use crate::config::{is_use_txn_api};
+use crate::tikv::errors::AsyncResult;
 
 use bytes::Bytes;
-use std::time::Duration;
 use tracing::{debug, instrument};
 
 /// Set `key` to hold the string `value`.
@@ -86,7 +87,7 @@ impl SetNX {
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         
-        let response = match do_async_rawkv_put_not_exists(&self.key, self.value).await {
+        let response = match self.put_not_exists(&self.key, &self.value).await {
                     Ok(val) => val,
                     Err(e) => Frame::Error(e.to_string()),
         };
@@ -94,6 +95,14 @@ impl SetNX {
         dst.write_frame(&response).await?;
 
         Ok(())
+    }
+
+    async fn put_not_exists(&self, key: &String, value: &Bytes) -> AsyncResult<Frame> {
+        if is_use_txn_api() {
+            do_async_txnkv_put_not_exists(key, value).await
+        } else {
+            do_async_rawkv_put_not_exists(key, value).await
+        }
     }
 
     pub(crate) fn into_frame(self) -> Frame {

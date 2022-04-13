@@ -9,6 +9,7 @@ use self::client::TxnClientWrapper;
 use self::errors::{RTError, AsyncResult};
 
 pub mod string;
+pub mod hash;
 pub mod errors;
 pub mod client;
 pub mod encoding;

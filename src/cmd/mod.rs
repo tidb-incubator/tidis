@@ -40,6 +40,15 @@ pub use incr::Incr;
 mod decr;
 pub use decr::Decr;
 
+mod hset;
+pub use hset::Hset;
+
+mod hget;
+pub use hget::Hget;
+
+mod hmget;
+pub use hmget::Hmget;
+
 mod unknown;
 pub use unknown::Unknown;
 
@@ -65,6 +74,14 @@ pub enum Command {
     Exists(Exists),
     Incr(Incr),
     Decr(Decr),
+    
+    // hash
+    Hset(Hset),
+    Hget(Hget),
+    Hmget(Hmget),
+    // list
+    // set
+    // sorted set
     Unknown(Unknown),
 }
 
@@ -107,6 +124,9 @@ impl Command {
             "exists" => Command::Exists(Exists::parse_frames(&mut parse)?),
             "incr" => Command::Incr(Incr::parse_frames(&mut parse)?),
             "decr" => Command::Decr(Decr::parse_frames(&mut parse)?),
+            "hset" => Command::Hset(Hset::parse_frames(&mut parse)?),
+            "hget" => Command::Hget(Hget::parse_frames(&mut parse)?),
+            "hmget" => Command::Hmget(Hmget::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -154,6 +174,9 @@ impl Command {
             Exists(cmd) => cmd.apply(dst).await,
             Incr(cmd) => cmd.apply(dst).await,
             Decr(cmd) => cmd.apply(dst).await,
+            Hset(cmd) => cmd.apply(dst).await,
+            Hget(cmd) => cmd.apply(dst).await,
+            Hmget(cmd) => cmd.apply(dst).await,
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
             // context of a `Subscribe` command.
@@ -179,6 +202,9 @@ impl Command {
             Command::Exists(_) => "exists",
             Command::Incr(_) => "incr",
             Command::Decr(_) => "decr",
+            Command::Hset(_) => "hset",
+            Command::Hget(_) => "hget",
+            Command::Hmget(_) => "hmget",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

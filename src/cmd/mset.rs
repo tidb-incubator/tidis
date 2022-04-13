@@ -63,14 +63,7 @@ impl Mset {
 
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        let mut kvs = Vec::new();
-        for (idx, key) in self.keys.iter().enumerate() {
-            let val = &self.vals[idx];
-            let ekey = KeyEncoder::new().encode_string(&key);
-            let kvpair = KvPair::from((ekey, val.to_vec()));
-            kvs.push(kvpair);
-        }
-        let response = match self.batch_put(kvs).await {
+        let response = match self.batch_put().await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
@@ -83,10 +76,23 @@ impl Mset {
         Ok(())
     }
 
-    async fn batch_put(&self, kvs: Vec<KvPair>) -> AsyncResult<Frame> {
+    async fn batch_put(&self) -> AsyncResult<Frame> {
+        let mut kvs = Vec::new();
         if is_use_txn_api() {
+            for (idx, key) in self.keys.iter().enumerate() {
+                let val = KeyEncoder::new().encode_txnkv_string_value(&mut self.vals[idx].to_vec(), 0);
+                let ekey = KeyEncoder::new().encode_txnkv_string(&key);
+                let kvpair = KvPair::from((ekey, val.to_vec()));
+                kvs.push(kvpair);
+            }
             do_async_txnkv_batch_put(kvs).await
         } else {
+            for (idx, key) in self.keys.iter().enumerate() {
+                let val = &self.vals[idx];
+                let ekey = KeyEncoder::new().encode_rawkv_string(&key);
+                let kvpair = KvPair::from((ekey, val.to_vec()));
+                kvs.push(kvpair);
+            }
             do_async_rawkv_batch_put(kvs).await
         }
     }

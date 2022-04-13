@@ -9,9 +9,11 @@ use tikv_client::{
     Transaction
 };
 
-use std::future::Future;
+use crate::is_use_pessimistic_txn;
+
 use super::{errors::AsyncResult};
-use futures::future::{BoxFuture, FutureExt};
+use futures::future::{BoxFuture};
+
 
 use crate::metrics::TIKV_CLIENT_RETRIES;
 
@@ -39,15 +41,23 @@ impl TxnClientWrapper<'static> {
     }
 
     pub async fn newest_snapshot(&self) -> Snapshot {
-        let options = TransactionOptions::new_pessimistic();
+        let options = if is_use_pessimistic_txn() {
+            TransactionOptions::new_pessimistic()
+        } else {
+            TransactionOptions::new_optimistic()
+        };
+
         let current_timestamp = self.current_timestamp().await.unwrap();
         self.snapshot(current_timestamp, options).await
     }
 
     pub async fn begin(&self) -> TiKVResult<Transaction> {
         // use pessimistic transaction for now
-        self.client.begin_pessimistic().await
-        //self.client.begin_optimistic().await
+        if is_use_pessimistic_txn() {
+            self.client.begin_pessimistic().await
+        } else {
+            self.client.begin_optimistic().await
+        }
     }
 
     

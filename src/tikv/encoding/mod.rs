@@ -8,6 +8,7 @@ pub enum DataType {
     Hash,
     List,
     Set,
+    Zset,
 }
 
 pub use {

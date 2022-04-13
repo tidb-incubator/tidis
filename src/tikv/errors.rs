@@ -22,3 +22,6 @@ impl From<String> for RTError {
 }
 
 pub type AsyncResult<T> = std::result::Result<T, RTError>;
+
+
+pub const REDIS_WRONG_TYPE_ERR: &str = "WRONGTYPE Operation against a key holding the wrong kind of value";

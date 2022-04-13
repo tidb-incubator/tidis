@@ -1,5 +1,7 @@
 use tikv_client::Key;
+use tracing_subscriber::registry::Data;
 
+use tikv_client::Value;
 use crate::tikv::get_instance_id;
 
 use super::DataType;
@@ -21,6 +23,7 @@ impl KeyEncoder {
             DataType::Hash => "H",
             DataType::List => "L",
             DataType::Set => "S",
+            DataType::Zset => "Z",
         };
         format!(
             "x$R_{}_{}",
@@ -29,17 +32,68 @@ impl KeyEncoder {
         )
     }
 
-    pub fn encode_string(&self, key: &str) -> Key {
+    fn get_type_bytes(&self, dt: DataType) -> u8 {
+        match dt {
+            DataType::String => 0,
+            DataType::Hash => 1,
+            DataType::List => 2,
+            DataType::Set => 3,
+            DataType::Zset => 4,
+        }
+    }
+
+    pub fn encode_rawkv_string(&self, key: &str) -> Key {
         let prefix = self.get_prefix(DataType::String);
-        let ret = format!("{}_{}", prefix, key);
+        let ret = format!("{}_M_{}", prefix, key);
         ret.into()
     }
 
-    pub fn encode_strings(&self, keys: &Vec<String>) -> Vec<Key> {
+    pub fn encode_txnkv_string(&self, key: &str) -> Key {
+        let ret = format!("x_{}_M_{}", self.instance_id, key);
+        ret.into()
+    }
+
+    pub fn encode_txnkv_string_value(&self, value: &mut Value, ttl: u64) -> Value {
+        let dt = self.get_type_bytes(DataType::String);
+        let mut val = Vec::new();
+        val.append(&mut dt.to_be_bytes().to_vec());
+        val.append(&mut ttl.to_be_bytes().to_vec());
+        val.append(value);
+        val.into()
+    }
+
+    pub fn encode_rawkv_strings(&self, keys: &Vec<String>) -> Vec<Key> {
         let prefix = self.get_prefix(DataType::String);
         keys.into_iter()
             .map(|val| format!("{}_{}", prefix, val).into())
             .collect()
+    }
+
+    pub fn encode_txnkv_strings(&self, keys: &Vec<String>) -> Vec<Key> {
+        keys.into_iter()
+            .map(|val| format!("x_{}_M_{}", self.instance_id, val).into())
+            .collect()
+    }
+
+    pub fn encode_txnkv_hash_meta_key(&self, key: &str) -> Key {
+        let ret = format!("x_{}_M_{}", self.instance_id, key);
+        ret.into()
+    }
+
+    pub fn encode_txnkv_hash_data_key(&self, key: &str, field: &str) -> Key {
+        // TODO: maybe conflict
+        let ret = format!("x_{}_D_{}_{}", self.instance_id, key, field);
+        ret.into()
+    }
+
+    pub fn encode_txnkv_hash_meta_value(&self, ttl: u64, size: u64) -> Value {
+        let dt = self.get_type_bytes(DataType::Hash);
+        let mut val = Vec::new();
+
+        val.append(&mut dt.to_be_bytes().to_vec());
+        val.append(&mut ttl.to_be_bytes().to_vec());
+        val.append(&mut size.to_be_bytes().to_vec());
+        val.into()
     }
 
     pub fn encode_string_end(&self) -> Key {

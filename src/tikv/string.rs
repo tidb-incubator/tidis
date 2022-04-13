@@ -1,17 +1,18 @@
 use ::futures::future::{FutureExt};
 use crate::Frame;
 use std::collections::HashMap;
-use tikv_client::{Key, Value, KvPair, Transaction};
+use tikv_client::{Key, Value, KvPair};
 use super::{
-    encoding::{KeyEncoder}, errors::AsyncResult, errors::RTError,
+    encoding::{KeyEncoder, KeyDecoder, DataType}, errors::AsyncResult, errors::RTError,
 };
 use bytes::Bytes;
 use super::{get_client, get_txn_client};
 use crate::utils::{sleep, resp_err, resp_int};
+use super::errors::*;
 
 pub async fn do_async_rawkv_get(key: &str) -> AsyncResult<Frame> {
     let client = get_client()?;
-    let ekey = KeyEncoder::new().encode_string(key);
+    let ekey = KeyEncoder::new().encode_rawkv_string(key);
     match client.get(ekey).await? {
         Some(val) => Ok(Frame::Bulk(val.into())),
         None => Ok(Frame::Null),
@@ -20,27 +21,35 @@ pub async fn do_async_rawkv_get(key: &str) -> AsyncResult<Frame> {
 
 pub async fn do_async_txnkv_get(key: &str) -> AsyncResult<Frame> {
     let client = get_txn_client()?;
-    let ekey = KeyEncoder::new().encode_string(key);
+    let ekey = KeyEncoder::new().encode_txnkv_string(key);
     let mut ss = client.newest_snapshot().await;
     match ss.get(ekey).await? {
-        Some(val) => Ok(Frame::Bulk(val.into())),
+        Some(val) => {
+            let dt = KeyDecoder::new().decode_key_type(&val);
+            if !matches!(dt, DataType::String) {
+                return Ok(resp_err(&REDIS_WRONG_TYPE_ERR))
+            }
+
+            let data = KeyDecoder::new().decode_key_string_value(&val);
+            Ok(Frame::Bulk(data.into()))
+        }
         None => Ok(Frame::Null),
     }
 }
 
 pub async fn do_async_rawkv_put(key: &str, val: &Bytes) -> AsyncResult<Frame> {
     let client = get_client()?;
-    let ekey = KeyEncoder::new().encode_string(key);
+    let ekey = KeyEncoder::new().encode_rawkv_string(key);
     let _ = client.put(ekey, val.to_vec()).await?;
     Ok(Frame::Integer(1))
 }
 
 pub async fn do_async_txnkv_put(key: &str, val: &Bytes) -> AsyncResult<Frame> {
     let client = get_txn_client()?;
-    let ekey = KeyEncoder::new().encode_string(key);
-    let val_vec = val.to_vec();
+    let ekey = KeyEncoder::new().encode_txnkv_string(key);
+    let eval = KeyEncoder::new().encode_txnkv_string_value(&mut val.to_vec(), 0);
     let resp = client.exec_in_txn(|txn| async move {
-        txn.put(ekey, val_vec).await?;
+        txn.put(ekey, eval).await?;
         Ok(())
     }.boxed()).await;
     match resp {
@@ -55,7 +64,7 @@ pub async fn do_async_txnkv_put(key: &str, val: &Bytes) -> AsyncResult<Frame> {
 
 pub async fn do_async_rawkv_batch_get(keys: &Vec<String>) -> AsyncResult<Frame> {
     let client = get_client()?;
-    let ekeys = KeyEncoder::new().encode_strings(keys);
+    let ekeys = KeyEncoder::new().encode_rawkv_strings(keys);
     let result = client.batch_get(ekeys.clone()).await?;
     let ret: HashMap<Key, Value> = result.into_iter()
     .map(|pair| (pair.0, pair.1))
@@ -75,7 +84,7 @@ pub async fn do_async_rawkv_batch_get(keys: &Vec<String>) -> AsyncResult<Frame> 
 
 pub async fn do_async_txnkv_batch_get(keys: &Vec<String>) -> AsyncResult<Frame> {
     let client = get_txn_client()?;
-    let ekeys = KeyEncoder::new().encode_strings(keys);
+    let ekeys = KeyEncoder::new().encode_txnkv_strings(keys);
     // TODO: panic here??
     let mut ss = client.newest_snapshot().await;
     let result = ss.batch_get(ekeys.clone()).await?;
@@ -88,7 +97,10 @@ pub async fn do_async_txnkv_batch_get(keys: &Vec<String>) -> AsyncResult<Frame> 
     .map(|k| {
         let data = ret.get(k.as_ref());
         match data {
-            Some(val) => Frame::Bulk(val.to_owned().into()),
+            Some(val) => {
+                let data = KeyDecoder::new().decode_key_string_value(val);
+                Frame::Bulk(data.into())
+            }
             None => Frame::Null,
         }
     }).collect();
@@ -125,7 +137,7 @@ pub async fn do_async_txnkv_batch_put(kvs: Vec<KvPair>) -> AsyncResult<Frame> {
 
 pub async fn do_async_rawkv_put_not_exists(key: &str, value: &Bytes) -> AsyncResult<Frame> {
     let client = get_client()?;
-    let ekey = KeyEncoder::new().encode_string(key);
+    let ekey = KeyEncoder::new().encode_rawkv_string(key);
     let (_, swapped) = client.compare_and_swap(ekey, None.into(), value.to_vec()).await?;
     if swapped {
         Ok(Frame::Integer(1))
@@ -136,15 +148,15 @@ pub async fn do_async_rawkv_put_not_exists(key: &str, value: &Bytes) -> AsyncRes
 
 pub async fn do_async_txnkv_put_not_exists(key: &str, value: &Bytes) -> AsyncResult<Frame> {
     let client = get_txn_client()?;
-    let ekey = KeyEncoder::new().encode_string(key);
-    let val_vec = value.to_vec();
+    let ekey = KeyEncoder::new().encode_txnkv_string(key);
+    let eval = KeyEncoder::new().encode_txnkv_string_value(&mut value.to_vec(), 0);
 
     let resp = client.exec_in_txn(|txn| async move {
         let exists = txn.key_exists(ekey.clone()).await?;
         if exists {
             return Ok(0);
         } else {
-            txn.put(ekey, val_vec).await?;
+            txn.put(ekey, eval).await?;
             Ok(1)
         }
     }.boxed()).await;
@@ -162,7 +174,7 @@ pub async fn do_async_txnkv_put_not_exists(key: &str, value: &Bytes) -> AsyncRes
 
 pub async fn do_async_rawkv_expire(key: &str, value: Option<Bytes>, ttl: i64) ->AsyncResult<Frame> {
     let client = get_client()?;
-    let ekey = KeyEncoder::new().encode_string(&key.clone());
+    let ekey = KeyEncoder::new().encode_rawkv_string(&key.clone());
     let mut swapped = false;
     for i in 0..2000 {
         let prev_val = client.get(ekey.clone()).await?;
@@ -199,14 +211,14 @@ pub async fn do_async_rawkv_expire(key: &str, value: Option<Bytes>, ttl: i64) ->
 
 pub async fn do_async_rawkv_get_ttl(key: &String) -> AsyncResult<Frame> {
     let client = get_client()?;
-    let ekey = KeyEncoder::new().encode_string(&key);
+    let ekey = KeyEncoder::new().encode_rawkv_string(&key);
     let val = client.get_ttl(ekey).await?;
     Ok(resp_int(val as i64))
 }
 
 pub async fn do_async_rawkv_exists(keys: &Vec<String>) -> AsyncResult<Frame> {
     let client = get_client()?;
-    let ekeys = KeyEncoder::new().encode_strings(keys);
+    let ekeys = KeyEncoder::new().encode_rawkv_strings(keys);
     let result = client.batch_get(ekeys).await?;
     let num_items = result.len();
     Ok(resp_int(num_items as i64))
@@ -217,7 +229,7 @@ pub async fn do_async_txnkv_exists(keys: &Vec<String>) -> AsyncResult<Frame> {
     let mut ss = client.newest_snapshot().await;
     let mut cnt = 0;
     for key in keys {
-        let ekey = KeyEncoder::new().encode_string(key);
+        let ekey = KeyEncoder::new().encode_txnkv_string(key);
         match ss.key_exists(ekey).await {
             Ok(true) => cnt += 1,
             Ok(_) => {},
@@ -233,7 +245,7 @@ pub async fn do_async_rawkv_incr(
     key: &String, inc: bool, step: i64
 ) -> AsyncResult<Frame> {
     let client = get_client()?;
-    let ekey = KeyEncoder::new().encode_string(&key.clone());
+    let ekey = KeyEncoder::new().encode_rawkv_string(&key.clone());
     let mut new_int: i64 = 0;
     let mut swapped = false;
     for i in 0..2000 {
@@ -278,7 +290,7 @@ pub async fn do_async_txnkv_incr(
     key: &String, inc: bool, step: i64
 ) -> AsyncResult<Frame> {
     let client = get_txn_client()?;
-    let ekey = KeyEncoder::new().encode_string(&key);
+    let ekey = KeyEncoder::new().encode_txnkv_string(&key);
 
     let mut new_int: i64 = 0;
     let mut prev_int = 0;
@@ -303,7 +315,8 @@ pub async fn do_async_txnkv_incr(
             new_int = prev_int - step;
         }
         let new_val = new_int.to_string();
-        txn.put(ekey, new_val.to_owned()).await?;
+        let eval = KeyEncoder::new().encode_txnkv_string_value(&mut new_val.as_bytes().to_vec(), 0);
+        txn.put(ekey, eval).await?;
         Ok(new_int)
     }.boxed()).await;
 

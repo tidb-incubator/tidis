@@ -19,6 +19,7 @@ struct Backend {
     use_txn_api: Option<bool>,
     use_async_commit: Option<bool>,
     try_one_pc_commit: Option<bool>,
+    use_pessimistic_txn: Option<bool>,
 }
 
 // Config
@@ -64,5 +65,17 @@ pub fn is_try_one_pc_commit() -> bool {
             }
         }
         false
+    }
+}
+
+pub fn is_use_pessimistic_txn() -> bool {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.use_pessimistic_txn {
+                return b
+            }
+        }
+        // default use pessimistic txn mode
+        true
     }
 }

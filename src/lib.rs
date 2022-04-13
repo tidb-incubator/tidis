@@ -78,6 +78,7 @@ pub use config::get_global_config;
 pub use config::is_try_one_pc_commit;
 pub use config::is_use_async_commit;
 pub use config::is_use_txn_api;
+pub use config::is_use_pessimistic_txn;
 
 /// Default port that a redis server listens on.
 ///

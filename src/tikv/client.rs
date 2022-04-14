@@ -9,7 +9,11 @@ use tikv_client::{
     Transaction
 };
 
-use crate::is_use_pessimistic_txn;
+use crate::{
+    is_use_pessimistic_txn,
+    is_try_one_pc_commit,
+    is_use_async_commit,
+};
 
 use super::{errors::AsyncResult};
 use futures::future::{BoxFuture};
@@ -52,12 +56,23 @@ impl TxnClientWrapper<'static> {
     }
 
     pub async fn begin(&self) -> TiKVResult<Transaction> {
-        // use pessimistic transaction for now
-        if is_use_pessimistic_txn() {
-            self.client.begin_pessimistic().await
+        let mut txn_options = if is_use_pessimistic_txn() {
+            TransactionOptions::new_optimistic()
         } else {
-            self.client.begin_optimistic().await
-        }
+            TransactionOptions::new_pessimistic()
+        };
+        txn_options = if is_use_async_commit() {
+            txn_options.use_async_commit()
+        } else {
+            txn_options
+        };
+        txn_options = if is_try_one_pc_commit() {
+            txn_options.try_one_pc()
+        } else {
+            txn_options
+        };
+
+        self.client.begin_with_options(txn_options).await
     }
 
     

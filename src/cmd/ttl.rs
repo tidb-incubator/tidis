@@ -1,4 +1,4 @@
-use crate::{Connection, Db, Frame, Parse, tikv::string::do_async_rawkv_get_ttl};
+use crate::{Connection, Frame, Parse, tikv::string::do_async_rawkv_get_ttl};
 
 use tracing::{debug, instrument};
 
@@ -37,10 +37,5 @@ impl TTL {
         dst.write_frame(&response).await?;
 
         Ok(())
-    }
-
-    pub(crate) fn into_frame(self) -> Frame {
-        let mut frame = Frame::array();
-        frame
     }
 }

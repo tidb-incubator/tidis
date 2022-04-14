@@ -1,5 +1,5 @@
 use crate::tikv::errors::AsyncResult;
-use crate::{Connection, Db, Frame, Parse};
+use crate::{Connection, Frame, Parse};
 use crate::tikv::string::{do_async_txnkv_get,do_async_rawkv_get};
 use bytes::Bytes;
 use tracing::{debug, instrument};
@@ -85,16 +85,5 @@ impl Get {
         } else {
             do_async_rawkv_get(key).await
         }
-    }
-
-    /// Converts the command into an equivalent `Frame`.
-    ///
-    /// This is called by the client when encoding a `Get` command to send to
-    /// the server.
-    pub(crate) fn into_frame(self) -> Frame {
-        let mut frame = Frame::array();
-        frame.push_bulk(Bytes::from("get".as_bytes()));
-        frame.push_bulk(Bytes::from(self.key.into_bytes()));
-        frame
     }
 }

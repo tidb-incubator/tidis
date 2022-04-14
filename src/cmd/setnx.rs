@@ -1,6 +1,6 @@
-use crate::cmd::{Parse, ParseError};
+use crate::cmd::{Parse};
 use crate::tikv::string::{do_async_txnkv_put_not_exists, do_async_rawkv_put_not_exists};
-use crate::{Connection, Db, Frame};
+use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
 use crate::tikv::errors::AsyncResult;
 
@@ -103,10 +103,5 @@ impl SetNX {
         } else {
             do_async_rawkv_put_not_exists(key, value).await
         }
-    }
-
-    pub(crate) fn into_frame(self) -> Frame {
-        let mut frame = Frame::array();
-        frame
     }
 }

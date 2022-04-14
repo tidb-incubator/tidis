@@ -1,9 +1,9 @@
-use crate::cmd::{Parse, ParseError};
+use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::hash::{do_async_txnkv_hset};
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
-use crate::utils::{sleep, resp_err, resp_int};
+use crate::utils::{resp_err};
 
 use tracing::{debug, instrument};
 use tikv_client::{KvPair};

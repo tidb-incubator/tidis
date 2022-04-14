@@ -1,9 +1,8 @@
-use crate::cmd::{Parse, ParseError};
+use crate::cmd::{Parse};
 use crate::tikv::string::{do_async_rawkv_expire};
 use crate::{Connection, Frame};
 
 use bytes::Bytes;
-use std::time::Duration;
 use tracing::{debug, instrument};
 
 /// Set `key` to hold the string `value`.
@@ -108,10 +107,5 @@ impl SetEX {
         dst.write_frame(&response).await?;
 
         Ok(())
-    }
-
-    pub(crate) fn into_frame(self) -> Frame {
-        let mut frame = Frame::array();
-        frame
     }
 }

@@ -1,7 +1,7 @@
 use crate::tikv::errors::AsyncResult;
-use crate::{Connection, Db, Frame, Parse};
+use crate::{Connection, Frame, Parse};
 use crate::tikv::string::{do_async_rawkv_batch_put, do_async_txnkv_batch_put};
-use tikv_client::{Key, Value, KvPair};
+use tikv_client::{KvPair};
 use crate::tikv::{
     encoding::{KeyEncoder}
 };
@@ -95,14 +95,5 @@ impl Mset {
             }
             do_async_rawkv_batch_put(kvs).await
         }
-    }
-    /// Converts the command into an equivalent `Frame`.
-    ///
-    /// This is called by the client when encoding a `Get` command to send to
-    /// the server.
-    pub(crate) fn into_frame(self) -> Frame {
-        let mut frame = Frame::array();
-        // TODO
-        frame
     }
 }

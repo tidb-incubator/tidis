@@ -1,6 +1,4 @@
 use tikv_client::Key;
-use tracing_subscriber::registry::Data;
-
 use tikv_client::Value;
 use crate::tikv::get_instance_id;
 
@@ -83,6 +81,11 @@ impl KeyEncoder {
     pub fn encode_txnkv_hash_data_key(&self, key: &str, field: &str) -> Key {
         // TODO: maybe conflict
         let ret = format!("x_{}_D_{}_{}", self.instance_id, key, field);
+        ret.into()
+    }
+
+    pub fn encode_txnkv_hash_data_key_start(&self, key: &str) -> Key {
+        let ret = format!("x_{}_D_{}_", self.instance_id, key);
         ret.into()
     }
 

@@ -49,6 +49,21 @@ pub use hget::Hget;
 mod hmget;
 pub use hmget::Hmget;
 
+mod hlen;
+pub use hlen::Hlen;
+
+mod hgetall;
+pub use hgetall::Hgetall;
+
+mod hkeys;
+pub use hkeys::Hkeys;
+
+mod hvals;
+pub use hvals::Hvals;
+
+mod hdel;
+pub use hdel::Hdel;
+
 mod unknown;
 pub use unknown::Unknown;
 
@@ -79,6 +94,11 @@ pub enum Command {
     Hset(Hset),
     Hget(Hget),
     Hmget(Hmget),
+    Hlen(Hlen),
+    Hgetall(Hgetall),
+    Hdel(Hdel),
+    Hkeys(Hkeys),
+    Hvals(Hvals),
     // list
     // set
     // sorted set
@@ -127,6 +147,11 @@ impl Command {
             "hset" => Command::Hset(Hset::parse_frames(&mut parse)?),
             "hget" => Command::Hget(Hget::parse_frames(&mut parse)?),
             "hmget" => Command::Hmget(Hmget::parse_frames(&mut parse)?),
+            "hlen" => Command::Hlen(Hlen::parse_frames(&mut parse)?),
+            "hgetall" => Command::Hgetall(Hgetall::parse_frames(&mut parse)?),
+            "hdel" => Command::Hdel(Hdel::parse_frames(&mut parse)?),
+            "hkeys" => Command::Hkeys(Hkeys::parse_frames(&mut parse)?),
+            "hvals" => Command::Hvals(Hvals::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -177,6 +202,11 @@ impl Command {
             Hset(cmd) => cmd.apply(dst).await,
             Hget(cmd) => cmd.apply(dst).await,
             Hmget(cmd) => cmd.apply(dst).await,
+            Hlen(cmd) => cmd.apply(dst).await,
+            Hgetall(cmd) => cmd.apply(dst).await,
+            Hdel(cmd) => cmd.apply(dst).await,
+            Hkeys(cmd) => cmd.apply(dst).await,
+            Hvals(cmd) => cmd.apply(dst).await,
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
             // context of a `Subscribe` command.
@@ -205,6 +235,11 @@ impl Command {
             Command::Hset(_) => "hset",
             Command::Hget(_) => "hget",
             Command::Hmget(_) => "hmget",
+            Command::Hlen(_) => "hlen",
+            Command::Hgetall(_) => "hgetall",
+            Command::Hdel(_) => "hdel",
+            Command::Hkeys(_) => "hkeys",
+            Command::Hvals(_) => "hvals",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

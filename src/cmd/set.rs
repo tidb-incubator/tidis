@@ -1,7 +1,7 @@
 use crate::cmd::{Parse, ParseError};
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::string::{do_async_rawkv_put,do_async_rawkv_put_not_exists,do_async_txnkv_put};
-use crate::{Connection, Db, Frame};
+use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
 
 use bytes::Bytes;
@@ -175,10 +175,5 @@ impl Set {
         } else {
             do_async_rawkv_put(key, val).await
         }
-    }
-
-    pub(crate) fn into_frame(self) -> Frame {
-        let mut frame = Frame::array();
-        frame
     }
 }

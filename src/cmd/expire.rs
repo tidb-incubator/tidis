@@ -45,9 +45,4 @@ impl Expire {
 
         Ok(())
     }
-
-    pub(crate) fn into_frame(self) -> Frame {
-        let mut frame = Frame::array();
-        frame
-    }
 }

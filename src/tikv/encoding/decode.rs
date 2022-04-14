@@ -42,6 +42,12 @@ impl KeyDecoder {
         (self.decode_key_ttl(value), self.decode_key_hash_size(value))
     }
 
+    pub fn decode_key_hash_userkey_from_datakey(&self, rkey: &str, key: Key) -> Vec<u8> {
+        let key: Vec<u8> = key.into();
+        let idx = 14 + rkey.len();
+        key[idx..].to_vec()
+    }
+
     pub fn decode_hash_field(&self, rkey: Key, key: &str) -> Vec<u8> {
         let mut bytes: Vec<u8> = rkey.clone().into();
         bytes.drain(17 + key.len() + 1..).collect()

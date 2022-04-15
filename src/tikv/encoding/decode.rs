@@ -48,6 +48,15 @@ impl KeyDecoder {
         key[idx..].to_vec()
     }
 
+    /// return (ttl, left, right)
+    pub fn decode_key_list_meta(&self, value: &Vec<u8>) -> (u64, u64, u64) {
+        (
+            u64::from_be_bytes(value[1..9].try_into().unwrap()),
+            u64::from_be_bytes(value[9..17].try_into().unwrap()),
+            u64::from_be_bytes(value[17..].try_into().unwrap()),
+        )
+    }
+
     pub fn decode_hash_field(&self, rkey: Key, key: &str) -> Vec<u8> {
         let mut bytes: Vec<u8> = rkey.clone().into();
         bytes.drain(17 + key.len() + 1..).collect()

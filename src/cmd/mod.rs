@@ -73,6 +73,12 @@ pub use hexists::Hexists;
 mod hstrlen;
 pub use hstrlen::Hstrlen;
 
+mod push;
+pub use push::Push;
+
+mod pop;
+pub use pop::Pop;
+
 mod unknown;
 pub use unknown::Unknown;
 
@@ -112,6 +118,10 @@ pub enum Command {
     Hexists(Hexists),
     Hstrlen(Hstrlen),
     // list
+    Lpush(Push),
+    Rpush(Push),
+    Lpop(Pop),
+    Rpop(Pop),
     // set
     // sorted set
     Unknown(Unknown),
@@ -168,6 +178,10 @@ impl Command {
             "hincrby" => Command::Hincrby(Hincrby::parse_frames(&mut parse)?),
             "hexists" => Command::Hexists(Hexists::parse_frames(&mut parse)?),
             "hstrlen" => Command::Hstrlen(Hstrlen::parse_frames(&mut parse)?),
+            "lpush" => Command::Lpush(Push::parse_frames(&mut parse)?),
+            "rpush" => Command::Rpush(Push::parse_frames(&mut parse)?),
+            "lpop" => Command::Lpop(Pop::parse_frames(&mut parse)?),
+            "rpop" => Command::Rpop(Pop::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -226,6 +240,10 @@ impl Command {
             Hincrby(cmd) => cmd.apply(dst).await,
             Hexists(cmd) => cmd.apply(dst).await,
             Hstrlen(cmd) => cmd.apply(dst).await,
+            Lpush(cmd) => cmd.apply(dst, true).await,
+            Rpush(cmd) => cmd.apply(dst, false).await,
+            Lpop(cmd) => cmd.apply(dst, true).await,
+            Rpop(cmd) => cmd.apply(dst, false).await,
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
             // context of a `Subscribe` command.
@@ -262,6 +280,10 @@ impl Command {
             Command::Hincrby(_) => "hincrby",
             Command::Hexists(_) => "hexists",
             Command::Hstrlen(_) => "hstrlen",
+            Command::Lpush(_) => "lpush",
+            Command::Rpush(_) => "rpush",
+            Command::Lpop(_) => "lpop",
+            Command::Rpop(_) => "rpop",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

@@ -105,13 +105,13 @@ impl Set {
                 // An expiration is specified in seconds. The next value is an
                 // integer.
                 let secs = parse.next_int()?;
-                expire = Some(Duration::from_secs(secs));
+                expire = Some(Duration::from_secs(secs as u64));
             }
             Ok(s) if s.to_uppercase() == "PX" => {
                 // An expiration is specified in milliseconds. The next value is
                 // an integer.
                 let ms = parse.next_int()?;
-                expire = Some(Duration::from_millis(ms));
+                expire = Some(Duration::from_millis(ms as u64));
             }
             Ok(s) if s.to_uppercase() == "NX" => {
                 // Only set if key not present

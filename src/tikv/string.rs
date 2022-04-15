@@ -292,10 +292,9 @@ pub async fn do_async_txnkv_incr(
     let client = get_txn_client()?;
     let ekey = KeyEncoder::new().encode_txnkv_string(&key);
 
-    let mut new_int: i64 = 0;
-    let mut prev_int = 0;
-
     let resp = client.exec_in_txn(|txn| async move {
+        let mut new_int = 0;
+        let mut prev_int = 0;
         match txn.get(ekey.clone()).await? {
             Some(val) => match String::from_utf8_lossy(&val).parse::<i64>() {
                 Ok(ival) => {

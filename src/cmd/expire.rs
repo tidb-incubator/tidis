@@ -5,11 +5,11 @@ use tracing::{debug, instrument};
 #[derive(Debug)]
 pub struct Expire {
     key: String,
-    seconds: u64,
+    seconds: i64,
 }
 
 impl Expire {
-    pub fn new(key: impl ToString, seconds: u64) -> Expire {
+    pub fn new(key: impl ToString, seconds: i64) -> Expire {
         Expire {
             key: key.to_string(),
             seconds: seconds,
@@ -21,7 +21,7 @@ impl Expire {
         &self.key
     }
 
-    pub fn seconds(&self) -> u64 {
+    pub fn seconds(&self) -> i64 {
         self.seconds
     }
 
@@ -29,12 +29,12 @@ impl Expire {
         let key = parse.next_string()?;
         let seconds = parse.next_int()?;
 
-        Ok(Expire { key, seconds })
+        Ok(Expire { key, seconds})
     }
 
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        let response = match do_async_rawkv_expire(&self.key, None, self.seconds as i64).await {
+        let response = match do_async_rawkv_expire(&self.key, None, self.seconds).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };

@@ -64,6 +64,15 @@ pub use hvals::Hvals;
 mod hdel;
 pub use hdel::Hdel;
 
+mod hincrby;
+pub use hincrby::Hincrby;
+
+mod hexists;
+pub use hexists::Hexists;
+
+mod hstrlen;
+pub use hstrlen::Hstrlen;
+
 mod unknown;
 pub use unknown::Unknown;
 
@@ -99,6 +108,9 @@ pub enum Command {
     Hdel(Hdel),
     Hkeys(Hkeys),
     Hvals(Hvals),
+    Hincrby(Hincrby),
+    Hexists(Hexists),
+    Hstrlen(Hstrlen),
     // list
     // set
     // sorted set
@@ -145,6 +157,7 @@ impl Command {
             "incr" => Command::Incr(Incr::parse_frames(&mut parse)?),
             "decr" => Command::Decr(Decr::parse_frames(&mut parse)?),
             "hset" => Command::Hset(Hset::parse_frames(&mut parse)?),
+            "hmset" => Command::Hset(Hset::parse_frames(&mut parse)?),
             "hget" => Command::Hget(Hget::parse_frames(&mut parse)?),
             "hmget" => Command::Hmget(Hmget::parse_frames(&mut parse)?),
             "hlen" => Command::Hlen(Hlen::parse_frames(&mut parse)?),
@@ -152,6 +165,9 @@ impl Command {
             "hdel" => Command::Hdel(Hdel::parse_frames(&mut parse)?),
             "hkeys" => Command::Hkeys(Hkeys::parse_frames(&mut parse)?),
             "hvals" => Command::Hvals(Hvals::parse_frames(&mut parse)?),
+            "hincrby" => Command::Hincrby(Hincrby::parse_frames(&mut parse)?),
+            "hexists" => Command::Hexists(Hexists::parse_frames(&mut parse)?),
+            "hstrlen" => Command::Hstrlen(Hstrlen::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -207,6 +223,9 @@ impl Command {
             Hdel(cmd) => cmd.apply(dst).await,
             Hkeys(cmd) => cmd.apply(dst).await,
             Hvals(cmd) => cmd.apply(dst).await,
+            Hincrby(cmd) => cmd.apply(dst).await,
+            Hexists(cmd) => cmd.apply(dst).await,
+            Hstrlen(cmd) => cmd.apply(dst).await,
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
             // context of a `Subscribe` command.
@@ -240,6 +259,9 @@ impl Command {
             Command::Hdel(_) => "hdel",
             Command::Hkeys(_) => "hkeys",
             Command::Hvals(_) => "hvals",
+            Command::Hincrby(_) => "hincrby",
+            Command::Hexists(_) => "hexists",
+            Command::Hstrlen(_) => "hstrlen",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

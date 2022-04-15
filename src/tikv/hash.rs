@@ -22,7 +22,7 @@ pub async fn do_async_txnkv_hset(key: &str, fvs: &Vec<KvPair>) -> AsyncResult<Fr
             Some(meta_value) => {
                 // check key type is hash
                 if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Hash) {
-                    return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.to_string()));
+                    return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
                 }
                 // already exists
                 let (mut ttl, mut size) = KeyDecoder::new().decode_key_hash_meta(&meta_value);
@@ -86,7 +86,7 @@ pub async fn do_async_txnkv_hget(key: &str, field: &str) -> AsyncResult<Frame> {
         Some(meta_value) => {
             // check key type and ttl
             if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Hash) {
-                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.to_string()));
+                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
             }
 
             // TODO check ttl
@@ -111,6 +111,73 @@ pub async fn do_async_txnkv_hget(key: &str, field: &str) -> AsyncResult<Frame> {
 
 }
 
+pub async fn do_async_txnkv_hstrlen(key: &str, field: &str) -> AsyncResult<Frame> {
+    let client = get_txn_client()?;
+    let key = key.to_owned();
+    let field = field.to_owned();
+    let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
+
+    let mut ss = client.newest_snapshot().await;
+    match ss.get(meta_key.to_owned()).await? {
+        Some(meta_value) => {
+            // check key type and ttl
+            if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Hash) {
+                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+            }
+
+            // TODO check ttl
+            let ttl = KeyDecoder::new().decode_key_ttl(&meta_value);
+
+            let data_key = KeyEncoder::new().encode_txnkv_hash_data_key(&key, &field);
+
+            match ss.get(data_key).await? {
+                Some(data) => {
+                    return Ok(resp_int(data.len() as i64));
+                },
+                None => {
+                    return Ok(resp_int(0));
+                }
+            }
+        }
+        None => {
+            return Ok(resp_int(0));
+        },
+    }
+
+}
+
+pub async fn do_async_txnkv_hexists(key: &str, field: &str) -> AsyncResult<Frame> {
+    let client = get_txn_client()?;
+    let key = key.to_owned();
+    let field = field.to_owned();
+    let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
+
+    let mut ss = client.newest_snapshot().await;
+    match ss.get(meta_key.to_owned()).await? {
+        Some(meta_value) => {
+            // check key type and ttl
+            if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Hash) {
+                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+            }
+
+            // TODO check ttl
+            let ttl = KeyDecoder::new().decode_key_ttl(&meta_value);
+
+            let data_key = KeyEncoder::new().encode_txnkv_hash_data_key(&key, &field);
+
+            if ss.key_exists(data_key).await? {
+                Ok(resp_int(1))
+            } else {
+                Ok(resp_int(0))
+            }
+        }
+        None => {
+            return Ok(resp_int(0));
+        },
+    }
+
+}
+
 pub async fn do_async_txnkv_hmget(key: &str, fields: &Vec<String>) -> AsyncResult<Frame> {
     let client = get_txn_client()?;
     let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(key);
@@ -122,7 +189,7 @@ pub async fn do_async_txnkv_hmget(key: &str, fields: &Vec<String>) -> AsyncResul
         Some(meta_value) => {
             // check key type and ttl
             if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Hash) {
-                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.to_string()));
+                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
             }
 
             // TODO check ttl
@@ -160,7 +227,7 @@ pub async fn do_async_txnkv_hlen(key: &str) -> AsyncResult<Frame> {
         Some(meta_value) => {
             // check key type and ttl
             if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Hash) {
-                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.to_string()));
+                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
             }
 
             // TODO check ttl
@@ -181,7 +248,7 @@ pub async fn do_async_txnkv_hgetall(key: &str, with_field: bool, with_value: boo
     if let Some(meta_value) = ss.get(meta_key.to_owned()).await? {
         // check key type and ttl
         if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Hash) {
-            return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.to_string()));
+            return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
         }
 
         // TODO check ttl
@@ -227,7 +294,7 @@ pub async fn do_async_txnkv_hdel(key: &str, field: &str) -> AsyncResult<Frame> {
             Some(meta_value) => {
                 // check key type and ttl
                 if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Hash) {
-                    return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.to_string()));
+                    return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
                 }
 
                 let (ttl, mut size) = KeyDecoder::new().decode_key_hash_meta(&meta_value);
@@ -251,6 +318,70 @@ pub async fn do_async_txnkv_hdel(key: &str, field: &str) -> AsyncResult<Frame> {
                 Ok(0)
             }
         }
+    }.boxed()).await;
+
+    match resp {
+        Ok(n) => {
+            Ok(resp_int(n))
+        },
+        Err(e) => {
+            Ok(resp_err(&e.to_string()))
+        }
+    }
+}
+
+pub async fn do_async_txnkv_hincrby(key: &str, field: &str, step: i64) -> AsyncResult<Frame> {
+    let client =  get_txn_client()?;
+    let key = key.to_owned();
+    let field = field.to_owned();
+    let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
+    let data_key = KeyEncoder::new().encode_txnkv_hash_data_key(&key, &field);
+
+    let resp = client.exec_in_txn(|txn| async move {
+        let mut new_int = 0;
+        let mut prev_int = 0;
+        match txn.get_for_update(meta_key.clone()).await? {
+            Some(meta_value) => {
+                // check key type and ttl
+                if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Hash) {
+                    return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                }
+
+                let (ttl, size) = KeyDecoder::new().decode_key_hash_meta(&meta_value);
+
+                match txn.get(data_key.clone()).await? {
+                    Some(data_value) => {
+                        // try to convert to int
+                        match String::from_utf8_lossy(&data_value).parse::<i64>() {
+                            Ok(ival) => {
+                                prev_int = ival;
+                            },
+                            Err(err) => {
+                                return Err(RTError::StringError(err.to_string()));
+                            }
+                        }
+                    }, 
+                    None => {
+                        // filed not exist
+                        prev_int = 0;
+                        // update meta key
+                        let new_meta_value = KeyEncoder::new().encode_txnkv_hash_meta_value(ttl, size+1);
+                        txn.put(meta_key, new_meta_value).await?;
+                    }
+                }
+            },
+            None => {
+                prev_int = 0;
+                // create new meta key first
+                let meta_value = KeyEncoder::new().encode_txnkv_hash_meta_value(0, 1);
+                txn.put(meta_key, meta_value).await?;
+            }
+        }
+        new_int = prev_int + step;
+        // update data key
+        txn.put(data_key, new_int.to_string().as_bytes().to_vec()).await?;
+
+        Ok(new_int)
     }.boxed()).await;
 
     match resp {

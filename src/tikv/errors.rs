@@ -21,6 +21,12 @@ impl From<String> for RTError {
     }
 }
 
+impl From<&str> for RTError {
+    fn from(e: &str) -> Self {
+        RTError::StringError(e.to_string())
+    }
+}
+
 pub type AsyncResult<T> = std::result::Result<T, RTError>;
 
 

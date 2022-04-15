@@ -79,6 +79,9 @@ pub use push::Push;
 mod pop;
 pub use pop::Pop;
 
+mod lrange;
+pub use lrange::Lrange;
+
 mod unknown;
 pub use unknown::Unknown;
 
@@ -122,6 +125,7 @@ pub enum Command {
     Rpush(Push),
     Lpop(Pop),
     Rpop(Pop),
+    Lrange(Lrange),
     // set
     // sorted set
     Unknown(Unknown),
@@ -182,6 +186,7 @@ impl Command {
             "rpush" => Command::Rpush(Push::parse_frames(&mut parse)?),
             "lpop" => Command::Lpop(Pop::parse_frames(&mut parse)?),
             "rpop" => Command::Rpop(Pop::parse_frames(&mut parse)?),
+            "lrange" => Command::Lrange(Lrange::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -244,6 +249,7 @@ impl Command {
             Rpush(cmd) => cmd.apply(dst, false).await,
             Lpop(cmd) => cmd.apply(dst, true).await,
             Rpop(cmd) => cmd.apply(dst, false).await,
+            Lrange(cmd) => cmd.apply(dst).await,
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
             // context of a `Subscribe` command.
@@ -284,6 +290,7 @@ impl Command {
             Command::Rpush(_) => "rpush",
             Command::Lpop(_) => "lpop",
             Command::Rpop(_) => "rpop",
+            Command::Lrange(_) => "lrange",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

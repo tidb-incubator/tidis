@@ -7,7 +7,7 @@ use super::{
 };
 use super::{get_txn_client};
 use bytes::Bytes;
-
+use std::convert::TryInto;
 use crate::utils::{resp_err, resp_array, resp_bulk, resp_int, resp_nil};
 use super::errors::*;
 
@@ -185,6 +185,50 @@ pub async fn do_async_txnkv_pop(key: &str, op_left: bool, count: i64) -> AsyncRe
     }
 }
 
-pub async fn do_async_txnkv_lrange(key: &str, left: u64, right: u64) -> AsyncResult<Frame> {
-    Ok(resp_nil())
+pub async fn do_async_txnkv_lrange(key: &str, mut r_left: i64, mut r_right: i64) -> AsyncResult<Frame> {
+    let client = get_txn_client()?;
+    let mut ss = client.newest_snapshot().await;
+    let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(key);
+    
+    match ss.get(meta_key).await? {
+        Some(meta_value) => {
+            // check key type and ttl
+            if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::List) {
+                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+            }
+            let (ttl, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
+
+            let llen: i64 = (right - left) as i64;
+
+            // convert negative index to positive index
+            if r_left < 0 {
+                r_left += llen;
+            }
+            if r_right < 0 {
+                r_right += llen;
+            }
+            if r_left > r_right {
+                return Ok(resp_nil())
+            }
+
+            let real_left = r_left as u64 + left;
+            let mut real_length = r_right - r_left + 1;
+            if real_length > llen {
+                real_length = llen;
+            }
+
+            let data_key_start = KeyEncoder::new().encode_txnkv_list_data_key(key, real_left);
+            let range: RangeFrom<Key> = data_key_start..;
+            let from_range: BoundRange = range.into();
+            let iter = ss.scan(from_range, real_length.try_into().unwrap()).await?;
+
+            let resp = iter.map(|kv|{
+                resp_bulk(kv.1)
+            }).collect();
+            Ok(resp_array(resp))
+        },
+        None => {
+            Ok(resp_nil())
+        }
+    }
 }

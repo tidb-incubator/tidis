@@ -25,7 +25,7 @@ pub async fn do_async_txnkv_hset(key: &str, fvs: &Vec<KvPair>) -> AsyncResult<Fr
                     return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
                 }
                 // already exists
-                let (mut ttl, mut size) = KeyDecoder::new().decode_key_hash_meta(&meta_value);
+                let (ttl, mut size) = KeyDecoder::new().decode_key_hash_meta(&meta_value);
 
                 for kv in fvs_copy {
                     let field: Vec<u8> = kv.0.into();

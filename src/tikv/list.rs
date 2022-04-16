@@ -8,7 +8,7 @@ use super::{
 use super::{get_txn_client};
 use bytes::Bytes;
 use std::convert::TryInto;
-use crate::utils::{resp_err, resp_array, resp_bulk, resp_int, resp_nil};
+use crate::utils::{resp_err, resp_array, resp_bulk, resp_int, resp_nil, resp_ok};
 use super::errors::*;
 
 const INIT_INDEX: u64 = 1<<32;
@@ -230,5 +230,101 @@ pub async fn do_async_txnkv_lrange(key: &str, mut r_left: i64, mut r_right: i64)
         None => {
             Ok(resp_nil())
         }
+    }
+}
+
+pub async fn do_async_txnkv_llen(key: &str) -> AsyncResult<Frame> {
+    let client = get_txn_client()?;
+
+    let mut ss = client.newest_snapshot().await;
+    let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(key);
+
+    match ss.get(meta_key).await? {
+        Some(meta_value) => {
+            // check type and ttl
+            if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::List) {
+                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+            }
+            let (ttl, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
+
+            let llen: i64 = (right - left) as i64;
+            Ok(resp_int(llen))
+        },
+        None => {
+            Ok(resp_int(0))
+        }
+    }
+}
+
+pub async fn do_async_txnkv_lindex(key: &str, idx: i64) -> AsyncResult<Frame> {
+    let client = get_txn_client()?;
+
+    let mut ss = client.newest_snapshot().await;
+    let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(key);
+
+    match ss.get(meta_key).await? {
+        Some(meta_value) => {
+            // check type and ttl
+            if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::List) {
+                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+            }
+            let (ttl, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
+
+            let real_idx = left + idx as u64;
+
+            // get value from data key
+            let data_key = KeyEncoder::new().encode_txnkv_list_data_key(&key, real_idx);
+            if let Some(value) = ss.get(data_key).await? {
+                Ok(resp_bulk(value))
+            } else {
+                Ok(resp_nil())
+            }
+        },
+        None => {
+            Ok(resp_nil())
+        }
+    }
+}
+
+pub async fn do_async_txnkv_lset(key: &str, mut idx: i64, ele: &Bytes) -> AsyncResult<Frame> {
+    let client = get_txn_client()?;
+    let key = key.to_owned();
+    let ele = ele.to_owned();
+
+    let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(&key);
+    let resp = client.exec_in_txn(|txn| async move {
+        Ok(match txn.get_for_update(meta_key.clone()).await? {
+            Some(meta_value) => {
+                // check type and ttl
+                if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::List) {
+                    return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                }
+                let (ttl, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
+
+                // convert idx to positive is needed
+                if idx < 0 {
+                    idx = idx + (right - left) as i64;
+                }
+
+                let uidx = idx as u64 + left;
+                if idx < 0 || uidx < left || uidx > right - 1 {
+                    return Err(RTError::StringError(REDIS_INDEX_OUT_OF_RANGE.into()));
+                }
+
+                let data_key = KeyEncoder::new().encode_txnkv_list_data_key(&key, uidx);
+                // data keys exists, update it to new value
+                txn.put(data_key, ele.to_vec()).await?;
+                Ok(())
+            },
+            None => {
+                // -Err no such key
+                Err(RTError::StringError(REDIS_NO_SUCH_KEY_ERR.into()))
+            }
+        })
+    }.boxed()).await;
+
+    match resp {
+        Ok(_) => Ok(resp_ok()),
+        Err(e) => Ok(resp_err(&e.to_string()))
     }
 }

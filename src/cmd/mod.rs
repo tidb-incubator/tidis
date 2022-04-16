@@ -82,6 +82,15 @@ pub use pop::Pop;
 mod lrange;
 pub use lrange::Lrange;
 
+mod llen;
+pub use llen::Llen;
+
+mod lindex;
+pub use lindex::Lindex;
+
+mod lset;
+pub use lset::Lset;
+
 mod unknown;
 pub use unknown::Unknown;
 
@@ -126,6 +135,9 @@ pub enum Command {
     Lpop(Pop),
     Rpop(Pop),
     Lrange(Lrange),
+    Llen(Llen),
+    Lindex(Lindex),
+    Lset(Lset),
     // set
     // sorted set
     Unknown(Unknown),
@@ -187,6 +199,9 @@ impl Command {
             "lpop" => Command::Lpop(Pop::parse_frames(&mut parse)?),
             "rpop" => Command::Rpop(Pop::parse_frames(&mut parse)?),
             "lrange" => Command::Lrange(Lrange::parse_frames(&mut parse)?),
+            "llen" => Command::Llen(Llen::parse_frames(&mut parse)?),
+            "lindex" => Command::Lindex(Lindex::parse_frames(&mut parse)?),
+            "lset" => Command::Lset(Lset::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -250,6 +265,9 @@ impl Command {
             Lpop(cmd) => cmd.apply(dst, true).await,
             Rpop(cmd) => cmd.apply(dst, false).await,
             Lrange(cmd) => cmd.apply(dst).await,
+            Llen(cmd) => cmd.apply(dst).await,
+            Lindex(cmd) => cmd.apply(dst).await,
+            Lset(cmd) => cmd.apply(dst).await,
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
             // context of a `Subscribe` command.
@@ -291,6 +309,9 @@ impl Command {
             Command::Lpop(_) => "lpop",
             Command::Rpop(_) => "rpop",
             Command::Lrange(_) => "lrange",
+            Command::Llen(_) => "llen",
+            Command::Lindex(_) => "lindex",
+            Command::Lset(_) => "lset",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

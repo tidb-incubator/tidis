@@ -1,4 +1,5 @@
-use crate::{Connection, Frame, Parse, tikv::string::do_async_rawkv_expire};
+use crate::{Connection, Frame, Parse};
+use crate::tikv::string::StringCommandCtx;
 
 use tracing::{debug, instrument};
 
@@ -34,7 +35,7 @@ impl Expire {
 
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        let response = match do_async_rawkv_expire(&self.key, None, self.seconds).await {
+        let response = match StringCommandCtx::new(None).do_async_rawkv_expire(&self.key, None, self.seconds).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };

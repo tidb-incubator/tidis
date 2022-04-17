@@ -1,6 +1,6 @@
 use crate::tikv::errors::AsyncResult;
 use crate::{Connection, Frame, Parse};
-use crate::tikv::string::{do_async_rawkv_batch_get,do_async_txnkv_batch_get};
+use crate::tikv::string::StringCommandCtx;
 use crate::config::is_use_txn_api;
 use tracing::{debug, instrument};
 
@@ -62,9 +62,9 @@ impl Mget {
 
     async fn batch_get(&self, keys: &Vec<String>) -> AsyncResult<Frame> {
         if is_use_txn_api() {
-            do_async_txnkv_batch_get(keys).await
+            StringCommandCtx::new(None).do_async_txnkv_batch_get(keys).await
         } else {
-            do_async_rawkv_batch_get(keys).await
+            StringCommandCtx::new(None).do_async_rawkv_batch_get(keys).await
         }
     }
 }

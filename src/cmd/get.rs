@@ -1,7 +1,6 @@
 use crate::tikv::errors::AsyncResult;
 use crate::{Connection, Frame, Parse};
-use crate::tikv::string::{do_async_txnkv_get,do_async_rawkv_get};
-use bytes::Bytes;
+use crate::tikv::string::StringCommandCtx;
 use tracing::{debug, instrument};
 
 use crate::config::{is_use_txn_api};
@@ -81,9 +80,9 @@ impl Get {
 
     async fn get(&self, key: &str) ->AsyncResult<Frame> {
         if is_use_txn_api() {
-            do_async_txnkv_get(key).await
+            StringCommandCtx::new(None).do_async_txnkv_get(key).await
         } else {
-            do_async_rawkv_get(key).await
+            StringCommandCtx::new(None).do_async_rawkv_get(key).await
         }
     }
 }

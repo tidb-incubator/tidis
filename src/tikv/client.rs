@@ -44,6 +44,15 @@ impl TxnClientWrapper<'static> {
         self.client.snapshot(timestamp, options)
     }
 
+    pub async fn snapshot_from_txn(&self, txn: &Transaction) -> Snapshot {
+        let options = if is_use_pessimistic_txn() {
+            TransactionOptions::new_pessimistic()
+        } else {
+            TransactionOptions::new_optimistic()
+        };
+        self.snapshot(txn.start_timestamp(), options).await
+    }
+
     pub async fn newest_snapshot(&self) -> Snapshot {
         let options = if is_use_pessimistic_txn() {
             TransactionOptions::new_pessimistic()
@@ -77,27 +86,44 @@ impl TxnClientWrapper<'static> {
 
     
     /// Auto begin new txn, call f with the txn, commit or callback due to the result
-    pub async fn exec_in_txn<T, F>(&self, f: F) -> AsyncResult<T> where 
+    pub async fn exec_in_txn<T, F>(&self, txn: Option<&mut Transaction>, f: F) -> AsyncResult<T> where 
     F: FnOnce(&mut Transaction) -> BoxFuture<'_, AsyncResult<T>>,
     {
-        // TODO: add retry policy
-
-        // begin new transaction
-        let mut txn = self.begin().await?;
-
-        // call f
-        let result = f(&mut txn).await;
-        match result {
-            Ok(res) => { 
-                txn.commit().await?;
-                Ok(res)
+        match txn {
+            Some(txn) => {
+                // call f
+                let result = f(txn).await;
+                match result {
+                    Ok(res) => { 
+                        Ok(res)
+                    },
+                    Err(err) => {
+                        Err(err)
+                    }
+                }
             },
-            Err(err) => {
-                // log and rollback
-                txn.rollback().await?;
-                Err(err)
+            None => {
+                // begin new transaction
+                let mut txn = self.begin().await?;
+
+                // call f
+                let result = f(&mut txn).await;
+                match result {
+                    Ok(res) => { 
+                        txn.commit().await?;
+                        Ok(res)
+                    },
+                    Err(err) => {
+                        // log and rollback
+                        txn.rollback().await?;
+                        Err(err)
+                    }
+                }
             }
         }
+        // TODO: add retry policy
+
+        
 
     }
 

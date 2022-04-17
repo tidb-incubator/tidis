@@ -1,6 +1,6 @@
 use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
-use crate::tikv::hash::{do_async_txnkv_hincrby};
+use crate::tikv::hash::HashCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
 use crate::utils::{resp_err};
@@ -60,7 +60,7 @@ impl Hincrby {
 
     async fn hincrby(&self) -> AsyncResult<Frame> {
         if is_use_txn_api() {
-            do_async_txnkv_hincrby(&self.key, &self.field, self.step).await
+            HashCommandCtx::new(None).do_async_txnkv_hincrby(&self.key, &self.field, self.step).await
         } else {
             Ok(resp_err("not supported yet"))
         }

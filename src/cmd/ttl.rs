@@ -1,4 +1,5 @@
-use crate::{Connection, Frame, Parse, tikv::string::do_async_rawkv_get_ttl};
+use crate::{Connection, Frame, Parse};
+use crate::tikv::string::StringCommandCtx;
 
 use tracing::{debug, instrument};
 
@@ -27,7 +28,7 @@ impl TTL {
 
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        let response = match do_async_rawkv_get_ttl(&self.key).await {
+        let response = match StringCommandCtx::new(None).do_async_rawkv_get_ttl(&self.key).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };

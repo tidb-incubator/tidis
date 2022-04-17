@@ -1,6 +1,6 @@
 use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
-use crate::tikv::list::{do_async_txnkv_push};
+use crate::tikv::list::ListCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
 use crate::utils::{resp_err};
@@ -56,7 +56,7 @@ impl Push {
 
     async fn push(&self, op_left: bool) -> AsyncResult<Frame> {
         if is_use_txn_api() {
-            do_async_txnkv_push(&self.key, &self.items, op_left).await
+            ListCommandCtx::new(None).do_async_txnkv_push(&self.key, &self.items, op_left).await
         } else {
             Ok(resp_err("not supported yet"))
         }

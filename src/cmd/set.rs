@@ -1,6 +1,6 @@
 use crate::cmd::{Parse, ParseError};
 use crate::tikv::errors::AsyncResult;
-use crate::tikv::string::{do_async_rawkv_put,do_async_rawkv_put_not_exists,do_async_txnkv_put};
+use crate::tikv::string::StringCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
 
@@ -165,15 +165,15 @@ impl Set {
             // TODO:
             Ok(Frame::Null)
         } else {
-            do_async_rawkv_put_not_exists(key, val).await
+            StringCommandCtx::new(None).do_async_rawkv_put_not_exists(key, val).await
         }
     }
 
     async fn put(&self, key: &str, val: &Bytes) -> AsyncResult<Frame> {
         if is_use_txn_api() {
-            do_async_txnkv_put(key, val).await
+            StringCommandCtx::new(None).do_async_txnkv_put(key, val).await
         } else {
-            do_async_rawkv_put(key, val).await
+            StringCommandCtx::new(None).do_async_rawkv_put(key, val).await
         }
     }
 }

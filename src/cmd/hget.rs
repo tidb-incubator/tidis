@@ -1,6 +1,6 @@
 use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
-use crate::tikv::hash::{do_async_txnkv_hget};
+use crate::tikv::hash::HashCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
 use crate::utils::{resp_err};
@@ -47,7 +47,7 @@ impl Hget {
 
     async fn hget(&self) -> AsyncResult<Frame> {
         if is_use_txn_api() {
-            do_async_txnkv_hget(&self.key, &self.field).await
+            HashCommandCtx::new(None).do_async_txnkv_hget(&self.key, &self.field).await
         } else {
             Ok(resp_err("not supported yet"))
         }

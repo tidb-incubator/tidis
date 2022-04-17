@@ -1,6 +1,6 @@
 use crate::tikv::errors::AsyncResult;
 use crate::{Connection, Frame, Parse};
-use crate::tikv::string::{do_async_rawkv_batch_put, do_async_txnkv_batch_put};
+use crate::tikv::string::StringCommandCtx;
 use tikv_client::{KvPair};
 use crate::tikv::{
     encoding::{KeyEncoder}
@@ -85,7 +85,7 @@ impl Mset {
                 let kvpair = KvPair::from((ekey, val.to_vec()));
                 kvs.push(kvpair);
             }
-            do_async_txnkv_batch_put(kvs).await
+            StringCommandCtx::new(None).do_async_txnkv_batch_put(kvs).await
         } else {
             for (idx, key) in self.keys.iter().enumerate() {
                 let val = &self.vals[idx];
@@ -93,7 +93,7 @@ impl Mset {
                 let kvpair = KvPair::from((ekey, val.to_vec()));
                 kvs.push(kvpair);
             }
-            do_async_rawkv_batch_put(kvs).await
+            StringCommandCtx::new(None).do_async_rawkv_batch_put(kvs).await
         }
     }
 }

@@ -1,5 +1,5 @@
 use crate::cmd::{Parse};
-use crate::tikv::string::{do_async_rawkv_expire};
+use crate::tikv::string::StringCommandCtx;
 use crate::{Connection, Frame};
 
 use bytes::Bytes;
@@ -99,7 +99,7 @@ impl SetEX {
     /// to execute a received command.
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        let response = match do_async_rawkv_expire(&self.key, Some(self.value.clone()), self.expire).await {
+        let response = match StringCommandCtx::new(None).do_async_rawkv_expire(&self.key, Some(self.value.clone()), self.expire).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };

@@ -1,11 +1,10 @@
 use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
-use crate::tikv::list::{do_async_txnkv_lrange};
+use crate::tikv::list::ListCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
 use crate::utils::{resp_err};
 
-use bytes::Bytes;
 use tracing::{debug, instrument};
 
 #[derive(Debug)]
@@ -47,7 +46,7 @@ impl Lrange {
 
     async fn lrange(&self) -> AsyncResult<Frame> {
         if is_use_txn_api() {
-            do_async_txnkv_lrange(&self.key, self.left, self.right).await
+            ListCommandCtx::new(None).do_async_txnkv_lrange(&self.key, self.left, self.right).await
         } else {
             Ok(resp_err("not supported yet"))
         }

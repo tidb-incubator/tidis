@@ -1,5 +1,5 @@
 use crate::{Connection, Frame, Parse};
-use crate::tikv::string::{do_async_rawkv_incr, do_async_txnkv_incr};
+use crate::tikv::string::StringCommandCtx;
 use crate::config::{is_use_txn_api};
 use crate::tikv::errors::AsyncResult;
 
@@ -44,9 +44,9 @@ impl Incr {
 
     async fn incr(&self, key: &String) -> AsyncResult<Frame> {
         if is_use_txn_api() {
-            do_async_txnkv_incr(key, true, 1).await
+            StringCommandCtx::new(None).do_async_txnkv_incr(key, true, 1).await
         } else {
-            do_async_rawkv_incr(key, false, 1).await
+            StringCommandCtx::new(None).do_async_rawkv_incr(key, false, 1).await
         }
     }
 }

@@ -1,6 +1,6 @@
 use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
-use crate::tikv::list::{do_async_txnkv_lset};
+use crate::tikv::list::ListCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
 use crate::utils::{resp_err};
@@ -47,7 +47,7 @@ impl Lset {
 
     async fn lset(&self) -> AsyncResult<Frame> {
         if is_use_txn_api() {
-            do_async_txnkv_lset(&self.key, self.idx, &self.element).await
+            ListCommandCtx::new(None).do_async_txnkv_lset(&self.key, self.idx, &self.element).await
         } else {
             Ok(resp_err("not supported yet"))
         }

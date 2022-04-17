@@ -1,6 +1,6 @@
 use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
-use crate::tikv::list::{do_async_txnkv_lindex};
+use crate::tikv::list::ListCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
 use crate::utils::{resp_err};
@@ -44,7 +44,7 @@ impl Lindex {
 
     async fn lindex(&self) -> AsyncResult<Frame> {
         if is_use_txn_api() {
-            do_async_txnkv_lindex(&self.key, self.idx).await
+            ListCommandCtx::new(None).do_async_txnkv_lindex(&self.key, self.idx).await
         } else {
             Ok(resp_err("not supported yet"))
         }

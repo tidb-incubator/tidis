@@ -1,5 +1,5 @@
 use crate::{Connection, Frame, Parse};
-use crate::tikv::string::{do_async_rawkv_exists, do_async_txnkv_exists};
+use crate::tikv::string::StringCommandCtx;
 use crate::config::{is_use_txn_api};
 use crate::tikv::errors::AsyncResult;
 use tracing::{debug, instrument};
@@ -51,9 +51,9 @@ impl Exists {
 
     async fn exists(&self, keys: &Vec<String>) -> AsyncResult<Frame> {
         if is_use_txn_api() {
-            do_async_txnkv_exists(keys).await
+            StringCommandCtx::new(None).do_async_txnkv_exists(keys).await
         } else {
-            do_async_rawkv_exists(keys).await
+            StringCommandCtx::new(None).do_async_rawkv_exists(keys).await
         }
     }
 }

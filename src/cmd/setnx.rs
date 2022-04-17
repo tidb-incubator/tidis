@@ -1,5 +1,5 @@
 use crate::cmd::{Parse};
-use crate::tikv::string::{do_async_txnkv_put_not_exists, do_async_rawkv_put_not_exists};
+use crate::tikv::string::StringCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
 use crate::tikv::errors::AsyncResult;
@@ -99,9 +99,9 @@ impl SetNX {
 
     async fn put_not_exists(&self, key: &String, value: &Bytes) -> AsyncResult<Frame> {
         if is_use_txn_api() {
-            do_async_txnkv_put_not_exists(key, value).await
+            StringCommandCtx::new(None).do_async_txnkv_put_not_exists(key, value).await
         } else {
-            do_async_rawkv_put_not_exists(key, value).await
+            StringCommandCtx::new(None).do_async_rawkv_put_not_exists(key, value).await
         }
     }
 }

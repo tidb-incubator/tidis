@@ -1,6 +1,6 @@
 use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
-use crate::tikv::list::{do_async_txnkv_llen};
+use crate::tikv::list::ListCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
 use crate::utils::{resp_err};
@@ -42,7 +42,7 @@ impl Llen {
 
     async fn llen(&self) -> AsyncResult<Frame> {
         if is_use_txn_api() {
-            do_async_txnkv_llen(&self.key).await
+            ListCommandCtx::new(None).do_async_txnkv_llen(&self.key).await
         } else {
             Ok(resp_err("not supported yet"))
         }

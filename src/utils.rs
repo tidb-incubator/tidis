@@ -16,6 +16,10 @@ pub fn resp_sstr(val: &'static str) -> Frame {
     Frame::Simple(val.to_string())
 }
 
+pub fn resp_str(val: &str) -> Frame {
+    Frame::Simple(val.to_string())
+}
+
 pub fn resp_int(val: i64) -> Frame {
     Frame::Integer(val)
 }

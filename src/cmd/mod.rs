@@ -91,6 +91,9 @@ pub use lindex::Lindex;
 mod lset;
 pub use lset::Lset;
 
+mod eval;
+pub use eval::Eval;
+
 mod unknown;
 pub use unknown::Unknown;
 
@@ -140,6 +143,9 @@ pub enum Command {
     Lset(Lset),
     // set
     // sorted set
+
+    // scripts
+    Eval(Eval),
     Unknown(Unknown),
 }
 
@@ -202,6 +208,7 @@ impl Command {
             "llen" => Command::Llen(Llen::parse_frames(&mut parse)?),
             "lindex" => Command::Lindex(Lindex::parse_frames(&mut parse)?),
             "lset" => Command::Lset(Lset::parse_frames(&mut parse)?),
+            "eval" => Command::Eval(Eval::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -268,6 +275,7 @@ impl Command {
             Llen(cmd) => cmd.apply(dst).await,
             Lindex(cmd) => cmd.apply(dst).await,
             Lset(cmd) => cmd.apply(dst).await,
+            Eval(cmd) => cmd.apply(dst).await,
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
             // context of a `Subscribe` command.
@@ -312,6 +320,7 @@ impl Command {
             Command::Llen(_) => "llen",
             Command::Lindex(_) => "lindex",
             Command::Lset(_) => "lset",
+            Command::Eval(_) => "eval",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

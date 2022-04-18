@@ -29,7 +29,7 @@ impl Decr {
 
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        let response = match self.decr(&self.key).await {
+        let response = match self.decr().await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
@@ -41,11 +41,11 @@ impl Decr {
         Ok(())
     }
 
-    async fn decr(&self, key: &String) -> AsyncResult<Frame> {
+    async fn decr(&self) -> AsyncResult<Frame> {
         if is_use_txn_api() {
-            StringCommandCtx::new(None).do_async_txnkv_incr(key, true, -1).await
+            StringCommandCtx::new(None).do_async_txnkv_incr(&self.key, true, -1).await
         } else {
-            StringCommandCtx::new(None).do_async_rawkv_incr(key, false, -1).await
+            StringCommandCtx::new(None).do_async_rawkv_incr(&self.key, false, -1).await
         }
     }
 }

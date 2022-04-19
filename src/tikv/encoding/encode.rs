@@ -147,6 +147,11 @@ impl KeyEncoder {
         ret.into()
     }
 
+    pub fn encode_txnkv_set_data_key_start(&self, key: &str) -> Key {
+        let ret = format!("x_{}_D_S_{}_", self.instance_id, key);
+        ret.into()
+    }
+
     pub fn encode_string_end(&self) -> Key {
         let prefix = self.get_prefix(DataType::String);
         let ret = format!("{}`", prefix);

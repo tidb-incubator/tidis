@@ -44,7 +44,7 @@ impl KeyDecoder {
 
     pub fn decode_key_hash_userkey_from_datakey(&self, rkey: &str, key: Key) -> Vec<u8> {
         let key: Vec<u8> = key.into();
-        let idx = 14 + rkey.len();
+        let idx = 16 + rkey.len();
         key[idx..].to_vec()
     }
 
@@ -57,7 +57,6 @@ impl KeyDecoder {
         )
     }
 
-
     pub fn decode_key_set_size(&self, value: &Vec<u8>) -> u64 {
         u64::from_be_bytes(value[9..].try_into().unwrap())
     }
@@ -66,6 +65,11 @@ impl KeyDecoder {
         (self.decode_key_ttl(value), self.decode_key_set_size(value))
     }
 
+    pub fn decode_key_set_member_from_datakey(&self, rkey: &str, key: Key) -> Vec<u8> {
+        let key: Vec<u8> = key.into();
+        let idx = 16 + rkey.len();
+        key[idx..].to_vec()
+    }
 
     pub fn decode_hash_field(&self, rkey: Key, key: &str) -> Vec<u8> {
         let mut bytes: Vec<u8> = rkey.clone().into();

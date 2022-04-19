@@ -100,6 +100,21 @@ pub use sadd::Sadd;
 mod scard;
 pub use scard::Scard;
 
+mod sismember;
+pub use sismember::Sismember;
+
+mod smismember;
+pub use smismember::Smismember;
+
+mod smembers;
+pub use smembers::Smembers;
+
+mod spop;
+pub use spop::Spop;
+
+mod srem;
+pub use srem::Srem;
+
 mod unknown;
 pub use unknown::Unknown;
 
@@ -150,6 +165,11 @@ pub enum Command {
     // set
     Sadd(Sadd),
     Scard(Scard),
+    Sismember(Sismember),
+    Smismember(Smismember),
+    Smembers(Smembers),
+    Spop(Spop),
+    Srem(Srem),
     // sorted set
 
     // scripts
@@ -219,6 +239,11 @@ impl Command {
             "eval" => Command::Eval(Eval::parse_frames(&mut parse)?),
             "sadd" => Command::Sadd(Sadd::parse_frames(&mut parse)?),
             "scard" => Command::Scard(Scard::parse_frames(&mut parse)?),
+            "sismember" => Command::Sismember(Sismember::parse_frames(&mut parse)?),
+            "smismember" => Command::Smismember(Smismember::parse_frames(&mut parse)?),
+            "smembers" => Command::Smembers(Smembers::parse_frames(&mut parse)?),
+            "spop" => Command::Spop(Spop::parse_frames(&mut parse)?),
+            "srem" => Command::Srem(Srem::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -288,6 +313,11 @@ impl Command {
             Eval(cmd) => cmd.apply(dst).await,
             Sadd(cmd) => cmd.apply(dst).await,
             Scard(cmd) => cmd.apply(dst).await,
+            Sismember(cmd) => cmd.apply(dst).await,
+            Smismember(cmd) => cmd.apply(dst).await,
+            Smembers(cmd) => cmd.apply(dst).await,
+            Spop(cmd) => cmd.apply(dst).await,
+            Srem(cmd) => cmd.apply(dst).await,
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
             // context of a `Subscribe` command.
@@ -335,6 +365,11 @@ impl Command {
             Command::Eval(_) => "eval",
             Command::Sadd(_) => "sadd",
             Command::Scard(_) => "scard",
+            Command::Sismember(_) => "sismember",
+            Command::Smismember(_) => "smismember",
+            Command::Smembers(_) => "smembers",
+            Command::Spop(_) => "spop",
+            Command::Srem(_) => "srem",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

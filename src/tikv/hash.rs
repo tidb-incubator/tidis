@@ -98,7 +98,7 @@ impl<'a> HashCommandCtx<'a> {
             Some(meta_value) => {
                 // check key type and ttl
                 if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Hash) {
-                    return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
     
                 // TODO check ttl
@@ -137,7 +137,7 @@ impl<'a> HashCommandCtx<'a> {
             Some(meta_value) => {
                 // check key type and ttl
                 if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Hash) {
-                    return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
     
                 // TODO check ttl
@@ -175,7 +175,7 @@ impl<'a> HashCommandCtx<'a> {
             Some(meta_value) => {
                 // check key type and ttl
                 if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Hash) {
-                    return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
     
                 // TODO check ttl
@@ -210,7 +210,7 @@ impl<'a> HashCommandCtx<'a> {
             Some(meta_value) => {
                 // check key type and ttl
                 if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Hash) {
-                    return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
     
                 // TODO check ttl
@@ -251,7 +251,7 @@ impl<'a> HashCommandCtx<'a> {
             Some(meta_value) => {
                 // check key type and ttl
                 if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Hash) {
-                    return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
     
                 // TODO check ttl
@@ -275,7 +275,7 @@ impl<'a> HashCommandCtx<'a> {
         if let Some(meta_value) = ss.get(meta_key.to_owned()).await? {
             // check key type and ttl
             if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Hash) {
-                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
             }
     
             // TODO check ttl

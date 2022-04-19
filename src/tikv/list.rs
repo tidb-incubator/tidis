@@ -207,7 +207,7 @@ impl<'a> ListCommandCtx<'a> {
             Some(meta_value) => {
                 // check key type and ttl
                 if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::List) {
-                    return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
                 let (ttl, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
     
@@ -259,7 +259,7 @@ impl<'a> ListCommandCtx<'a> {
             Some(meta_value) => {
                 // check type and ttl
                 if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::List) {
-                    return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
                 let (ttl, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
     
@@ -285,7 +285,7 @@ impl<'a> ListCommandCtx<'a> {
             Some(meta_value) => {
                 // check type and ttl
                 if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::List) {
-                    return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
                 let (ttl, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
     

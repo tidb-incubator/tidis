@@ -59,7 +59,6 @@ impl<'a> LuaCommandCtx<'a> {
     }
 
     pub fn lua_resp_to_redis_resp(&self, resp: LuaValue) -> Frame {
-        let mut frame: Frame;
         match resp {
             LuaValue::String(r) => {
                 resp_bulk(r.to_str().unwrap().as_bytes().to_vec())

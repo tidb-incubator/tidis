@@ -94,6 +94,12 @@ pub use lset::Lset;
 mod eval;
 pub use eval::Eval;
 
+mod sadd;
+pub use sadd::Sadd;
+
+mod scard;
+pub use scard::Scard;
+
 mod unknown;
 pub use unknown::Unknown;
 
@@ -142,6 +148,8 @@ pub enum Command {
     Lindex(Lindex),
     Lset(Lset),
     // set
+    Sadd(Sadd),
+    Scard(Scard),
     // sorted set
 
     // scripts
@@ -209,6 +217,8 @@ impl Command {
             "lindex" => Command::Lindex(Lindex::parse_frames(&mut parse)?),
             "lset" => Command::Lset(Lset::parse_frames(&mut parse)?),
             "eval" => Command::Eval(Eval::parse_frames(&mut parse)?),
+            "sadd" => Command::Sadd(Sadd::parse_frames(&mut parse)?),
+            "scard" => Command::Scard(Scard::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -276,6 +286,8 @@ impl Command {
             Lindex(cmd) => cmd.apply(dst).await,
             Lset(cmd) => cmd.apply(dst).await,
             Eval(cmd) => cmd.apply(dst).await,
+            Sadd(cmd) => cmd.apply(dst).await,
+            Scard(cmd) => cmd.apply(dst).await,
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
             // context of a `Subscribe` command.
@@ -321,6 +333,8 @@ impl Command {
             Command::Lindex(_) => "lindex",
             Command::Lset(_) => "lset",
             Command::Eval(_) => "eval",
+            Command::Sadd(_) => "sadd",
+            Command::Scard(_) => "scard",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

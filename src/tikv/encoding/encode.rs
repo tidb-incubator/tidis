@@ -80,7 +80,7 @@ impl KeyEncoder {
 
     pub fn encode_txnkv_hash_data_key(&self, key: &str, field: &str) -> Key {
         // TODO: maybe conflict
-        let ret = format!("x_{}_D_{}_{}", self.instance_id, key, field);
+        let ret = format!("x_{}_D_H_{}_{}", self.instance_id, key, field);
         ret.into()
     }
 
@@ -104,12 +104,13 @@ impl KeyEncoder {
         ret.into()
     }
 
+
     /// idx range [0, 1<<64]
     /// left initial value  1<<32, left is point to the left element 
     /// right initial value 1<<32, right is point to the next right position of right element
     /// list is indicated as null if left index equal to right
     pub fn encode_txnkv_list_data_key(&self, key: &str, idx: u64) -> Key {
-        let prefix = format!("x_{}_D_{}", self.instance_id, key);
+        let prefix = format!("x_{}_D_L_{}", self.instance_id, key);
         let mut key = prefix.as_bytes().to_vec();
         key.append(&mut idx.to_be_bytes().to_vec());
         key.into()
@@ -124,6 +125,26 @@ impl KeyEncoder {
         val.append(&mut left.to_be_bytes().to_vec());
         val.append(&mut right.to_be_bytes().to_vec());
         val.into()
+    }
+
+    pub fn encode_txnkv_set_meta_key(&self, key: &str) -> Key {
+        let ret = format!("x_{}_M_{}", self.instance_id, key);
+        ret.into()
+    }
+
+    pub fn encode_txnkv_set_meta_value(&self, ttl: u64, size: u64) -> Value {
+        let dt = self.get_type_bytes(DataType::Set);
+        let mut val = Vec::new();
+
+        val.append(&mut dt.to_be_bytes().to_vec());
+        val.append(&mut ttl.to_be_bytes().to_vec());
+        val.append(&mut size.to_be_bytes().to_vec());
+        val.into()
+    }
+
+    pub fn encode_txnkv_set_data_key(&self, key: &str, members: &str) -> Key {
+        let ret = format!("x_{}_D_S_{}_{}", self.instance_id, key, members);
+        ret.into()
     }
 
     pub fn encode_string_end(&self) -> Key {

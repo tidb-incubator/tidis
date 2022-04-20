@@ -152,6 +152,38 @@ impl KeyEncoder {
         ret.into()
     }
 
+    pub fn encode_txnkv_zset_meta_key(&self, key: &str) -> Key {
+        let ret = format!("x_{}_M_{}", self.instance_id, key);
+        ret.into()
+    }
+
+    pub fn encode_txnkv_zset_meta_value(&self, ttl: u64, size: u64) -> Value {
+        let dt = self.get_type_bytes(DataType::Zset);
+        let mut val = Vec::new();
+
+        val.append(&mut dt.to_be_bytes().to_vec());
+        val.append(&mut ttl.to_be_bytes().to_vec());
+        val.append(&mut size.to_be_bytes().to_vec());
+        val.into()
+    }
+
+    pub fn encode_txnkv_zset_data_key(&self, key: &str, member: &str) -> Key {
+        let ret = format!("x_{}_D_Z_{}_{}", self.instance_id, key, member);
+        ret.into()
+    }
+
+    pub fn encode_txnkv_zset_data_value(&self, score: i64) -> Value {
+        score.to_be_bytes().to_vec().into()
+    }
+
+    pub fn encode_txnkv_zset_score_key(&self, key: &str, score: i64) -> Key {
+        let prefix = format!("x_{}_S_Z_{}_", self.instance_id, key);
+        let mut ret = prefix.as_bytes().to_vec();
+        ret.append(&mut score.to_be_bytes().to_vec());
+        ret.into()
+    }
+
+
     pub fn encode_string_end(&self) -> Key {
         let prefix = self.get_prefix(DataType::String);
         let ret = format!("{}`", prefix);

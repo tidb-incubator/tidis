@@ -115,6 +115,15 @@ pub use spop::Spop;
 mod srem;
 pub use srem::Srem;
 
+mod zadd;
+pub use zadd::Zadd;
+
+mod zcard;
+pub use zcard::Zcard;
+
+mod zscore;
+pub use zscore::Zscore;
+
 mod unknown;
 pub use unknown::Unknown;
 
@@ -171,6 +180,9 @@ pub enum Command {
     Spop(Spop),
     Srem(Srem),
     // sorted set
+    Zadd(Zadd),
+    Zcard(Zcard),
+    Zscore(Zscore),
 
     // scripts
     Eval(Eval),
@@ -244,6 +256,9 @@ impl Command {
             "smembers" => Command::Smembers(Smembers::parse_frames(&mut parse)?),
             "spop" => Command::Spop(Spop::parse_frames(&mut parse)?),
             "srem" => Command::Srem(Srem::parse_frames(&mut parse)?),
+            "zadd" => Command::Zadd(Zadd::parse_frames(&mut parse)?),
+            "zcard" => Command::Zcard(Zcard::parse_frames(&mut parse)?),
+            "zscore" => Command::Zscore(Zscore::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -318,6 +333,9 @@ impl Command {
             Smembers(cmd) => cmd.apply(dst).await,
             Spop(cmd) => cmd.apply(dst).await,
             Srem(cmd) => cmd.apply(dst).await,
+            Zadd(cmd) => cmd.apply(dst).await,
+            Zcard(cmd) => cmd.apply(dst).await,
+            Zscore(cmd) => cmd.apply(dst).await,
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
             // context of a `Subscribe` command.
@@ -370,6 +388,9 @@ impl Command {
             Command::Smembers(_) => "smembers",
             Command::Spop(_) => "spop",
             Command::Srem(_) => "srem",
+            Command::Zadd(_) => "zadd",
+            Command::Zcard(_) => "zcard",
+            Command::Zscore(_) => "zscore",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

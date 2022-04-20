@@ -100,8 +100,6 @@ impl Parse {
     /// If the next entry cannot be represented as an integer, then an error is
     /// returned.
     pub(crate) fn next_int(&mut self) -> Result<i64, ParseError> {
-        use atoi::atoi;
-
         const MSG: &str = "protocol error; invalid number";
 
         match self.next()? {

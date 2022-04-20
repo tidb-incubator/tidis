@@ -2,11 +2,10 @@ use std::convert::TryInto;
 
 use ::futures::future::{FutureExt};
 use crate::Frame;
-use tikv_client::{Key, Value, KvPair, Transaction, BoundRange};
+use tikv_client::{Transaction, BoundRange};
 use super::{
     encoding::{KeyEncoder, KeyDecoder, DataType}, errors::AsyncResult, errors::RTError,
 };
-use bytes::Bytes;
 use super::{get_txn_client};
 use crate::utils::{resp_err, resp_int, resp_array, resp_bulk};
 use super::errors::*;

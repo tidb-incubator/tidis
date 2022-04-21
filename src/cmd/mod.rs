@@ -124,6 +124,21 @@ pub use zcard::Zcard;
 mod zscore;
 pub use zscore::Zscore;
 
+mod zrem;
+pub use zrem::Zrem;
+
+mod zremrangebyscore;
+pub use zremrangebyscore::Zremrangebyscore;
+
+mod zrange;
+pub use zrange::Zrange;
+
+mod zrevrange;
+pub use zrevrange::Zrevrange;
+
+mod zrangebyscore;
+pub use zrangebyscore::Zrangebyscore;
+
 mod unknown;
 pub use unknown::Unknown;
 
@@ -183,6 +198,12 @@ pub enum Command {
     Zadd(Zadd),
     Zcard(Zcard),
     Zscore(Zscore),
+    Zrem(Zrem),
+    Zremrangebyscore(Zremrangebyscore),
+    Zrange(Zrange),
+    Zrevrange(Zrevrange),
+    Zrangebyscore(Zrangebyscore),
+    Zrevrangebyscore(Zrangebyscore),
 
     // scripts
     Eval(Eval),
@@ -259,6 +280,12 @@ impl Command {
             "zadd" => Command::Zadd(Zadd::parse_frames(&mut parse)?),
             "zcard" => Command::Zcard(Zcard::parse_frames(&mut parse)?),
             "zscore" => Command::Zscore(Zscore::parse_frames(&mut parse)?),
+            "zrem" => Command::Zrem(Zrem::parse_frames(&mut parse)?),
+            "zremrangebyscore" => Command::Zremrangebyscore(Zremrangebyscore::parse_frames(&mut parse)?),
+            "zrange" => Command::Zrange(Zrange::parse_frames(&mut parse)?),
+            "zrevrange" => Command::Zrevrange(Zrevrange::parse_frames(&mut parse)?),
+            "zrangebyscore" => Command::Zrangebyscore(Zrangebyscore::parse_frames(&mut parse)?),
+            "zrevrangebyscore" => Command::Zrevrangebyscore(Zrangebyscore::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -336,6 +363,12 @@ impl Command {
             Zadd(cmd) => cmd.apply(dst).await,
             Zcard(cmd) => cmd.apply(dst).await,
             Zscore(cmd) => cmd.apply(dst).await,
+            Zrem(cmd) => cmd.apply(dst).await,
+            Zremrangebyscore(cmd) => cmd.apply(dst).await,
+            Zrange(cmd) => cmd.apply(dst).await,
+            Zrevrange(cmd) => cmd.apply(dst).await,
+            Zrangebyscore(cmd) => cmd.apply(dst, false).await,
+            Zrevrangebyscore(cmd) => cmd.apply(dst, true).await,
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
             // context of a `Subscribe` command.
@@ -391,6 +424,12 @@ impl Command {
             Command::Zadd(_) => "zadd",
             Command::Zcard(_) => "zcard",
             Command::Zscore(_) => "zscore",
+            Command::Zrem(_) => "zrem",
+            Command::Zremrangebyscore(_) => "zremrangebyscore",
+            Command::Zrange(_) => "zrange",
+            Command::Zrevrange(_) => "zrevrange",
+            Command::Zrangebyscore(_) => "zrangebyscore",
+            Command::Zrevrangebyscore(_) => "zrevrangebyscore",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

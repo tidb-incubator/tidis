@@ -85,12 +85,18 @@ impl KeyDecoder {
         key[idx..].to_vec()
     }
 
+    pub fn decode_key_zset_score_from_scorekey(&self, rkey: &str, key: Key) -> i64 {
+        let key: Vec<u8> = key.into();
+        let idx = 16 + rkey.len();
+        i64::from_be_bytes(key[idx..].try_into().unwrap())
+    }
+
     pub fn decode_key_zset_data_value(&self, value: &Vec<u8>) -> i64 {
         i64::from_be_bytes(value[..].try_into().unwrap())
     }
 
     pub fn decode_hash_field(&self, rkey: Key, key: &str) -> Vec<u8> {
-        let mut bytes: Vec<u8> = rkey.clone().into();
+        let mut bytes: Vec<u8> = rkey.into();
         bytes.drain(17 + key.len() + 1..).collect()
     }
 

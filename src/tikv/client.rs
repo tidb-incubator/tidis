@@ -18,7 +18,6 @@ use crate::{
 use super::{errors::AsyncResult};
 use futures::future::{BoxFuture};
 
-
 use crate::metrics::TIKV_CLIENT_RETRIES;
 
 use super::sleep;

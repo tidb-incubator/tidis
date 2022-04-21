@@ -204,12 +204,127 @@ impl<'a> ZsetCommandCtx<'a> {
         Ok(resp_nil())
     }
 
-    pub async fn do_async_txnkv_zrange(self, key: &str, min: u64, with_min: bool, max: u64, with_max: bool, with_scores: bool, reverse: bool) -> AsyncResult<Frame> {
-        Ok(resp_nil())
+    pub async fn do_async_txnkv_zrange(self, key: &str, mut min: i64, mut max: i64, with_scores: bool, reverse: bool) -> AsyncResult<Frame> {
+        let client = get_txn_client()?;
+        let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(key);
+
+        let mut ss = match self.txn {
+            Some(txn) => client.snapshot_from_txn(txn).await,
+            None => client.newest_snapshot().await
+        };
+
+        let mut resp = vec![];
+        match ss.get(meta_key.to_owned()).await? {
+            Some(meta_value) => {
+                // check key type and ttl
+                if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Zset) {
+                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                }
+
+                let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
+                // convert index to positive if negtive
+                if min < 0 {
+                    min += size as i64;
+                }
+                if max < 0 {
+                    max += size as i64;
+                }
+
+                let start_key = KeyEncoder::new().encode_txnkv_zset_data_key_start(key);
+                let range = start_key..;
+                let from_range: BoundRange = range.into();
+                let iter = ss.scan(from_range, size.try_into().unwrap()).await?;
+
+                let mut idx = 0;
+                for kv in iter {
+                    if idx < min {
+                        continue;
+                    }
+                    if idx > max {
+                        break;
+                    }
+                    idx += 1;
+
+                    // decode member key from data key
+                    let member = KeyDecoder::new().decode_key_zset_member_from_datakey(key, kv.0);
+                    if reverse {
+                        resp.insert(0, resp_bulk(member));
+                    } else {
+                        resp.push(resp_bulk(member));
+                    }
+                    if with_scores {
+                        // decode vec[u8] to i64
+                        let score = KeyDecoder::new().decode_key_zset_data_value(&kv.1);
+                        if reverse {
+                            resp.insert(0, resp_bulk(score.to_string().as_bytes().to_vec()));
+                        } else {
+                            resp.push(resp_bulk(score.to_string().as_bytes().to_vec()));
+                        }
+                    }
+                }
+                Ok(resp_array(resp))
+            },
+            None => {
+                Ok(resp_array(resp))
+            }
+        }
     }
 
-    pub async fn do_async_txnkv_zrange_by_score(self, key: &str, min: u64, with_min: bool, max: u64, with_max: bool, with_scores: bool, reverse: bool) -> AsyncResult<Frame> {
-        Ok(resp_nil())
+    pub async fn do_async_txnkv_zrange_by_score(self, key: &str, mut min: i64, min_inclusive: bool, mut max: i64, max_inclusive: bool, with_scores: bool, reverse: bool) -> AsyncResult<Frame> {
+        let client = get_txn_client()?;
+        let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(key);
+
+        let mut ss = match self.txn {
+            Some(txn) => client.snapshot_from_txn(txn).await,
+            None => client.newest_snapshot().await
+        };
+
+        let mut resp = vec![];
+        match ss.get(meta_key.to_owned()).await? {
+            Some(meta_value) => {
+                // check key type and ttl
+                if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Zset) {
+                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                }
+
+                let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
+                // update index bound
+                if !min_inclusive {
+                    min += 1;
+                }
+                if !max_inclusive {
+                    max -= 1;
+                }
+
+                let start_key = KeyEncoder::new().encode_txnkv_zset_score_key(key, min);
+                let end_key = KeyEncoder::new().encode_txnkv_zset_score_key(key, max);
+                let range = start_key..=end_key;
+                let bound_range: BoundRange = range.into();
+                let iter = ss.scan(bound_range, size.try_into().unwrap()).await?;
+
+                for kv in iter {
+                    let member = kv.1;
+                    if reverse {
+                        resp.insert(0, resp_bulk(member));
+                    } else {
+                        resp.push(resp_bulk(member));
+                    }
+                    if with_scores {
+                        // decode score from score key
+                        let score = KeyDecoder::new().decode_key_zset_score_from_scorekey(key ,kv.0);
+                        if reverse {
+                            resp.insert(0, resp_bulk(score.to_string().as_bytes().to_vec()));
+                        } else {
+                            resp.push(resp_bulk(score.to_string().as_bytes().to_vec()));
+                        }
+                    }
+                }
+                Ok(resp_array(resp))
+            },
+            None => {
+                Ok(resp_array(resp))
+            }
+        }
     }
 
     pub async fn do_async_txnkv_zrange_by_lex(self, key: &str, min: &str, with_min: bool, max: &str, with_max: bool, with_scores: bool, reverse: bool) -> AsyncResult<Frame> {
@@ -225,7 +340,58 @@ impl<'a> ZsetCommandCtx<'a> {
     }
 
     pub async fn do_async_txnkv_zrem(self, key: &str, members: &Vec<String>) -> AsyncResult<Frame> {
-        Ok(resp_nil())
+        let client = get_txn_client()?;
+        let key = key.to_owned();
+        let members = members.to_owned();
+
+        let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(&key);
+        let resp = client.exec_in_txn(self.txn, |txn| async move {
+            match txn.get(meta_key.clone()).await? {
+                Some(meta_value) => {
+                    // check key type and ttl
+                    if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Zset) {
+                        return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                    }
+
+                    let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
+                    let mut removed_count = 0;
+
+                    for member in members {
+                        let data_key = KeyEncoder::new().encode_txnkv_zset_data_key(&key, &member);
+                        // get data key and decode value as score, to generate score key
+                        let score = txn.get(data_key.clone()).await?;
+                        if score.is_none() {
+                            continue;
+                        }
+
+                        // decode the score vec to i64
+                        let iscore = KeyDecoder::new().decode_key_zset_data_value(&score.unwrap());
+                        // remove member and score key
+                        let score_key = KeyEncoder::new().encode_txnkv_zset_score_key(&key, iscore);
+                        txn.delete(data_key).await?;
+                        txn.delete(score_key).await?;
+                        removed_count += 1;
+                    }
+
+                    // update meta key
+                    let new_meta_value = KeyEncoder::new().encode_txnkv_zset_meta_value(ttl, size - removed_count);
+                    txn.put(meta_key, new_meta_value).await?;
+                    Ok(removed_count)
+                },
+                None => {
+                    Ok(0)
+                }
+            }
+        }.boxed()).await;
+
+        match resp {
+            Ok(v) => {
+                Ok(resp_int(v as i64))
+            },
+            Err(e) => {
+                Ok(resp_err(&e.to_string()))
+            }
+        }
     }
 
     pub async fn do_async_txnkv_zremrange_by_lex(self, key: &str, min: &str, with_min: bool, max: &str, with_max: bool) -> AsyncResult<Frame> {
@@ -233,6 +399,60 @@ impl<'a> ZsetCommandCtx<'a> {
     }
 
     pub async fn do_async_txnkv_zremrange_by_score(self, key: &str, min: i64, max: i64) -> AsyncResult<Frame> {
-        Ok(resp_nil())
+        let client = get_txn_client()?;
+        let key = key.to_owned();
+        
+        let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(&key);
+        let resp = client.exec_in_txn(self.txn, |txn| async move {
+            match txn.get_for_update(meta_key.clone()).await? {
+                Some(meta_value) => {
+                    // check key type and ttl
+                    if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Zset) {
+                        return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                    }
+
+                    let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
+
+                    // generate score key range to remove, inclusive
+                    let score_key_start = KeyEncoder::new().encode_txnkv_zset_score_key(&key, min);
+                    let score_key_end = KeyEncoder::new().encode_txnkv_zset_score_key(&key, max);
+                    
+                    // remove score key and data key
+                    let range = score_key_start..=score_key_end;
+                    let bound_range: BoundRange = range.into();
+                    let mut removed_count = 0;
+
+                    let iter = txn.scan(bound_range, size.try_into().unwrap()).await?;
+
+                    // TODO big txn optimization
+                    for kv in iter {
+                        // fetch this score key member
+                        let score_value = kv.1;
+                        let data_key = KeyEncoder::new().encode_txnkv_zset_data_key(&key, &String::from_utf8_lossy(&score_value));
+                        txn.delete(data_key).await?;
+                        txn.delete(kv.0).await?;
+                        removed_count += 1;
+                    }
+
+                    // update meta key
+                    let new_meta_value = KeyEncoder::new().encode_txnkv_zset_meta_value(ttl, size - removed_count);
+                    txn.put(meta_key, new_meta_value).await?;
+
+                    Ok(removed_count)
+                },
+                None => {
+                    Ok(0)
+                }
+            }
+        }.boxed()).await;
+
+        match resp {
+            Ok(v) => {
+                Ok(resp_int(v as i64))
+            },
+            Err(e) => {
+                Ok(resp_err(&e.to_string()))
+            }
+        }
     }
 }

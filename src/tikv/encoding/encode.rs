@@ -172,6 +172,11 @@ impl KeyEncoder {
         ret.into()
     }
 
+    pub fn encode_txnkv_zset_data_key_start(&self, key: &str) -> Key {
+        let ret = format!("x_{}_D_Z_{}_", self.instance_id, key);
+        ret.into()
+    }
+
     pub fn encode_txnkv_zset_data_value(&self, score: i64) -> Value {
         score.to_be_bytes().to_vec().into()
     }

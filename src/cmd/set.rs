@@ -117,9 +117,6 @@ impl Set {
                 // Only set if key not present
                 nx = Some(true);
             }
-            // Currently, mini-redis does not support any of the other SET
-            // options. An error here results in the connection being
-            // terminated. Other connections will continue to operate normally.
             Ok(_) => return Err("currently `SET` only supports the expiration option".into()),
             // The `EndOfStream` error indicates there is no further data to
             // parse. In this case, it is a normal run time situation and

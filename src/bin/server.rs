@@ -1,13 +1,5 @@
-//! mini-redis server.
-//!
-//! This file is the entry point for the server implemented in the library. It
-//! performs command line parsing and passes the arguments on to
-//! `mini_redis::server`.
-//!
-//! The `clap` crate is used for parsing arguments.
-
-use mini_redis::{server, DEFAULT_PORT, set_instance_id, do_async_raw_connect, do_async_connect, PrometheusServer};
-use mini_redis::{Config, set_global_config};
+use tikv_service::{server, DEFAULT_PORT, set_instance_id, do_async_raw_connect, do_async_connect, PrometheusServer};
+use tikv_service::{Config, set_global_config};
 
 use structopt::StructOpt;
 use async_std::net::TcpListener;
@@ -16,7 +8,7 @@ use std::fs;
 use std::process::exit;
 
 #[tokio::main]
-pub async fn main() -> mini_redis::Result<()> {
+pub async fn main() -> tikv_service::Result<()> {
     // enable logging
     // see https://docs.rs/tracing for more info
     tracing_subscriber::fmt::try_init()?;
@@ -80,7 +72,7 @@ pub async fn main() -> mini_redis::Result<()> {
         server.run().await;
     });
 
-    println!("Mini-Redis Server Listen on: {}:{}", &listen_addr, port);
+    println!("TiKV Service Server Listen on: {}:{}", &listen_addr, port);
     // Bind a TCP listener
     let listener = TcpListener::bind(&format!("{}:{}", &listen_addr, port)).await?;
 
@@ -90,7 +82,7 @@ pub async fn main() -> mini_redis::Result<()> {
 }
 
 #[derive(StructOpt, Debug)]
-#[structopt(name = "mini-redis-server", version = env!("CARGO_PKG_VERSION"), author = env!("CARGO_PKG_AUTHORS"), about = "A Redis server")]
+#[structopt(name = "tikv-service-server", version = env!("CARGO_PKG_VERSION"), author = env!("CARGO_PKG_AUTHORS"), about = "A service layer for TiKV")]
 struct Cli {
     #[structopt(name = "listen", long = "--listen")]
     listen_addr: Option<String>,

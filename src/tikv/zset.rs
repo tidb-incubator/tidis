@@ -200,8 +200,44 @@ impl<'a> ZsetCommandCtx<'a> {
         }
     }
 
-    pub async fn do_async_txnkv_zcount(self, key: &str, min: u64, max: u64) -> AsyncResult<Frame> {
-        Ok(resp_nil())
+    pub async fn do_async_txnkv_zcount(self, key: &str, mut min: i64, min_inclusive: bool, mut max: i64, max_inclusive: bool) -> AsyncResult<Frame> {
+        let client = get_txn_client()?;
+        let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(key);
+
+        let mut ss = match self.txn {
+            Some(txn) => client.snapshot_from_txn(txn).await,
+            None => client.newest_snapshot().await
+        };
+
+        let resp = 0;
+        match ss.get(meta_key.to_owned()).await? {
+            Some(meta_value) => {
+                // check key type and ttl
+                if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Zset) {
+                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                }
+
+                let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
+                // update index bound
+                if !min_inclusive {
+                    min += 1;
+                }
+                if !max_inclusive {
+                    max -= 1;
+                }
+
+                let start_key = KeyEncoder::new().encode_txnkv_zset_score_key(key, min);
+                let end_key = KeyEncoder::new().encode_txnkv_zset_score_key(key, max);
+                let range = start_key..=end_key;
+                let bound_range: BoundRange = range.into();
+                let iter = ss.scan(bound_range, size.try_into().unwrap()).await?;
+
+                Ok(resp_int(iter.count() as i64))
+            },
+            None => {
+                Ok(resp_int(0))
+            }
+        }
     }
 
     pub async fn do_async_txnkv_zrange(self, key: &str, mut min: i64, mut max: i64, with_scores: bool, reverse: bool) -> AsyncResult<Frame> {
@@ -332,11 +368,114 @@ impl<'a> ZsetCommandCtx<'a> {
     }
 
     pub async fn do_async_txnkv_zpop(self, key: &str, from_min: bool, count: u64) -> AsyncResult<Frame> {
-        Ok(resp_nil())
+        let client = get_txn_client()?;
+        let key = key.to_owned();
+        let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(&key);
+
+        let resp = client.exec_in_txn(self.txn, |txn| async move {
+            match txn.get_for_update(meta_key.clone()).await? {
+                Some(meta_value) => {
+                     // check key type and ttl
+                     if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Zset) {
+                        return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                    }
+
+                    let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
+                    let mut poped_count = 0;
+                    let mut resp = vec![];
+                    if from_min {
+                        let start_key = KeyEncoder::new().encode_txnkv_zset_score_key(&key, 0);
+                        let range = start_key..;
+                        let from_range: BoundRange = range.into();
+                        let iter = txn.scan(from_range, count.try_into().unwrap()).await?;
+
+                        for kv in iter {
+                            let data_key = KeyEncoder::new().encode_txnkv_zset_data_key(&key, &String::from_utf8_lossy(&kv.1));
+                            
+                            // push member to resp
+                            resp.push(resp_bulk(kv.1));
+                            // push score to resp
+                            let score = KeyDecoder::new().decode_key_zset_score_from_scorekey(&key, kv.0.clone());
+                            resp.push(resp_bulk(score.to_string().as_bytes().to_vec()));
+
+                            txn.delete(data_key).await?;
+                            txn.delete(kv.0).await?;
+                            poped_count += 1;
+                        }
+                    } else {
+                        // TODO not supported yet
+                    }
+
+                    // update meta key
+                    let new_meta_value = KeyEncoder::new().encode_txnkv_zset_meta_value(ttl , size - poped_count);
+                    txn.put(meta_key, new_meta_value).await?;
+
+                    Ok(resp)
+                },
+                None => {
+                    Ok(vec![])
+                }
+            }
+        }.boxed()).await;
+        
+        match resp {
+            Ok(v) => {
+                Ok(resp_array(v))
+            },
+            Err(e) => {
+                Ok(resp_err(&e.to_string()))
+            }
+        }
     }
 
     pub async fn do_async_txnkv_zrank(self, key: &str, member: &str) -> AsyncResult<Frame> {
-        Ok(resp_nil())
+        let client = get_txn_client()?;
+        let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(key);
+
+        let mut ss = match self.txn {
+            Some(txn) => client.snapshot_from_txn(txn).await,
+            None => client.newest_snapshot().await
+        };
+
+        match ss.get(meta_key.to_owned()).await? {
+            Some(meta_value) => {
+                // check key type and ttl
+                if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::Zset) {
+                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                }
+
+                let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
+
+                let data_key = KeyEncoder::new().encode_txnkv_zset_data_key(key, member);
+                match ss.get(data_key).await? {
+                    Some(data_value) => {
+                        // calculate the score rank in score key index
+                        let score = KeyDecoder::new().decode_key_zset_data_value(&data_value);
+                        let score_key = KeyEncoder::new().encode_txnkv_zset_score_key(&key, score);
+
+                        // scan from range start
+                        let score_key_start = KeyEncoder::new().encode_txnkv_zset_score_key(&key, 0);
+                        let range = score_key_start..;
+                        let from_range: BoundRange = range.into();
+                        let iter = ss.scan_keys(from_range, size.try_into().unwrap()).await?;
+                        let mut rank = 0;
+                        for k in iter {
+                            if k ==  score_key {
+                                break;
+                            }
+                            rank += 1;
+                        }
+                        return Ok(resp_int(rank));
+                    },
+                    None => {
+                        return Ok(resp_nil());
+                    }
+                }
+            },
+            None => {
+                return Ok(resp_nil());
+            }
+        }
     }
 
     pub async fn do_async_txnkv_zrem(self, key: &str, members: &Vec<String>) -> AsyncResult<Frame> {

@@ -139,6 +139,15 @@ pub use zrevrange::Zrevrange;
 mod zrangebyscore;
 pub use zrangebyscore::Zrangebyscore;
 
+mod zcount;
+pub use zcount::Zcount;
+
+mod zpop;
+pub use zpop::Zpop;
+
+mod zrank;
+pub use zrank::Zrank;
+
 mod unknown;
 pub use unknown::Unknown;
 
@@ -204,6 +213,9 @@ pub enum Command {
     Zrevrange(Zrevrange),
     Zrangebyscore(Zrangebyscore),
     Zrevrangebyscore(Zrangebyscore),
+    Zcount(Zcount),
+    Zpopmin(Zpop),
+    Zrank(Zrank),
 
     // scripts
     Eval(Eval),
@@ -286,6 +298,9 @@ impl Command {
             "zrevrange" => Command::Zrevrange(Zrevrange::parse_frames(&mut parse)?),
             "zrangebyscore" => Command::Zrangebyscore(Zrangebyscore::parse_frames(&mut parse)?),
             "zrevrangebyscore" => Command::Zrevrangebyscore(Zrangebyscore::parse_frames(&mut parse)?),
+            "zcount" => Command::Zcount(Zcount::parse_frames(&mut parse)?),
+            "zpopmin" => Command::Zpopmin(Zpop::parse_frames(&mut parse)?),
+            "zrank" => Command::Zrank(Zrank::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -369,6 +384,9 @@ impl Command {
             Zrevrange(cmd) => cmd.apply(dst).await,
             Zrangebyscore(cmd) => cmd.apply(dst, false).await,
             Zrevrangebyscore(cmd) => cmd.apply(dst, true).await,
+            Zcount(cmd) => cmd.apply(dst).await,
+            Zpopmin(cmd) => cmd.apply(dst, true).await,
+            Zrank(cmd) => cmd.apply(dst).await,
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
             // context of a `Subscribe` command.
@@ -430,6 +448,9 @@ impl Command {
             Command::Zrevrange(_) => "zrevrange",
             Command::Zrangebyscore(_) => "zrangebyscore",
             Command::Zrevrangebyscore(_) => "zrevrangebyscore",
+            Command::Zcount(_) => "zcount",
+            Command::Zpopmin(_) => "zpopmin",
+            Command::Zrank(_) => "zrank",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

@@ -9,6 +9,7 @@ pub enum DataType {
     List,
     Set,
     Zset,
+    Null,
 }
 
 pub use {

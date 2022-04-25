@@ -1,21 +1,24 @@
 use ::futures::future::{FutureExt};
-use crate::Frame;
-use std::collections::HashMap;
+use crate::{Frame, utils::{resp_bulk, resp_nil}};
+use std::{collections::HashMap};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tokio::runtime::Runtime;
 use tikv_client::{Key, Value, KvPair, Transaction};
 use super::{
     encoding::{KeyEncoder, KeyDecoder, DataType}, errors::AsyncResult, errors::RTError,
 };
 use bytes::Bytes;
 use super::{get_client, get_txn_client};
-use crate::utils::{sleep, resp_err, resp_int};
+use crate::utils::{sleep, resp_err, resp_int, key_is_expired};
 use super::errors::*;
-
-pub struct StringCommandCtx<'a> {
-    txn: Option<&'a mut Transaction>,
+#[derive(Clone)]
+pub struct StringCommandCtx {
+    txn: Option<Arc<Mutex<Transaction>>>,
 }
 
-impl<'a> StringCommandCtx<'a> {
-    pub fn new(txn: Option<&'a mut Transaction>) -> Self {
+impl StringCommandCtx {
+    pub fn new(txn: Option<Arc<Mutex<Transaction>>>) -> Self {
         StringCommandCtx { txn }
     }
 
@@ -32,8 +35,10 @@ impl<'a> StringCommandCtx<'a> {
         let client = get_txn_client()?;
         let ekey = KeyEncoder::new().encode_txnkv_string(key);
 
-        let mut ss = match self.txn {
-            Some(txn) => client.snapshot_from_txn(txn).await,
+        let mut ss = match self.txn.clone() {
+            Some(txn) => {
+                client.snapshot_from_txn(txn).await
+            },
             None => client.newest_snapshot().await
         };
 
@@ -43,11 +48,20 @@ impl<'a> StringCommandCtx<'a> {
                 if !matches!(dt, DataType::String) {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR))
                 }
+
+                // ttl saved in milliseconds
+                let ttl = KeyDecoder::new().decode_key_ttl(&val);
+                if key_is_expired(ttl) {
+                    // delete key
+                    self.do_async_txnkv_string_del(key).await?;
+                    return Ok(resp_nil())
+                }
     
+
                 let data = KeyDecoder::new().decode_key_string_value(&val);
-                Ok(Frame::Bulk(data.into()))
+                Ok(resp_bulk(data))
             }
-            None => Ok(Frame::Null),
+            None => Ok(resp_nil()),
         }
     }
     
@@ -63,6 +77,7 @@ impl<'a> StringCommandCtx<'a> {
         let ekey = KeyEncoder::new().encode_txnkv_string(key);
         let eval = KeyEncoder::new().encode_txnkv_string_value(&mut val.to_vec(), 0);
         let resp = client.exec_in_txn(self.txn, |txn| async move {
+            let mut txn = txn.lock().await;
             txn.put(ekey, eval).await?;
             Ok(())
         }.boxed()).await;
@@ -101,7 +116,9 @@ impl<'a> StringCommandCtx<'a> {
         let ekeys = KeyEncoder::new().encode_txnkv_strings(keys);
 
         let mut ss = match self.txn {
-            Some(txn) => client.snapshot_from_txn(txn).await,
+            Some(txn) => {
+                client.snapshot_from_txn(txn).await
+            }
             None => client.newest_snapshot().await
         };
         let result = ss.batch_get(ekeys.clone()).await?;
@@ -136,6 +153,7 @@ impl<'a> StringCommandCtx<'a> {
         let client = get_txn_client()?;
         let num_keys = kvs.len();
         let resp = client.exec_in_txn(self.txn, |txn| async move {
+            let mut txn = txn.lock().await;
             for kv in kvs {
                 txn.put(kv.0, kv.1).await?;
             }
@@ -169,6 +187,7 @@ impl<'a> StringCommandCtx<'a> {
         let eval = KeyEncoder::new().encode_txnkv_string_value(&mut value.to_vec(), 0);
     
         let resp = client.exec_in_txn(self.txn, |txn| async move {
+            let mut txn = txn.lock().await;
             let exists = txn.key_exists(ekey.clone()).await?;
             if exists {
                 return Ok(0);
@@ -244,7 +263,9 @@ impl<'a> StringCommandCtx<'a> {
     pub async fn do_async_txnkv_exists(self, keys: &Vec<String>) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
         let mut ss = match self.txn {
-            Some(txn) => client.snapshot_from_txn(txn).await,
+            Some(txn) => {
+                client.snapshot_from_txn(txn).await
+            }
             None => client.newest_snapshot().await
         };
         let mut cnt = 0;
@@ -315,6 +336,7 @@ impl<'a> StringCommandCtx<'a> {
         let resp = client.exec_in_txn(self.txn, |txn| async move {
             let mut new_int = 0;
             let mut prev_int = 0;
+            let mut txn = txn.lock().await;
             match txn.get(ekey.clone()).await? {
                 Some(val) => match String::from_utf8_lossy(&val).parse::<i64>() {
                     Ok(ival) => {
@@ -341,6 +363,110 @@ impl<'a> StringCommandCtx<'a> {
     
         match resp {
             Ok(n) => Ok(resp_int(n)),
+            Err(e) => Ok(resp_err(&e.to_string()))
+        }
+    }
+
+    pub async fn do_async_txnkv_string_del(self, key: &str) -> AsyncResult<i64> {
+        let client = get_txn_client()?;
+        let key = key.to_owned();
+
+        let resp = client.exec_in_txn(self.txn.clone(), |txn| async move {
+            let mut txn = txn.lock().await;
+            let ekey = KeyEncoder::new().encode_txnkv_string(&key);
+            if txn.key_exists(ekey.to_owned()).await? {
+                txn.delete(ekey).await?;
+                return Ok(1);
+            }
+            return Ok(0); 
+        }.boxed()).await;
+
+        resp
+    }
+
+    pub async fn do_async_txnkv_string_expire(self, key: &str, ttl: u64) -> AsyncResult<Frame> {
+        let client = get_txn_client()?;
+        let key = key.to_owned();
+        let ekey = KeyEncoder::new().encode_txnkv_string(&key);
+
+        let resp = client.exec_in_txn(self.txn.clone(), |txn| async move {
+            let mut txn = txn.lock().await;
+            match txn.get_for_update(ekey.clone()).await? {
+                Some(value) => {
+                    let old_ttl = KeyDecoder::new().decode_key_ttl(&value);
+                    if key_is_expired(old_ttl) {
+                        self.do_async_txnkv_string_del(&key).await?;
+                        return Ok(0)
+                    }
+                    let mut val = KeyDecoder::new().decode_key_string_value(&value);
+                    let new_val = KeyEncoder::new().encode_txnkv_string_value(&mut val, ttl);
+                    txn.put(ekey, new_val).await?;
+                    Ok(1)
+                },
+                None => {
+                    Ok(0)
+                }
+            }
+        }.boxed()).await;
+
+        match resp {
+            Ok(v) => {
+                Ok(resp_int(v))
+            },
+            Err(e) => {
+                Ok(resp_err(&e.to_string()))
+            }
+        }
+    }
+
+    pub async fn do_async_txnkv_expire(self, key: &str, ttl: u64) -> AsyncResult<Frame> {
+        Ok(resp_nil())
+    }
+
+    pub async fn do_async_txnkv_ttl(self, key: &str) -> AsyncResult<Frame> {
+        Ok(resp_nil())
+    }
+
+    pub async fn do_async_txnkv_del(mut self, keys: &Vec<String>) -> AsyncResult<Frame> {
+        let client = get_txn_client()?;
+        let keys = keys.to_owned();
+        let keys_len = keys.len();
+
+        let resp = client.exec_in_txn(self.txn.clone(), |txn| async move {
+            self.txn = Some(txn.clone());
+            let mut txn = txn.lock().await;
+
+            let mut dts = vec![];
+            for key in &keys {
+                let ekey = KeyEncoder::new().encode_txnkv_string(&key);
+                let meta_value = txn.get(ekey).await?;
+                if let Some(v) = meta_value {
+                    let dt = KeyDecoder::new().decode_key_type(&v);
+                    dts.push(dt);
+                } else {
+                    dts.push(DataType::Null);
+                }
+            }
+            drop(txn);
+
+            let mut resp = 0;
+            for idx in 0..keys_len {
+                match dts[idx] {
+                    DataType::String => {
+                        self.clone().do_async_txnkv_string_del(&keys[idx]).await?;
+                        resp += 1;
+                    },
+                    DataType::Hash => {},
+                    DataType::List => {},
+                    DataType::Set => {},
+                    DataType::Zset => {},
+                    DataType::Null => {},
+                }
+            }
+            Ok(resp)
+        }.boxed()).await;
+        match resp {
+            Ok(v) => Ok(resp_int(v)),
             Err(e) => Ok(resp_err(&e.to_string()))
         }
     }

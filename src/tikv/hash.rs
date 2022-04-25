@@ -2,6 +2,8 @@ use futures::future::{FutureExt};
 use crate::Frame;
 use tikv_client::{Key, KvPair, BoundRange, Transaction};
 use core::ops::RangeFrom;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use super::{
     encoding::{KeyEncoder, KeyDecoder, DataType}, errors::AsyncResult, errors::RTError,
 };
@@ -10,12 +12,12 @@ use super::{get_txn_client};
 use crate::utils::{resp_err, resp_array, resp_bulk, resp_int, resp_nil};
 use super::errors::*;
 
-pub struct HashCommandCtx<'a> {
-    txn: Option<&'a mut Transaction>,
+pub struct HashCommandCtx {
+    txn: Option<Arc<Mutex<Transaction>>>,
 }
 
-impl<'a> HashCommandCtx<'a> {
-    pub fn new(txn: Option<&'a mut Transaction>) -> Self {
+impl<'a> HashCommandCtx {
+    pub fn new(txn: Option<Arc<Mutex<Transaction>>>) -> Self {
         HashCommandCtx { txn }
     }
 
@@ -26,6 +28,7 @@ impl<'a> HashCommandCtx<'a> {
         let fvs_copy = fvs.clone();
         let fvs_len = fvs_copy.len();
         let resp = client.exec_in_txn(self.txn, |txn| async move {
+            let mut txn = txn.lock().await;
             // check if key already exists
             match txn.get_for_update(meta_key.clone()).await? {
                 Some(meta_value) => {
@@ -91,7 +94,9 @@ impl<'a> HashCommandCtx<'a> {
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
     
         let mut ss = match self.txn {
-            Some(txn) => client.snapshot_from_txn(txn).await,
+            Some(txn) => {
+                client.snapshot_from_txn(txn).await
+            },
             None => client.newest_snapshot().await
         };
         match ss.get(meta_key.to_owned()).await? {
@@ -130,7 +135,9 @@ impl<'a> HashCommandCtx<'a> {
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
     
         let mut ss = match self.txn {
-            Some(txn) => client.snapshot_from_txn(txn).await,
+            Some(txn) => {
+                client.snapshot_from_txn(txn).await
+            },
             None => client.newest_snapshot().await
         };
         match ss.get(meta_key.to_owned()).await? {
@@ -168,7 +175,9 @@ impl<'a> HashCommandCtx<'a> {
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
     
         let mut ss = match self.txn {
-            Some(txn) => client.snapshot_from_txn(txn).await,
+            Some(txn) => {
+                client.snapshot_from_txn(txn).await
+            },
             None => client.newest_snapshot().await
         };
         match ss.get(meta_key.to_owned()).await? {
@@ -243,7 +252,9 @@ impl<'a> HashCommandCtx<'a> {
         let client =get_txn_client()?;
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(key);
         let mut ss = match self.txn {
-            Some(txn) => client.snapshot_from_txn(txn).await,
+            Some(txn) => {
+                client.snapshot_from_txn(txn).await
+            },
             None => client.newest_snapshot().await
         };
     
@@ -268,7 +279,9 @@ impl<'a> HashCommandCtx<'a> {
         let client =get_txn_client()?;
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(key);
         let mut ss = match self.txn {
-            Some(txn) => client.snapshot_from_txn(txn).await,
+            Some(txn) => {
+                client.snapshot_from_txn(txn).await
+            },
             None => client.newest_snapshot().await
         };
     
@@ -317,6 +330,7 @@ impl<'a> HashCommandCtx<'a> {
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
     
         let resp = client.exec_in_txn(self.txn, |txn| async move {
+            let mut txn = txn.lock().await;
             match txn.get_for_update(meta_key.clone()).await? {
                 Some(meta_value) => {
                     // check key type and ttl
@@ -367,6 +381,7 @@ impl<'a> HashCommandCtx<'a> {
         let resp = client.exec_in_txn(self.txn, |txn| async move {
             let mut new_int = 0;
             let mut prev_int = 0;
+            let mut txn = txn.lock().await;
             match txn.get_for_update(meta_key.clone()).await? {
                 Some(meta_value) => {
                     // check key type and ttl

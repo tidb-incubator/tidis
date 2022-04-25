@@ -1,5 +1,6 @@
-use std::convert::TryInto;
-
+use std::{convert::TryInto};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use ::futures::future::{FutureExt};
 use crate::Frame;
 use tikv_client::{Transaction, BoundRange};
@@ -10,12 +11,12 @@ use super::{get_txn_client};
 use crate::utils::{resp_err, resp_int, resp_array, resp_bulk, resp_nil};
 use super::errors::*;
 
-pub struct ZsetCommandCtx<'a> {
-    txn: Option<&'a mut Transaction>,
+pub struct ZsetCommandCtx {
+    txn: Option<Arc<Mutex<Transaction>>>,
 }
 
-impl<'a> ZsetCommandCtx<'a> {
-    pub fn new(txn: Option<&'a mut Transaction>) -> Self {
+impl<'a> ZsetCommandCtx {
+    pub fn new(txn: Option<Arc<Mutex<Transaction>>>) -> Self {
         ZsetCommandCtx { txn }
     }
 
@@ -28,6 +29,7 @@ impl<'a> ZsetCommandCtx<'a> {
         
         let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(&key);
         let resp = client.exec_in_txn(self.txn, |txn| async move {
+            let mut txn = txn.lock().await;
             match txn.get_for_update(meta_key.clone()).await? {
                 Some(meta_value) => {
                     // check key type and ttl
@@ -143,7 +145,9 @@ impl<'a> ZsetCommandCtx<'a> {
         let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(key);
 
         let mut ss = match self.txn {
-            Some(txn) => client.snapshot_from_txn(txn).await,
+            Some(txn) => {
+                client.snapshot_from_txn(txn).await
+            },
             None => client.newest_snapshot().await
         };
 
@@ -169,7 +173,9 @@ impl<'a> ZsetCommandCtx<'a> {
         let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(key);
 
         let mut ss = match self.txn {
-            Some(txn) => client.snapshot_from_txn(txn).await,
+            Some(txn) => {
+                client.snapshot_from_txn(txn).await
+            },
             None => client.newest_snapshot().await
         };
 
@@ -205,7 +211,9 @@ impl<'a> ZsetCommandCtx<'a> {
         let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(key);
 
         let mut ss = match self.txn {
-            Some(txn) => client.snapshot_from_txn(txn).await,
+            Some(txn) => {
+                client.snapshot_from_txn(txn).await
+            },
             None => client.newest_snapshot().await
         };
 
@@ -245,7 +253,9 @@ impl<'a> ZsetCommandCtx<'a> {
         let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(key);
 
         let mut ss = match self.txn {
-            Some(txn) => client.snapshot_from_txn(txn).await,
+            Some(txn) => {
+                client.snapshot_from_txn(txn).await
+            },
             None => client.newest_snapshot().await
         };
 
@@ -311,7 +321,9 @@ impl<'a> ZsetCommandCtx<'a> {
         let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(key);
 
         let mut ss = match self.txn {
-            Some(txn) => client.snapshot_from_txn(txn).await,
+            Some(txn) => {
+                client.snapshot_from_txn(txn).await
+            },
             None => client.newest_snapshot().await
         };
 
@@ -373,6 +385,7 @@ impl<'a> ZsetCommandCtx<'a> {
         let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(&key);
 
         let resp = client.exec_in_txn(self.txn, |txn| async move {
+            let mut txn = txn.lock().await;
             match txn.get_for_update(meta_key.clone()).await? {
                 Some(meta_value) => {
                      // check key type and ttl
@@ -433,7 +446,9 @@ impl<'a> ZsetCommandCtx<'a> {
         let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(key);
 
         let mut ss = match self.txn {
-            Some(txn) => client.snapshot_from_txn(txn).await,
+            Some(txn) => {
+                client.snapshot_from_txn(txn).await
+            },
             None => client.newest_snapshot().await
         };
 
@@ -485,6 +500,7 @@ impl<'a> ZsetCommandCtx<'a> {
 
         let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(&key);
         let resp = client.exec_in_txn(self.txn, |txn| async move {
+            let mut txn = txn.lock().await;
             match txn.get(meta_key.clone()).await? {
                 Some(meta_value) => {
                     // check key type and ttl
@@ -543,6 +559,7 @@ impl<'a> ZsetCommandCtx<'a> {
         
         let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(&key);
         let resp = client.exec_in_txn(self.txn, |txn| async move {
+            let mut txn = txn.lock().await;
             match txn.get_for_update(meta_key.clone()).await? {
                 Some(meta_value) => {
                     // check key type and ttl

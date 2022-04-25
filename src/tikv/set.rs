@@ -1,5 +1,6 @@
-use std::convert::TryInto;
-
+use std::{convert::TryInto};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use ::futures::future::{FutureExt};
 use crate::Frame;
 use tikv_client::{Transaction, BoundRange};
@@ -10,12 +11,12 @@ use super::{get_txn_client};
 use crate::utils::{resp_err, resp_int, resp_array, resp_bulk};
 use super::errors::*;
 
-pub struct SetCommandCtx<'a> {
-    txn: Option<&'a mut Transaction>,
+pub struct SetCommandCtx {
+    txn: Option<Arc<Mutex<Transaction>>>,
 }
 
-impl<'a> SetCommandCtx<'a> {
-    pub fn new(txn: Option<&'a mut Transaction>) -> Self {
+impl<'a> SetCommandCtx {
+    pub fn new(txn: Option<Arc<Mutex<Transaction>>>) -> Self {
         SetCommandCtx { txn }
     }
 
@@ -27,6 +28,7 @@ impl<'a> SetCommandCtx<'a> {
         let meta_key = KeyEncoder::new().encode_txnkv_set_meta_key(&key);
 
         let resp = client.exec_in_txn(self.txn, |txn| async move {
+            let mut txn = txn.lock().await;
             match txn.get_for_update(meta_key.clone()).await? {
                 Some(meta_value) => {
                     // check key type and ttl
@@ -83,7 +85,9 @@ impl<'a> SetCommandCtx<'a> {
         let client = get_txn_client()?;
 
         let mut ss = match self.txn {
-            Some(txn) => client.snapshot_from_txn(txn).await,
+            Some(txn) => {
+                client.snapshot_from_txn(txn).await
+            },
             None => client.newest_snapshot().await
         };
 
@@ -114,7 +118,9 @@ impl<'a> SetCommandCtx<'a> {
         let member_len = members.len();
 
         let mut ss = match self.txn {
-            Some(txn) => client.snapshot_from_txn(txn).await,
+            Some(txn) => {
+                client.snapshot_from_txn(txn).await
+            },
             None => client.newest_snapshot().await
         };
 
@@ -164,7 +170,9 @@ impl<'a> SetCommandCtx<'a> {
         let meta_key = KeyEncoder::new().encode_txnkv_set_meta_key(key);
 
         let mut ss = match self.txn {
-            Some(txn) => client.snapshot_from_txn(txn).await,
+            Some(txn) => {
+                client.snapshot_from_txn(txn).await
+            },
             None => client.newest_snapshot().await
         };
 
@@ -207,6 +215,7 @@ impl<'a> SetCommandCtx<'a> {
         let meta_key = KeyEncoder::new().encode_txnkv_set_meta_key(&key);
 
         let resp = client.exec_in_txn(self.txn, |txn| async move {
+            let mut txn = txn.lock().await;
             match txn.get_for_update(meta_key.clone()).await? {
                 Some(meta_value) => {
                     // check key type and ttl
@@ -214,7 +223,7 @@ impl<'a> SetCommandCtx<'a> {
                         return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
                     }
 
-                    let (ttl, mut size) = KeyDecoder::new().decode_key_set_meta(&meta_value);
+                    let (ttl, size) = KeyDecoder::new().decode_key_set_meta(&meta_value);
 
                     let mut removed: u64 = 0;
                     for member in &members {
@@ -257,6 +266,7 @@ impl<'a> SetCommandCtx<'a> {
         let meta_key = KeyEncoder::new().encode_txnkv_set_meta_key(&key);
 
         let resp = client.exec_in_txn(self.txn, |txn| async move {
+            let mut txn = txn.lock().await;
             match txn.get_for_update(meta_key.clone()).await? {
                 Some(meta_value) => {
                     // check key type and ttl

@@ -85,6 +85,8 @@ impl Eval {
             return Ok(resp_err("not supported yet"));
         }
 
-        LuaCommandCtx::new(None).do_async_eval(&self.script, &self.keys, &self.args).await
+        let ctx = LuaCommandCtx::new(None);
+
+        ctx.do_async_eval(&self.script, &self.keys, &self.args).await
     }
 }

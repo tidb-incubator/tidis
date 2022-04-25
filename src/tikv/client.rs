@@ -1,3 +1,6 @@
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
 use tikv_client::{RawClient, Value, Key, Error, BoundRange, KvPair, ColumnFamily};
 
 use tikv_client::{
@@ -16,7 +19,7 @@ use crate::{
 };
 
 use super::{errors::AsyncResult};
-use futures::future::{BoxFuture};
+use futures::future::{BoxFuture, LocalBoxFuture};
 
 use crate::metrics::TIKV_CLIENT_RETRIES;
 
@@ -39,17 +42,19 @@ impl TxnClientWrapper<'static> {
         self.client.current_timestamp().await
     }
 
-    pub async fn snapshot(&self, timestamp: Timestamp, options: TransactionOptions) -> Snapshot {
+    pub fn snapshot(&self, timestamp: Timestamp, options: TransactionOptions) -> Snapshot {
         self.client.snapshot(timestamp, options)
     }
 
-    pub async fn snapshot_from_txn(&self, txn: &Transaction) -> Snapshot {
+    pub async fn snapshot_from_txn(&self, txn: Arc<Mutex<Transaction>>) -> Snapshot {
         let options = if is_use_pessimistic_txn() {
             TransactionOptions::new_pessimistic()
         } else {
             TransactionOptions::new_optimistic()
         };
-        self.snapshot(txn.start_timestamp(), options).await
+        let txn = txn.lock().await;
+        let ts = txn.start_timestamp();
+        self.snapshot(ts, options)
     }
 
     pub async fn newest_snapshot(&self) -> Snapshot {
@@ -60,7 +65,7 @@ impl TxnClientWrapper<'static> {
         };
 
         let current_timestamp = self.current_timestamp().await.unwrap();
-        self.snapshot(current_timestamp, options).await
+        self.snapshot(current_timestamp, options)
     }
 
     pub async fn begin(&self) -> TiKVResult<Transaction> {
@@ -85,8 +90,8 @@ impl TxnClientWrapper<'static> {
 
     
     /// Auto begin new txn, call f with the txn, commit or callback due to the result
-    pub async fn exec_in_txn<T, F>(&self, txn: Option<&mut Transaction>, f: F) -> AsyncResult<T> where 
-    F: FnOnce(&mut Transaction) -> BoxFuture<'_, AsyncResult<T>>,
+    pub async fn exec_in_txn<T, F>(&self, txn: Option<Arc<Mutex<Transaction>>>, f: F) -> AsyncResult<T> where 
+    F: FnOnce(Arc<Mutex<Transaction>>) -> BoxFuture<'static, AsyncResult<T>>,
     {
         match txn {
             Some(txn) => {
@@ -103,10 +108,12 @@ impl TxnClientWrapper<'static> {
             },
             None => {
                 // begin new transaction
-                let mut txn = self.begin().await?;
+                let txn = self.begin().await?;
+                let txn_arc = Arc::new(Mutex::new(txn));
 
                 // call f
-                let result = f(&mut txn).await;
+                let result = f(txn_arc.clone()).await;
+                let mut txn = txn_arc.lock().await;
                 match result {
                     Ok(res) => { 
                         txn.commit().await?;

@@ -22,6 +22,7 @@ impl KeyEncoder {
             DataType::List => "L",
             DataType::Set => "S",
             DataType::Zset => "Z",
+            DataType::Null => "N",
         };
         format!(
             "x$R_{}_{}",
@@ -37,6 +38,7 @@ impl KeyEncoder {
             DataType::List => 2,
             DataType::Set => 3,
             DataType::Zset => 4,
+            DataType::Null => 5,
         }
     }
 

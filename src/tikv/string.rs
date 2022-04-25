@@ -3,14 +3,13 @@ use crate::{Frame, utils::{resp_bulk, resp_nil}};
 use std::{collections::HashMap};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tokio::runtime::Runtime;
 use tikv_client::{Key, Value, KvPair, Transaction};
 use super::{
     encoding::{KeyEncoder, KeyDecoder, DataType}, errors::AsyncResult, errors::RTError,
 };
 use bytes::Bytes;
 use super::{get_client, get_txn_client};
-use crate::utils::{sleep, resp_err, resp_int, key_is_expired};
+use crate::utils::{sleep, resp_err, resp_int, key_is_expired, ttl_from_timestamp};
 use super::errors::*;
 #[derive(Clone)]
 pub struct StringCommandCtx {
@@ -374,7 +373,7 @@ impl StringCommandCtx {
         let resp = client.exec_in_txn(self.txn.clone(), |txn| async move {
             let mut txn = txn.lock().await;
             let ekey = KeyEncoder::new().encode_txnkv_string(&key);
-            if txn.key_exists(ekey.to_owned()).await? {
+            if let Some(_) = txn.get(ekey.to_owned()).await? {
                 txn.delete(ekey).await?;
                 return Ok(1);
             }
@@ -419,12 +418,94 @@ impl StringCommandCtx {
         }
     }
 
-    pub async fn do_async_txnkv_expire(self, key: &str, ttl: u64) -> AsyncResult<Frame> {
-        Ok(resp_nil())
+    pub async fn do_async_txnkv_expire(mut self, key: &str, timestamp: u64) -> AsyncResult<Frame> {
+        let client = get_txn_client()?;
+        let key = key.to_owned();
+        let ekey = KeyEncoder::new().encode_txnkv_string(&key);
+
+        let resp = client.exec_in_txn(self.txn.clone(), |txn_rc| async move {
+            if self.txn.is_none() {
+                self.txn = Some(txn_rc.clone());
+            }
+            let mut txn = txn_rc.lock().await;
+            match txn.get_for_update(ekey.clone()).await? {
+                Some(meta_value) => {
+                    let ttl = KeyDecoder::new().decode_key_ttl(&meta_value);
+                    // check key expired
+                    if key_is_expired(ttl) {
+                        drop(txn);
+                        self.do_async_txnkv_string_del(&key).await?;
+                        return Ok(0);
+                    }
+                    let dt = KeyDecoder::new().decode_key_type(&meta_value);
+                    match dt {
+                        DataType::String => {
+                            let mut value = KeyDecoder::new().decode_key_string_value(&meta_value);
+                            let new_meta_value = KeyEncoder::new().encode_txnkv_string_value(&mut value, timestamp);
+                            txn.put(ekey, new_meta_value).await?;
+                            return Ok(1);
+                        },
+                        DataType::Hash => {},
+                        DataType::List => {},
+                        DataType::Set => {},
+                        DataType::Zset => {},
+                        _ => {}
+                    }
+                    Ok(1)
+                },
+                None => Ok(0)
+            }
+        }.boxed()).await;
+        match resp {
+            Ok(v) => {
+                Ok(resp_int(v))
+            },
+            Err(e) => {
+                Ok(resp_err(&e.to_string()))
+            }
+        }
     }
 
-    pub async fn do_async_txnkv_ttl(self, key: &str) -> AsyncResult<Frame> {
-        Ok(resp_nil())
+    pub async fn do_async_txnkv_ttl(self, key: &str, is_millis: bool) -> AsyncResult<Frame> {
+        let client = get_txn_client()?;
+        let ekey = KeyEncoder::new().encode_txnkv_string(key);
+        let mut ss = match self.txn.clone() {
+            Some(txn) => {
+                client.snapshot_from_txn(txn).await
+            }
+            None => client.newest_snapshot().await
+        };
+
+        match ss.get(ekey).await? {
+            Some(meta_value) => {
+                let dt = KeyDecoder::new().decode_key_type(&meta_value);
+                let ttl = KeyDecoder::new().decode_key_ttl(&meta_value);
+                match dt {
+                    DataType::String => {
+                        if key_is_expired(ttl) {
+                            self.do_async_txnkv_string_del(&key).await?;
+                            return Ok(resp_int(-2));
+                        }
+                        if ttl == 0 {
+                            return Ok(resp_int(-1));
+                        } else {
+                            let mut ttl = ttl_from_timestamp(ttl) as i64;
+                            if !is_millis {
+                                ttl /= 1000;
+                            }
+                            return Ok(resp_int(ttl));
+                        }
+                    },
+                    DataType::Hash => {},
+                    DataType::List => {},
+                    DataType::Set => {},
+                    DataType::Zset => {},
+                    _ => {}
+                }
+                Ok(resp_nil())
+            },
+            None => Ok(resp_int(-2))
+        }
     }
 
     pub async fn do_async_txnkv_del(mut self, keys: &Vec<String>) -> AsyncResult<Frame> {
@@ -433,10 +514,13 @@ impl StringCommandCtx {
         let keys_len = keys.len();
 
         let resp = client.exec_in_txn(self.txn.clone(), |txn| async move {
-            self.txn = Some(txn.clone());
-            let mut txn = txn.lock().await;
+            if self.txn.is_none() {
+                self.txn = Some(txn.clone());
+            }
 
             let mut dts = vec![];
+            let mut txn = txn.lock().await;
+
             for key in &keys {
                 let ekey = KeyEncoder::new().encode_txnkv_string(&key);
                 let meta_value = txn.get(ekey).await?;

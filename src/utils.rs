@@ -94,3 +94,12 @@ pub fn now_timestamp_in_millis() -> u64 {
 pub fn timestamp_from_ttl(ttl: u64) -> u64 {
     ttl + now_timestamp_in_millis()
 }
+
+pub fn ttl_from_timestamp(timestamp: u64) -> u64 {
+    let now = now_timestamp_in_millis();
+    if now > timestamp {
+        return 0
+    } else {
+        return timestamp - now;
+    }
+}

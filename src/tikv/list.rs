@@ -1,6 +1,6 @@
 use futures::future::{FutureExt};
-use crate::Frame;
-use tikv_client::{Key, Value, KvPair, BoundRange, Transaction};
+use crate::{Frame, utils::key_is_expired};
+use tikv_client::{Key, BoundRange, Transaction};
 use core::ops::RangeFrom;
 use super::{
     encoding::{KeyEncoder, KeyDecoder, DataType}, errors::AsyncResult, errors::RTError,
@@ -15,6 +15,7 @@ use tokio::sync::Mutex;
 
 const INIT_INDEX: u64 = 1<<32;
 
+#[derive(Clone)]
 pub struct ListCommandCtx {
     txn: Option<Arc<Mutex<Transaction>>>,
 }
@@ -24,15 +25,18 @@ impl<'a> ListCommandCtx {
         ListCommandCtx { txn }
     }
 
-    pub async fn do_async_txnkv_push(self, key: &str, values: &Vec<Bytes>, op_left: bool) -> AsyncResult<Frame> {
+    pub async fn do_async_txnkv_push(mut self, key: &str, values: &Vec<Bytes>, op_left: bool) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
         let key = key.to_owned();
         let values = values.to_owned();
     
         let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(&key);
     
-        let resp = client.exec_in_txn(self.txn, |txn| async move {
-            let mut txn = txn.lock().await;
+        let resp = client.exec_in_txn(self.txn.clone(), |txn_rc| async move {
+            if self.txn.is_none() {
+                self.txn = Some(txn_rc.clone());
+            }
+            let mut txn = txn_rc.lock().await;
             match txn.get_for_update(meta_key.clone()).await? {
                 Some(meta_value) => {
                     // check key type and ttl
@@ -41,10 +45,15 @@ impl<'a> ListCommandCtx {
                     }
     
                     let (ttl, mut left, mut right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
-                    // TODO check ttl and lazy free if expired
+                    if key_is_expired(ttl) {
+                        drop(txn);
+                        self.clone().do_async_txnkv_list_expire_if_needed(&key).await?;
+                        left = INIT_INDEX;
+                        right = INIT_INDEX;
+                        txn = txn_rc.lock().await;
+                    }
     
                     let mut idx: u64;
-    
                     for value in values {
                         if op_left {
                             left -= 1;
@@ -99,15 +108,18 @@ impl<'a> ListCommandCtx {
         }
     }
     
-    pub async fn do_async_txnkv_pop(self, key: &str, op_left: bool, count: i64) -> AsyncResult<Frame> {
+    pub async fn do_async_txnkv_pop(mut self, key: &str, op_left: bool, count: i64) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
         let key = key.to_owned();
     
         let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(&key);
     
-        let resp = client.exec_in_txn(self.txn, |txn| async move {
+        let resp = client.exec_in_txn(self.txn.clone(), |txn_rc| async move {
+            if self.txn.is_none() {
+                self.txn = Some(txn_rc.clone());
+            }
             let mut values = Vec::new();
-            let mut txn = txn.lock().await;
+            let mut txn = txn_rc.lock().await;
             match txn.get_for_update(meta_key.clone()).await? {
                 Some(meta_value) => {
                     // check key type and ttl
@@ -116,7 +128,11 @@ impl<'a> ListCommandCtx {
                     }
     
                     let (ttl, mut left, mut right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
-                    // TODO check ttl and lazy free if expired
+                    if key_is_expired(ttl) {
+                        drop(txn);
+                        self.clone().do_async_txnkv_list_expire_if_needed(&key).await?;
+                        return Ok(values);
+                    }
     
                     let mut idx: u64;
     
@@ -200,7 +216,7 @@ impl<'a> ListCommandCtx {
     
     pub async fn do_async_txnkv_lrange(self, key: &str, mut r_left: i64, mut r_right: i64) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
-        let mut ss = match self.txn {
+        let mut ss = match self.txn.clone() {
             Some(txn) => {
                 client.snapshot_from_txn(txn).await
             },
@@ -216,6 +232,10 @@ impl<'a> ListCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
                 let (ttl, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
+                if key_is_expired(ttl) {
+                    self.clone().do_async_txnkv_list_expire_if_needed(&key).await?;
+                    return Ok(resp_array(vec![]));
+                }
     
                 let llen: i64 = (right - left) as i64;
     
@@ -255,7 +275,7 @@ impl<'a> ListCommandCtx {
     pub async fn do_async_txnkv_llen(self, key: &str) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
     
-        let mut ss = match self.txn {
+        let mut ss = match self.txn.clone() {
             Some(txn) => {
                 client.snapshot_from_txn(txn).await
             },
@@ -270,6 +290,10 @@ impl<'a> ListCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
                 let (ttl, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
+                if key_is_expired(ttl) {
+                    self.clone().do_async_txnkv_list_expire_if_needed(&key).await?;
+                    return Ok(resp_int(0));
+                }
     
                 let llen: i64 = (right - left) as i64;
                 Ok(resp_int(llen))
@@ -283,7 +307,7 @@ impl<'a> ListCommandCtx {
     pub async fn do_async_txnkv_lindex(self, key: &str, idx: i64) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
     
-        let mut ss = match self.txn {
+        let mut ss = match self.txn.clone() {
             Some(txn) => {
                 client.snapshot_from_txn(txn).await
             },
@@ -298,6 +322,10 @@ impl<'a> ListCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
                 let (ttl, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
+                if key_is_expired(ttl) {
+                    self.clone().do_async_txnkv_list_expire_if_needed(&key).await?;
+                    return Ok(resp_nil());
+                }
     
                 let real_idx = left + idx as u64;
     
@@ -315,14 +343,17 @@ impl<'a> ListCommandCtx {
         }
     }
     
-    pub async fn do_async_txnkv_lset(self, key: &str, mut idx: i64, ele: &Bytes) -> AsyncResult<Frame> {
+    pub async fn do_async_txnkv_lset(mut self, key: &str, mut idx: i64, ele: &Bytes) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
         let key = key.to_owned();
         let ele = ele.to_owned();
     
         let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(&key);
-        let resp = client.exec_in_txn(self.txn, |txn| async move {
-            let mut txn = txn.lock().await;
+        let resp = client.exec_in_txn(self.txn.clone(), |txn_rc| async move {
+            if self.txn.is_none() {
+                self.txn = Some(txn_rc.clone());
+            }
+            let mut txn = txn_rc.lock().await;
             Ok(match txn.get_for_update(meta_key.clone()).await? {
                 Some(meta_value) => {
                     // check type and ttl
@@ -330,6 +361,11 @@ impl<'a> ListCommandCtx {
                         return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
                     }
                     let (ttl, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
+                    if key_is_expired(ttl) {
+                        drop(txn);
+                        self.clone().do_async_txnkv_list_expire_if_needed(&key).await?;
+                        return Err(RTError::StringError(REDIS_NO_SUCH_KEY_ERR.into()));
+                    }
     
                     // convert idx to positive is needed
                     if idx < 0 {
@@ -357,6 +393,77 @@ impl<'a> ListCommandCtx {
             Ok(_) => Ok(resp_ok()),
             Err(e) => Ok(resp_err(&e.to_string()))
         }
+    }
+
+    pub async fn do_async_txnkv_list_del(mut self, key: &str) -> AsyncResult<i64> {
+        let client = get_txn_client()?;
+        let key = key.to_owned();
+        let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(&key);
+
+        let resp = client.exec_in_txn(self.txn.clone(), |txn_rc| async move {
+            if self.txn.is_none() {
+                self.txn = Some(txn_rc.clone());
+            }
+
+            let mut txn = txn_rc.lock().await;
+            match txn.get_for_update(meta_key.clone()).await? {
+                Some(meta_value) => {
+                    let (_, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
+                    let data_key_start = KeyEncoder::new().encode_txnkv_list_data_key(&key, left);
+                    let range: RangeFrom<Key> = data_key_start..;
+                    let from_range: BoundRange = range.into();
+                    let len = right - left;
+                    let iter = txn.scan(from_range, len.try_into().unwrap()).await?;
+
+                    for k in iter {
+                        txn.delete(k).await?;
+                    }
+                    txn.delete(meta_key).await?;
+                    Ok(1)
+                },
+                None => Ok(0),
+            }
+
+        }.boxed()).await;
+
+        resp
+    }
+
+    pub async fn do_async_txnkv_list_expire_if_needed(mut self, key: &str) -> AsyncResult<i64> {
+        let client = get_txn_client()?;
+        let key = key.to_owned();
+        let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(&key);
+
+        let resp = client.exec_in_txn(self.txn.clone(), |txn_rc| async move {
+            if self.txn.is_none() {
+                self.txn = Some(txn_rc.clone());
+            }
+
+            let mut txn = txn_rc.lock().await;
+            match txn.get_for_update(meta_key.clone()).await? {
+                Some(meta_value) => {
+                    let (ttl, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
+                    if !key_is_expired(ttl) {
+                        return Ok(0)
+                    } 
+                    let data_key_start = KeyEncoder::new().encode_txnkv_list_data_key(&key, left);
+                    let range: RangeFrom<Key> = data_key_start..;
+                    let from_range: BoundRange = range.into();
+                    let len = right - left;
+                    let iter = txn.scan(from_range, len.try_into().unwrap()).await?;
+
+                    for k in iter {
+                        txn.delete(k).await?;
+                    }
+                    txn.delete(meta_key).await?;
+                    Ok(1)
+                },
+                None => Ok(0),
+            }
+
+        }.boxed()).await;
+
+        resp
     }
 }
 

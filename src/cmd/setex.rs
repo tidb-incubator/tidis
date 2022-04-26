@@ -1,6 +1,8 @@
 use crate::cmd::{Parse};
+use crate::tikv::errors::AsyncResult;
 use crate::tikv::string::StringCommandCtx;
-use crate::{Connection, Frame};
+use crate::utils::{timestamp_from_ttl, resp_err};
+use crate::{Connection, Frame, is_use_txn_api};
 
 use bytes::Bytes;
 use tracing::{debug, instrument};
@@ -57,26 +59,6 @@ impl SetEX {
         self.expire
     }
 
-    /// Parse a `Set` instance from a received frame.
-    ///
-    /// The `Parse` argument provides a cursor-like API to read fields from the
-    /// `Frame`. At this point, the entire frame has already been received from
-    /// the socket.
-    ///
-    /// The `SET` string has already been consumed.
-    ///
-    /// # Returns
-    ///
-    /// Returns the `Set` value on success. If the frame is malformed, `Err` is
-    /// returned.
-    ///
-    /// # Format
-    ///
-    /// Expects an array frame containing at least 3 entries.
-    ///
-    /// ```text
-    /// SETEX key seconds value
-    /// ```
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<SetEX> {
 
         // Read the key to set. This is a required field
@@ -93,13 +75,9 @@ impl SetEX {
         Ok(SetEX { key, value, expire })
     }
 
-    /// Apply the `Set` command to the specified `Db` instance.
-    ///
-    /// The response is written to `dst`. This is called by the server in order
-    /// to execute a received command.
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        let response = match StringCommandCtx::new(None).do_async_rawkv_expire(&self.key, Some(self.value.clone()), self.expire).await {
+        let response = match self.setex().await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
@@ -107,5 +85,14 @@ impl SetEX {
         dst.write_frame(&response).await?;
 
         Ok(())
+    }
+
+    async fn setex(self) -> AsyncResult<Frame> {
+        if is_use_txn_api() {
+            let ts = timestamp_from_ttl(self.expire as u64);
+            StringCommandCtx::new(None).do_async_txnkv_put(&self.key, &self.value, ts).await
+        } else {
+            Ok(resp_err("not supported yet"))
+        }
     }
 }

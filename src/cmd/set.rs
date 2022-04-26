@@ -3,6 +3,7 @@ use crate::tikv::errors::AsyncResult;
 use crate::tikv::string::StringCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
+use crate::utils::{timestamp_from_ttl, resp_err};
 
 use bytes::Bytes;
 use std::time::Duration;
@@ -29,7 +30,7 @@ pub struct Set {
     value: Bytes,
 
     /// When to expire the key
-    expire: Option<Duration>,
+    expire: Option<i64>,
 
     /// Set if key is not present
     nx: Option<bool>,
@@ -40,7 +41,7 @@ impl Set {
     ///
     /// If `expire` is `Some`, the value should expire after the specified
     /// duration.
-    pub fn new(key: impl ToString, value: Bytes, expire: Option<Duration>) -> Set {
+    pub fn new(key: impl ToString, value: Bytes, expire: Option<i64>) -> Set {
         Set {
             key: key.to_string(),
             value,
@@ -60,7 +61,7 @@ impl Set {
     }
 
     /// Get the expire
-    pub fn expire(&self) -> Option<Duration> {
+    pub fn expire(&self) -> Option<i64> {
         self.expire
     }
 
@@ -105,13 +106,13 @@ impl Set {
                 // An expiration is specified in seconds. The next value is an
                 // integer.
                 let secs = parse.next_int()?;
-                expire = Some(Duration::from_secs(secs as u64));
+                expire = Some(secs);
             }
             Ok(s) if s.to_uppercase() == "PX" => {
                 // An expiration is specified in milliseconds. The next value is
                 // an integer.
                 let ms = parse.next_int()?;
-                expire = Some(Duration::from_millis(ms as u64));
+                expire = Some(ms);
             }
             Ok(s) if s.to_uppercase() == "NX" => {
                 // Only set if key not present
@@ -167,10 +168,14 @@ impl Set {
     }
 
     async fn put(&self, key: &str, val: &Bytes) -> AsyncResult<Frame> {
+        let mut ts = 0;
         if is_use_txn_api() {
-            StringCommandCtx::new(None).do_async_txnkv_put(key, val).await
+            if self.expire.is_some() {
+                ts = timestamp_from_ttl(self.expire.unwrap() as u64);
+            }
+            StringCommandCtx::new(None).do_async_txnkv_put(key, val, ts).await
         } else {
-            StringCommandCtx::new(None).do_async_rawkv_put(key, val).await
+            StringCommandCtx::new(None).do_async_rawkv_put(&self.key, &self.value).await
         }
     }
 }

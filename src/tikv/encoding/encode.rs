@@ -87,7 +87,7 @@ impl KeyEncoder {
     }
 
     pub fn encode_txnkv_hash_data_key_start(&self, key: &str) -> Key {
-        let ret = format!("x_{}_D_{}_", self.instance_id, key);
+        let ret = format!("x_{}_D_H_{}_", self.instance_id, key);
         ret.into()
     }
 

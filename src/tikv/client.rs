@@ -19,7 +19,7 @@ use crate::{
 };
 
 use super::{errors::AsyncResult};
-use futures::future::{BoxFuture, LocalBoxFuture};
+use futures::future::{BoxFuture};
 
 use crate::metrics::TIKV_CLIENT_RETRIES;
 
@@ -129,8 +129,6 @@ impl TxnClientWrapper<'static> {
         }
         // TODO: add retry policy
 
-        
-
     }
 
 
@@ -231,40 +229,6 @@ impl RawClientWrapper {
                     return Ok((val, swapped));
                 }
                 Err(err) => {
-                    if self.error_retryable(&err) {
-                        last_err.replace(err);
-                        sleep(std::cmp::min(2 + i, 200)).await;
-                        continue;
-                    }
-                    return Err(err);
-                }
-            }
-        }
-        match last_err {
-            Some(err) => Err(err),
-            None => Ok((None, false)),
-        }
-    }
-
-    pub async fn compare_and_swap_with_ttl(
-        &self, 
-        key: Key, 
-        prev_val: Option<Value>, 
-        val: Value,
-        ttl: i64,
-    ) -> Result<(Option<Value>, bool), Error> {
-        let mut last_err: Option<Error> = None;
-        for i in 0..self.retries {
-            match self.client
-                .with_atomic_for_cas()
-                .compare_and_swap_with_ttl(key.clone(), prev_val.clone(), val.to_owned(), ttl as u64)
-                .await
-            {
-                Ok((val, swapped)) => {
-                    return Ok((val, swapped));
-                }
-                Err(err) => {
-                    println!("Err: {:?}", &err);
                     if self.error_retryable(&err) {
                         last_err.replace(err);
                         sleep(std::cmp::min(2 + i, 200)).await;
@@ -407,42 +371,6 @@ impl RawClientWrapper {
         match last_err {
             Some(err) => Err(err),
             None => Ok(()),
-        }
-    }
-
-    pub async fn get_ttl(&self, key: Key) -> Result<i64, Error> {
-        let mut last_err: Option<Error> = None;
-        for i in 0..self.retries {
-            match self.client
-                .get_ttl(key.clone())
-                .await
-            {
-                Ok(val) => {
-                    match val {
-                        Some(ttl) => {
-                            if ttl == 0 {
-                                return Ok(-1);
-                            }
-                            return Ok(ttl as i64);
-                        },
-                        None => {
-                            return Ok(-2);
-                        }
-                    }
-                }
-                Err(err) => {
-                    if self.error_retryable(&err) {
-                        last_err.replace(err);
-                        sleep(std::cmp::min(2 + i, 200)).await;
-                        continue;
-                    }
-                    return Err(err);
-                }
-            }
-        }
-        match last_err {
-            Some(err) => Err(err),
-            None => Ok(-2),
         }
     }
 }

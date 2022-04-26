@@ -1,4 +1,5 @@
 use crate::tikv::errors::AsyncResult;
+use crate::utils::resp_err;
 use crate::{Connection, Frame, Parse};
 use crate::tikv::string::StringCommandCtx;
 use crate::config::{is_use_txn_api};
@@ -45,7 +46,7 @@ impl TTL {
         if is_use_txn_api() {
             StringCommandCtx::new(None).do_async_txnkv_ttl(&self.key, is_millis).await
         } else {
-            StringCommandCtx::new(None).do_async_rawkv_get_ttl(&self.key).await
+            Ok(resp_err("not supported yet"))
         }
     }
 }

@@ -1,5 +1,5 @@
 use futures::future::{FutureExt};
-use crate::Frame;
+use crate::{Frame, utils::key_is_expired};
 use tikv_client::{Key, KvPair, BoundRange, Transaction};
 use core::ops::RangeFrom;
 use std::sync::Arc;
@@ -12,6 +12,7 @@ use super::{get_txn_client};
 use crate::utils::{resp_err, resp_array, resp_bulk, resp_int, resp_nil};
 use super::errors::*;
 
+#[derive(Clone)]
 pub struct HashCommandCtx {
     txn: Option<Arc<Mutex<Transaction>>>,
 }
@@ -21,14 +22,17 @@ impl<'a> HashCommandCtx {
         HashCommandCtx { txn }
     }
 
-    pub async fn do_async_txnkv_hset(self, key: &str, fvs: &Vec<KvPair>) -> AsyncResult<Frame> {
+    pub async fn do_async_txnkv_hset(mut self, key: &str, fvs: &Vec<KvPair>) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
         let key = key.to_owned();
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
         let fvs_copy = fvs.clone();
         let fvs_len = fvs_copy.len();
-        let resp = client.exec_in_txn(self.txn, |txn| async move {
-            let mut txn = txn.lock().await;
+        let resp = client.exec_in_txn(self.txn.clone(), |txn_rc| async move {
+            if self.txn.is_none() {
+                self.txn = Some(txn_rc.clone());
+            }
+            let mut txn = txn_rc.lock().await;
             // check if key already exists
             match txn.get_for_update(meta_key.clone()).await? {
                 Some(meta_value) => {
@@ -38,6 +42,14 @@ impl<'a> HashCommandCtx {
                     }
                     // already exists
                     let (ttl, mut size) = KeyDecoder::new().decode_key_hash_meta(&meta_value);
+                    if key_is_expired(ttl) {
+                        // release mutex
+                        drop(txn);
+                        self.clone().do_async_txnkv_hash_expire_if_needed(&key).await?;
+                        size = 0;
+                        // re-lock mutex
+                        txn = txn_rc.lock().await;
+                    }
     
                     for kv in fvs_copy {
                         let field: Vec<u8> = kv.0.into();
@@ -93,7 +105,7 @@ impl<'a> HashCommandCtx {
         let field = field.to_owned();
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
     
-        let mut ss = match self.txn {
+        let mut ss = match self.txn.clone() {
             Some(txn) => {
                 client.snapshot_from_txn(txn).await
             },
@@ -106,8 +118,11 @@ impl<'a> HashCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
     
-                // TODO check ttl
                 let ttl = KeyDecoder::new().decode_key_ttl(&meta_value);
+                if key_is_expired(ttl) {
+                    self.clone().do_async_txnkv_hash_expire_if_needed(&key).await?;
+                    return Ok(resp_nil());
+                }
     
                 let data_key = KeyEncoder::new().encode_txnkv_hash_data_key(&key, &field);
     
@@ -134,7 +149,7 @@ impl<'a> HashCommandCtx {
         let field = field.to_owned();
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
     
-        let mut ss = match self.txn {
+        let mut ss = match self.txn.clone() {
             Some(txn) => {
                 client.snapshot_from_txn(txn).await
             },
@@ -147,8 +162,11 @@ impl<'a> HashCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
     
-                // TODO check ttl
                 let ttl = KeyDecoder::new().decode_key_ttl(&meta_value);
+                if key_is_expired(ttl) {
+                    self.clone().do_async_txnkv_hash_expire_if_needed(&key).await?;
+                    return Ok(resp_int(0));
+                }
     
                 let data_key = KeyEncoder::new().encode_txnkv_hash_data_key(&key, &field);
     
@@ -174,7 +192,7 @@ impl<'a> HashCommandCtx {
         let field = field.to_owned();
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
     
-        let mut ss = match self.txn {
+        let mut ss = match self.txn.clone() {
             Some(txn) => {
                 client.snapshot_from_txn(txn).await
             },
@@ -187,8 +205,11 @@ impl<'a> HashCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
     
-                // TODO check ttl
                 let ttl = KeyDecoder::new().decode_key_ttl(&meta_value);
+                if key_is_expired(ttl) {
+                    self.clone().do_async_txnkv_hash_expire_if_needed(&key).await?;
+                    return Ok(resp_int(0));
+                }
     
                 let data_key = KeyEncoder::new().encode_txnkv_hash_data_key(&key, &field);
     
@@ -208,7 +229,7 @@ impl<'a> HashCommandCtx {
     pub async fn do_async_txnkv_hmget(self, key: &str, fields: &Vec<String>) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(key);
-        let mut ss = match self.txn {
+        let mut ss = match self.txn.clone() {
             Some(txn) => client.snapshot_from_txn(txn).await,
             None => client.newest_snapshot().await
         };
@@ -222,9 +243,11 @@ impl<'a> HashCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
     
-                // TODO check ttl
                 let ttl = KeyDecoder::new().decode_key_ttl(&meta_value);
-    
+                if key_is_expired(ttl) {
+                    self.clone().do_async_txnkv_hash_expire_if_needed(&key).await?;
+                    return Ok(resp_array(vec![]));
+                }
                 
                 for field in fields {
                     let data_key = KeyEncoder::new().encode_txnkv_hash_data_key(&key, &field);
@@ -251,7 +274,7 @@ impl<'a> HashCommandCtx {
     pub async fn do_async_txnkv_hlen(self, key: &str) -> AsyncResult<Frame> {
         let client =get_txn_client()?;
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(key);
-        let mut ss = match self.txn {
+        let mut ss = match self.txn.clone() {
             Some(txn) => {
                 client.snapshot_from_txn(txn).await
             },
@@ -265,8 +288,11 @@ impl<'a> HashCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
     
-                // TODO check ttl
                 let ttl = KeyDecoder::new().decode_key_ttl(&meta_value);
+                if key_is_expired(ttl) {
+                    self.clone().do_async_txnkv_hash_expire_if_needed(&key).await?;
+                    return Ok(resp_nil());
+                }
     
                 let size = KeyDecoder::new().decode_key_hash_size(&meta_value);
                 Ok(resp_int(size as i64))
@@ -278,7 +304,7 @@ impl<'a> HashCommandCtx {
     pub async fn do_async_txnkv_hgetall(self, key: &str, with_field: bool, with_value: bool) -> AsyncResult<Frame> {
         let client =get_txn_client()?;
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(key);
-        let mut ss = match self.txn {
+        let mut ss = match self.txn.clone() {
             Some(txn) => {
                 client.snapshot_from_txn(txn).await
             },
@@ -291,8 +317,11 @@ impl<'a> HashCommandCtx {
                 return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
             }
     
-            // TODO check ttl
             let ttl = KeyDecoder::new().decode_key_ttl(&meta_value);
+            if key_is_expired(ttl) {
+                self.clone().do_async_txnkv_hash_expire_if_needed(&key).await?;
+                return Ok(resp_nil());
+            }
     
             let size = KeyDecoder::new().decode_key_hash_size(&meta_value);
     
@@ -323,14 +352,17 @@ impl<'a> HashCommandCtx {
         }
     }
     
-    pub async fn do_async_txnkv_hdel(self, key: &str, field: &str) -> AsyncResult<Frame> {
+    pub async fn do_async_txnkv_hdel(mut self, key: &str, field: &str) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
         let key = key.to_owned();
         let field = field.to_owned();
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
     
-        let resp = client.exec_in_txn(self.txn, |txn| async move {
-            let mut txn = txn.lock().await;
+        let resp = client.exec_in_txn(self.txn.clone(), |txn_rc| async move {
+            if self.txn.is_none() {
+                self.txn = Some(txn_rc.clone());
+            }
+            let mut txn = txn_rc.lock().await;
             match txn.get_for_update(meta_key.clone()).await? {
                 Some(meta_value) => {
                     // check key type and ttl
@@ -339,6 +371,11 @@ impl<'a> HashCommandCtx {
                     }
     
                     let (ttl, mut size) = KeyDecoder::new().decode_key_hash_meta(&meta_value);
+                    if key_is_expired(ttl) {
+                        drop(txn);
+                        self.clone().do_async_txnkv_hash_expire_if_needed(&key).await?;
+                        return Ok(0);
+                    }
     
                     // check data key exists
                     let data_key = KeyEncoder::new().encode_txnkv_hash_data_key(&key, &field);
@@ -378,10 +415,10 @@ impl<'a> HashCommandCtx {
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
         let data_key = KeyEncoder::new().encode_txnkv_hash_data_key(&key, &field);
     
-        let resp = client.exec_in_txn(self.txn, |txn| async move {
+        let resp = client.exec_in_txn(self.txn.clone(), |txn_rc| async move {
             let mut new_int = 0;
             let mut prev_int = 0;
-            let mut txn = txn.lock().await;
+            let mut txn = txn_rc.lock().await;
             match txn.get_for_update(meta_key.clone()).await? {
                 Some(meta_value) => {
                     // check key type and ttl
@@ -389,7 +426,14 @@ impl<'a> HashCommandCtx {
                         return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
                     }
     
-                    let (ttl, size) = KeyDecoder::new().decode_key_hash_meta(&meta_value);
+                    let (ttl, mut size) = KeyDecoder::new().decode_key_hash_meta(&meta_value);
+                    if key_is_expired(ttl) {
+                        drop(txn);
+                        self.clone().do_async_txnkv_hash_expire_if_needed(&key).await?;
+                        size = 0;
+                        // regain txn mutexguard
+                        txn = txn_rc.lock().await;
+                    }
     
                     match txn.get(data_key.clone()).await? {
                         Some(data_value) => {
@@ -434,5 +478,74 @@ impl<'a> HashCommandCtx {
                 Ok(resp_err(&e.to_string()))
             }
         }
+    }
+
+    pub async fn do_async_txnkv_hash_del(mut self, key: &str) -> AsyncResult<i64> {
+        let client = get_txn_client()?;
+        let key = key.to_owned();
+        let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
+
+        let resp = client.exec_in_txn(self.txn.clone(), |txn_arc| async move {
+            if self.txn.is_none() {
+                self.txn = Some(txn_arc.clone());
+            }
+            let mut txn = txn_arc.lock().await;
+            match txn.get_for_update(meta_key.clone()).await? {
+                Some(meta_value) => {
+                    let size = KeyDecoder::new().decode_key_hash_size(&meta_value);
+    
+                    let data_key_start = KeyEncoder::new().encode_txnkv_hash_data_key_start(&key);
+                    let range: RangeFrom<Key> = data_key_start..;
+                    let from_range: BoundRange = range.into();
+                    // scan return iterator
+                    let iter = txn.scan_keys(from_range, size as u32).await?;
+
+                    for k in iter {
+                        txn.delete(k).await?;
+                    }
+                    txn.delete(meta_key).await?;
+                    Ok(1)
+                },
+                None => Ok(0)
+            }
+        }.boxed()).await;
+        resp
+    }
+
+    pub async fn do_async_txnkv_hash_expire_if_needed(mut self, key: &str) -> AsyncResult<i64> {
+        let client = get_txn_client()?;
+        let key = key.to_owned();
+        let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
+
+        let resp = client.exec_in_txn(self.txn.clone(), |txn_arc| async move {
+            if self.txn.is_none() {
+                self.txn = Some(txn_arc.clone());
+            }
+            let mut txn = txn_arc.lock().await;
+            match txn.get_for_update(meta_key.clone()).await? {
+                Some(meta_value) => {
+                    let ttl = KeyDecoder::new().decode_key_ttl(&meta_value);
+                    if !key_is_expired(ttl) {
+                        return Ok(0)
+                    }
+
+                    let size = KeyDecoder::new().decode_key_hash_size(&meta_value);
+    
+                    let data_key_start = KeyEncoder::new().encode_txnkv_hash_data_key_start(&key);
+                    let range: RangeFrom<Key> = data_key_start..;
+                    let from_range: BoundRange = range.into();
+                    // scan return iterator
+                    let iter = txn.scan_keys(from_range, size as u32).await?;
+
+                    for k in iter {
+                        txn.delete(k).await?;
+                    }
+                    txn.delete(meta_key).await?;
+                    Ok(1)
+                },
+                None => Ok(0)
+            }
+        }.boxed()).await;
+        resp
     }
 }

@@ -292,7 +292,7 @@ impl ZsetCommandCtx {
                 let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone().do_async_txnkv_zset_expire_if_needed(&key).await?;
-                    return Ok(resp_int(0));
+                    return Ok(resp_array(vec![]));
                 }
                 // convert index to positive if negtive
                 if min < 0 {

@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+use crate::tikv::get_txn_client;
 use crate::utils::{resp_err, resp_int, resp_sstr, resp_str};
 use crate::{Connection, Frame, Parse};
 use crate::tikv::lua::LuaCommandCtx;
@@ -9,6 +12,7 @@ use mlua::{
 };
 
 
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
 #[derive(Debug)]
@@ -85,8 +89,25 @@ impl Eval {
             return Ok(resp_err("not supported yet"));
         }
 
-        let ctx = LuaCommandCtx::new(None);
+        // create new txn
+        let client = get_txn_client()?;
+        let txn = client.begin().await?;
+        let txn_rc = Arc::new(Mutex::new(txn));
 
-        ctx.do_async_eval(&self.script, &self.keys, &self.args).await
+        let ctx = LuaCommandCtx::new(Some(txn_rc.clone()));
+
+        let resp = ctx.do_async_eval(&self.script, &self.keys, &self.args).await;
+        match resp {
+            Ok(r) => {
+                let mut txn = txn_rc.lock().await;
+                txn.commit().await?;
+                Ok(r)
+            },
+            Err(e) => {
+                let mut txn = txn_rc.lock().await;
+                txn.rollback().await?;
+                Ok(resp_err(&e.to_string()))
+            }
+        }
     }
 }

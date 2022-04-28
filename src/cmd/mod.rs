@@ -94,6 +94,9 @@ pub use lindex::Lindex;
 mod lset;
 pub use lset::Lset;
 
+mod ltrim;
+pub use ltrim::Ltrim;
+
 mod eval;
 pub use eval::Eval;
 
@@ -203,6 +206,7 @@ pub enum Command {
     Llen(Llen),
     Lindex(Lindex),
     Lset(Lset),
+    Ltrim(Ltrim),
     // set
     Sadd(Sadd),
     Scard(Scard),
@@ -294,6 +298,7 @@ impl Command {
             "llen" => Command::Llen(Llen::parse_frames(&mut parse)?),
             "lindex" => Command::Lindex(Lindex::parse_frames(&mut parse)?),
             "lset" => Command::Lset(Lset::parse_frames(&mut parse)?),
+            "ltrim" => Command::Ltrim(Ltrim::parse_frames(&mut parse)?),
             "eval" => Command::Eval(Eval::parse_frames(&mut parse)?),
             "sadd" => Command::Sadd(Sadd::parse_frames(&mut parse)?),
             "scard" => Command::Scard(Scard::parse_frames(&mut parse)?),
@@ -385,6 +390,7 @@ impl Command {
             Llen(cmd) => cmd.apply(dst).await,
             Lindex(cmd) => cmd.apply(dst).await,
             Lset(cmd) => cmd.apply(dst).await,
+            Ltrim(cmd) => cmd.apply(dst).await,
             Eval(cmd) => cmd.apply(dst).await,
             Sadd(cmd) => cmd.apply(dst).await,
             Scard(cmd) => cmd.apply(dst).await,
@@ -454,6 +460,7 @@ impl Command {
             Command::Llen(_) => "llen",
             Command::Lindex(_) => "lindex",
             Command::Lset(_) => "lset",
+            Command::Ltrim(_) => "ltrim",
             Command::Eval(_) => "eval",
             Command::Sadd(_) => "sadd",
             Command::Scard(_) => "scard",

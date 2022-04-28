@@ -213,6 +213,82 @@ impl<'a> ListCommandCtx {
             Err(e) => Ok(resp_err(&e.to_string()))
         }
     }
+
+    pub async fn do_async_txnkv_ltrim(mut self, key: &str, mut start: i64, mut end: i64) -> AsyncResult<Frame> {
+        let client = get_txn_client()?;
+        let key = key.to_owned();
+    
+        let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(&key);
+    
+        let resp = client.exec_in_txn(self.txn.clone(), |txn_rc| async move {
+            if self.txn.is_none() {
+                self.txn = Some(txn_rc.clone());
+            }
+            let mut txn = txn_rc.lock().await;
+            match txn.get_for_update(meta_key.clone()).await? {
+                Some(meta_value) => {
+                    // check key type and ttl
+                    if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::List) {
+                        return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                    }
+    
+                    let (ttl, mut left, mut right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
+                    if key_is_expired(ttl) {
+                        drop(txn);
+                        self.clone().do_async_txnkv_list_expire_if_needed(&key).await?;
+                        return Ok(());
+                    }
+
+                    // convert start and end to positive
+                    let len = (right - left) as i64;
+                    if start < 0 {
+                        start += len;
+                    }
+                    if end < 0 {
+                        end += len;
+                    }
+
+                    // convert to relative position
+                    start += left as i64;
+                    end += left as i64;
+
+                    // trim left->start-1
+                    for idx in left..(start-1) as u64 {
+                        let data_key = KeyEncoder::new().encode_txnkv_list_data_key(&key, idx);
+                        txn.delete(data_key).await?;
+                        left += 1;
+                    }
+                    // trim right+1->end
+                    for idx in end as u64..right {
+                        let data_key = KeyEncoder::new().encode_txnkv_list_data_key(&key, idx);
+                        txn.delete(data_key).await?;
+                        right -= 1;
+                    }
+
+                    // check key if empty
+                    if left == right {
+                        // delete meta key
+                        txn.delete(meta_key).await?;
+                    } else {
+                        // update meta key
+                        let new_meta_value = KeyEncoder::new().encode_txnkv_list_meta_value(ttl, left, right);
+                        txn.put(meta_key, new_meta_value).await?;
+                    }
+                    Ok(())
+                },
+                None => {
+                    Ok(())
+                }
+            }
+        }.boxed()).await;
+    
+        match resp {
+            Ok(values) => {
+                Ok(resp_ok())
+            },
+            Err(e) => Ok(resp_err(&e.to_string()))
+        }
+    }
     
     pub async fn do_async_txnkv_lrange(self, key: &str, mut r_left: i64, mut r_right: i64) -> AsyncResult<Frame> {
         let client = get_txn_client()?;

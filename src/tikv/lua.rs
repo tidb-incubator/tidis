@@ -23,12 +23,9 @@ use mlua::{
 #[derive(Clone)]
 pub struct LuaCommandCtx {
     txn: Option<Arc<Mutex<Transaction>>>,
-    //lua: Arc<Mutex<Lua>>,
+    lua: Arc<Mutex<Lua>>,
 }
 
-pub async fn redis_call(_lua: &Lua, arg: String) -> Result<String> {
-    Ok(arg)
-}
 
 pub async fn redis_pcall(_lua: &Lua, arg: String) -> Result<String> {
     Ok(arg)
@@ -38,30 +35,20 @@ impl LuaCommandCtx {
     pub fn new(txn: Option<Arc<Mutex<Transaction>>>) -> Self {
         LuaCommandCtx {
             txn: txn,
-            // lua: Arc::new(Mutex::new(Lua::new_with(StdLib::STRING
-            //     |StdLib::TABLE
-            //     |StdLib::IO
-            //     |StdLib::MATH
-            //     |StdLib::OS, 
-            //     LuaOptions::new()).unwrap())),
+            lua: Arc::new(Mutex::new(Lua::new_with(StdLib::STRING
+                |StdLib::TABLE
+                |StdLib::IO
+                |StdLib::MATH
+                |StdLib::OS, 
+                LuaOptions::new()).unwrap())),
         }
     }
 
-    pub async fn redis_call(self, _lua: &Lua, arg: String) -> Result<String> {
-        Ok(arg)
-    }
-
-    pub async fn do_async_eval_inner(&'static self, script: &str, keys: &Vec<String>, args: &Vec<String>) -> LuaResult<Frame> {
+    pub async fn do_async_eval_inner(self, script: &str, keys: &Vec<String>, args: &Vec<String>) -> LuaResult<Frame> {
         let keys = keys.clone();
         let args = args.clone();
-        //let lua_rc = self.lua.clone();
-        //let lua = lua_rc.lock().await;
-        let lua = Lua::new_with(StdLib::STRING
-            |StdLib::TABLE
-            |StdLib::IO
-            |StdLib::MATH
-            |StdLib::OS, 
-            LuaOptions::new()).unwrap();
+        let lua_rc = self.lua.clone();
+        let lua = lua_rc.lock().await;
 
         let globals = lua.globals();
 
@@ -83,19 +70,24 @@ impl LuaCommandCtx {
         // Regist redis.call etc to handle redis.* command call in lua
         // create redis.* commands table
         let redis = lua.create_table()?;
-        let ctx = self.clone();
-        let txn_rc = self.txn.clone();
+        let txn_rc = self.txn;
         
-        let redis_call = lua.create_async_function(move |_lua, arg: String| async move {
-            match txn_rc.clone() {
-                Some(txn) => {
-                    let mut txn = txn.lock().await;
-                    let value = txn.get(arg.clone()).await.unwrap();
-                    //value.unwrap();
-                },
-                None => {}
+        let redis_call = lua.create_async_function(move |_lua, arg: String| {
+            let txn_rc = txn_rc.clone();
+            async move {
+                match txn_rc {
+                    Some(txn) => {
+                        let mut txn = txn.lock().await;
+                        let value = txn.get(arg.clone()).await.unwrap();
+                        println!("{:?}", value.unwrap());
+                        //value.unwrap();
+                    }
+                    None => {
+                        
+                    }
+                }
+                Ok(arg)
             }
-            Ok(arg)
         })?;
         redis.set("call", redis_call)?;
         let redis_pcall = lua.create_async_function(redis_pcall)?;
@@ -105,23 +97,24 @@ impl LuaCommandCtx {
 
         // TODO cache script
         // TODO async call
-        let resp = lua.load(script).eval::<LuaValue>()?;
+        let chunk = lua.load(script);
+        let resp: LuaValue = chunk.eval()?;
         // convert lua value to redis value
         let redis_resp = lua_resp_to_redis_resp(resp);
 
         // lua clean up
-
         Ok(redis_resp)
     }
 
     pub async fn do_async_eval(self, script: &str, keys: &Vec<String>, args: &Vec<String>) -> AsyncResult<Frame> {
-        let lua_resp = self.do_async_eval_inner(script, keys, args).await;
+        let lua_resp = self.clone().do_async_eval_inner(script, keys, args).await;
         match lua_resp {
             Ok(resp) => {
                 Ok(resp)
             },
             Err(err) => {
-                Ok(resp_err(&err.to_string()))
+                //return Ok(resp_err(&err.to_string()));
+                Err(RTError::StringError(err.to_string()))
             }
         }
     }

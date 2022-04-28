@@ -1,4 +1,7 @@
+use std::sync::Arc;
+
 use futures::future::{FutureExt};
+use tokio::sync::Mutex;
 use crate::Frame;
 use tikv_client::{Key, Value, KvPair, BoundRange, Transaction};
 use super::{
@@ -17,9 +20,10 @@ use mlua::{
     Result,
 };
 
-pub struct LuaCommandCtx<'a> {
-    txn: Option<&'a mut Transaction>,
-    lua: Lua,
+#[derive(Clone)]
+pub struct LuaCommandCtx {
+    txn: Option<Arc<Mutex<Transaction>>>,
+    //lua: Arc<Mutex<Lua>>,
 }
 
 pub async fn redis_call(_lua: &Lua, arg: String) -> Result<String> {
@@ -30,42 +34,34 @@ pub async fn redis_pcall(_lua: &Lua, arg: String) -> Result<String> {
     Ok(arg)
 }
 
-pub fn register_redis_func(lua: &Lua) -> Result<()> {
-    let globals = lua.globals();
-
-    // create redis.* commands table
-    let redis = lua.create_table()?;
-    let redis_call = lua.create_async_function(redis_call)?;
-    redis.set("call", redis_call)?;
-
-    let redis_pcall = lua.create_async_function(redis_pcall)?;
-    redis.set("pcall", redis_pcall)?;
-
-    // register to global table
-    globals.set("redis", redis)?;
-
-    Ok(())
-}
-
-impl<'a> LuaCommandCtx<'a> {
-    pub fn new(txn: Option<&'a mut Transaction>) -> Self {
+impl LuaCommandCtx {
+    pub fn new(txn: Option<Arc<Mutex<Transaction>>>) -> Self {
         LuaCommandCtx {
             txn: txn,
-            lua: Lua::new_with(StdLib::STRING
-                |StdLib::TABLE
-                |StdLib::IO
-                |StdLib::MATH
-                |StdLib::OS, 
-                LuaOptions::new()).unwrap(),
+            // lua: Arc::new(Mutex::new(Lua::new_with(StdLib::STRING
+            //     |StdLib::TABLE
+            //     |StdLib::IO
+            //     |StdLib::MATH
+            //     |StdLib::OS, 
+            //     LuaOptions::new()).unwrap())),
         }
     }
 
+    pub async fn redis_call(self, _lua: &Lua, arg: String) -> Result<String> {
+        Ok(arg)
+    }
 
-
-    pub async fn do_async_eval_inner(self, script: &str, keys: &Vec<String>, args: &Vec<String>) -> LuaResult<Frame> {
+    pub async fn do_async_eval_inner(&'static self, script: &str, keys: &Vec<String>, args: &Vec<String>) -> LuaResult<Frame> {
         let keys = keys.clone();
         let args = args.clone();
-        let lua = &self.lua;
+        //let lua_rc = self.lua.clone();
+        //let lua = lua_rc.lock().await;
+        let lua = Lua::new_with(StdLib::STRING
+            |StdLib::TABLE
+            |StdLib::IO
+            |StdLib::MATH
+            |StdLib::OS, 
+            LuaOptions::new()).unwrap();
 
         let globals = lua.globals();
 
@@ -85,10 +81,31 @@ impl<'a> LuaCommandCtx<'a> {
         globals.set("ARGV", args_table)?;
         
         // Regist redis.call etc to handle redis.* command call in lua
-        register_redis_func(lua);
+        // create redis.* commands table
+        let redis = lua.create_table()?;
+        let ctx = self.clone();
+        let txn_rc = self.txn.clone();
+        
+        let redis_call = lua.create_async_function(move |_lua, arg: String| async move {
+            match txn_rc.clone() {
+                Some(txn) => {
+                    let mut txn = txn.lock().await;
+                    let value = txn.get(arg.clone()).await.unwrap();
+                    //value.unwrap();
+                },
+                None => {}
+            }
+            Ok(arg)
+        })?;
+        redis.set("call", redis_call)?;
+        let redis_pcall = lua.create_async_function(redis_pcall)?;
+        redis.set("pcall", redis_pcall)?;
+        // register to global table
+        globals.set("redis", redis)?;
 
         // TODO cache script
-        let resp = lua.load(&script).eval::<LuaValue>()?;
+        // TODO async call
+        let resp = lua.load(script).eval::<LuaValue>()?;
         // convert lua value to redis value
         let redis_resp = lua_resp_to_redis_resp(resp);
 

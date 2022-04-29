@@ -8,9 +8,11 @@ use crate::{Command, Connection, Db, DbDropGuard, Shutdown};
 
 use std::future::Future;
 use async_std::net::{TcpListener, TcpStream};
+use tokio::runtime::Runtime;
 use tokio::sync::{broadcast, mpsc, Semaphore};
 use tokio::time::{self, Duration, Instant};
 use tracing::{debug, error, info, instrument};
+use tokio::task;
 
 /// Server listener state. Created in the `run` call. It includes a `run` method
 /// which performs the TCP listening and initialization of per-connection state.
@@ -226,6 +228,9 @@ impl Listener {
     async fn run(&mut self) -> crate::Result<()> {
         info!("accepting inbound connections");
 
+        // Construct a local task set that can run `!Send` futures.
+        let local = task::LocalSet::new();
+
         loop {
             // Wait for a permit to become available
             //
@@ -271,14 +276,26 @@ impl Listener {
 
             // Spawn a new task to process the connections. Tokio tasks are like
             // asynchronous green threads and are executed concurrently.
-            tokio::spawn(async move {
-                // Process the connection. If an error is encountered, log it.
-                CURRENT_CONNECTION_COUNTER.inc();
-                if let Err(err) = handler.run().await {
-                    println!("Connection Error: {:?}", &err);
-                    error!(cause = ?err, "connection error");
-                }
-            });
+            // tokio::spawn(async move {
+            //     // Process the connection. If an error is encountered, log it.
+            //     CURRENT_CONNECTION_COUNTER.inc();
+            //     if let Err(err) = handler.run().await {
+            //         println!("Connection Error: {:?}", &err);
+            //         error!(cause = ?err, "connection error");
+            //     }
+            // });
+
+            // Use localset to spawn task, because of mlua async function is not `Send`
+            local.run_until(async move {
+                task::spawn_local(async move {
+                    // Process the connection. If an error is encountered, log it.
+                    CURRENT_CONNECTION_COUNTER.inc();
+                    if let Err(err) = handler.run().await {
+                        println!("Connection Error: {:?}", &err);
+                        error!(cause = ?err, "connection error");
+                    }
+                }).await.unwrap();
+            }).await;
         }
     }
 
@@ -357,7 +374,7 @@ impl Handler {
             // error if the frame is not a valid redis command or it is an
             // unsupported command.
             let cmd = Command::from_frame(frame)?;
-            let cmd_name = cmd.get_name().to_owned().clone();
+            let cmd_name = cmd.get_name().to_owned();
             let start_at = Instant::now();
             REQUEST_COUNTER.inc();
             REQUEST_CMD_COUNTER.with_label_values(&[&cmd_name]).inc();

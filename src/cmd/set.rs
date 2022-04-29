@@ -3,9 +3,12 @@ use crate::tikv::errors::AsyncResult;
 use crate::tikv::string::StringCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
-use crate::utils::{timestamp_from_ttl, resp_err};
+use crate::utils::{timestamp_from_ttl, resp_err, resp_invalid_arguments};
 
 use bytes::Bytes;
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
+use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, instrument};
 
@@ -34,6 +37,8 @@ pub struct Set {
 
     /// Set if key is not present
     nx: Option<bool>,
+
+    valid: bool,
 }
 
 impl Set {
@@ -47,6 +52,17 @@ impl Set {
             value,
             expire,
             nx: None,
+            valid: true,
+        }
+    }
+
+    pub fn new_invalid() -> Set {
+        Set {
+            key: "".to_owned(),
+            value: Bytes::new(),
+            expire: None,
+            nx: None,
+            valid: false,
         }
     }
 
@@ -128,7 +144,39 @@ impl Set {
             Err(err) => return Err(err.into()),
         }
 
-        Ok(Set { key, value, expire, nx })
+        Ok(Set { key, value, expire, nx, valid: true })
+    }
+
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Set> {
+        if argv.len() < 2 {
+            return Ok(Set::new_invalid());
+        }
+        let key = argv[0].clone();
+        let value = Bytes::from(argv[1].clone());
+        let mut expire = None;
+        let mut nx = None;
+        for mut idx in 2..argv.len() {
+            if argv[idx].to_uppercase() == "EX" {
+                idx += 1;
+                let secs = argv[idx].parse::<i64>();
+                if let Ok(v) = secs {
+                    expire = Some(v);
+                } else {
+                    return Ok(Set::new_invalid());
+                }
+            } else if argv[idx].to_uppercase() == "PX" {
+                idx += 1;
+                let ms = argv[idx].parse::<i64>();
+                if let Ok(v) = ms {
+                    expire = Some(v);
+                }
+            } else if argv[idx].to_uppercase() == "NX" {
+                nx = Some(true);
+            } else {
+                return Ok(Set::new_invalid());
+            }
+        }
+        Ok(Set { key, value, expire, nx, valid: true })
     }
 
     /// Apply the `Set` command to the specified `Db` instance.
@@ -140,13 +188,13 @@ impl Set {
         
         let response = match self.nx {
             Some(_) => {
-                match self.put_not_exists(&self.key, &self.value).await {
+                match self.put_not_exists(None).await {
                     Ok(val) => val,
                     Err(e) => Frame::Error(e.to_string()),
                 }
             },
             None => {
-                match self.put(&self.key, &self.value).await {
+                match self.put(None).await {
                     Ok(val) => val,
                     Err(e) => Frame::Error(e.to_string()),
                 }
@@ -158,24 +206,44 @@ impl Set {
         Ok(())
     }
 
-    async fn put_not_exists(&self, key: &str, val: &Bytes) -> AsyncResult<Frame> {
+    pub(crate) async fn set(self, txn: Option<Arc<Mutex<Transaction>>>) ->  AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments());
+        }
+        let response = match self.nx {
+            Some(_) => {
+                match self.put_not_exists(None).await {
+                    Ok(val) => val,
+                    Err(e) => Frame::Error(e.to_string()),
+                }
+            },
+            None => {
+                match self.put(None).await {
+                    Ok(val) => val,
+                    Err(e) => Frame::Error(e.to_string()),
+                }
+            },
+        };
+        Ok(response)
+    }
+
+    async fn put_not_exists(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
         if is_use_txn_api() {
-            // TODO:
-            Ok(Frame::Null)
+            StringCommandCtx::new(txn).do_async_txnkv_put_not_exists(&self.key, &self.value).await
         } else {
-            StringCommandCtx::new(None).do_async_rawkv_put_not_exists(key, val).await
+            StringCommandCtx::new(txn).do_async_rawkv_put_not_exists(&self.key, &self.value).await
         }
     }
 
-    async fn put(&self, key: &str, val: &Bytes) -> AsyncResult<Frame> {
+    async fn put(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
         let mut ts = 0;
         if is_use_txn_api() {
             if self.expire.is_some() {
                 ts = timestamp_from_ttl(self.expire.unwrap() as u64);
             }
-            StringCommandCtx::new(None).do_async_txnkv_put(key, val, ts).await
+            StringCommandCtx::new(txn).do_async_txnkv_put(&self.key, &self.value, ts).await
         } else {
-            StringCommandCtx::new(None).do_async_rawkv_put(&self.key, &self.value).await
+            StringCommandCtx::new(txn).do_async_rawkv_put(&self.key, &self.value).await
         }
     }
 }

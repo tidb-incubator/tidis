@@ -1,6 +1,11 @@
+use std::sync::Arc;
+
 use crate::tikv::errors::AsyncResult;
+use crate::utils::resp_invalid_arguments;
 use crate::{Connection, Frame, Parse};
 use crate::tikv::string::StringCommandCtx;
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
 use crate::config::{is_use_txn_api};
@@ -14,6 +19,7 @@ use crate::config::{is_use_txn_api};
 pub struct Get {
     /// Name of the key to get
     key: String,
+    valid: bool,
 }
 
 impl Get {
@@ -21,6 +27,14 @@ impl Get {
     pub fn new(key: impl ToString) -> Get {
         Get {
             key: key.to_string(),
+            valid: true,
+        }
+    }
+
+    pub fn new_invalid() -> Get {
+        Get {
+            key: "".to_owned(),
+            valid: false,
         }
     }
 
@@ -55,7 +69,15 @@ impl Get {
         // input is fully consumed, then an error is returned.
         let key = parse.next_string()?;
 
-        Ok(Get { key })
+        Ok(Get { key: key, valid: true })
+    }
+
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Get> {
+        if argv.len() != 1 {
+            return Ok(Get::new_invalid());
+        }
+        let key = &argv[0];
+        Ok(Get::new(key))
     }
 
     /// Apply the `Get` command to the specified `Db` instance.
@@ -65,7 +87,7 @@ impl Get {
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         // Get the value from the shared database state
-        let response = match self.get(&self.key).await {
+        let response = match self.get(None).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
@@ -78,11 +100,14 @@ impl Get {
         Ok(())
     }
 
-    async fn get(&self, key: &str) ->AsyncResult<Frame> {
+    pub async fn get(&self, txn: Option<Arc<Mutex<Transaction>>>) ->AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments());
+        }
         if is_use_txn_api() {
-            StringCommandCtx::new(None).do_async_txnkv_get(key).await
+            StringCommandCtx::new(txn).do_async_txnkv_get(&self.key).await
         } else {
-            StringCommandCtx::new(None).do_async_rawkv_get(key).await
+            StringCommandCtx::new(txn).do_async_rawkv_get(&self.key).await
         }
     }
 }

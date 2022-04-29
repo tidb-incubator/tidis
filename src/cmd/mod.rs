@@ -1,4 +1,6 @@
 mod get;
+use std::sync::Arc;
+
 pub use get::Get;
 
 mod del;
@@ -23,6 +25,8 @@ mod setex;
 pub use setex::SetEX;
 
 mod ttl;
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 pub use ttl::TTL;
 
 mod subscribe;
@@ -336,6 +340,27 @@ impl Command {
         parse.finish()?;
 
         // The command has been successfully parsed
+        Ok(command)
+    }
+
+    pub fn from_argv(cmd_name: &str, argv: &Vec<String>) -> crate::Result<Command> {
+        let command_name = cmd_name.to_owned().to_lowercase();
+        // Match the command name, delegating the rest of the parsing to the
+        // specific command.
+        let command = match &command_name[..] {
+            "decr" => Command::Decr(Decr::parse_argv(argv)?),
+            "del" => Command::Del(Del::parse_argv(argv)?),
+            "exists" => Command::Exists(Exists::parse_argv(argv)?),
+            "get" => Command::Get(Get::parse_argv(argv)?),
+            "set" => Command::Set(Set::parse_argv(argv)?),
+            "setnx" => Command::SetNX(SetNX::parse_argv(argv)?),
+            _ => {
+                // The command is not recognized and an Unknown command is
+                // returned.
+                return Ok(Command::Unknown(Unknown::new(command_name)));
+            }
+        };
+
         Ok(command)
     }
 

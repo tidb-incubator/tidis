@@ -1,15 +1,17 @@
 use std::sync::Arc;
 
-use futures::future::{FutureExt};
 use tokio::sync::Mutex;
-use crate::Frame;
-use tikv_client::{Key, Value, KvPair, BoundRange, Transaction};
+use crate::{Frame, Command};
+use tikv_client::{Transaction};
 use super::{
-    encoding::{KeyEncoder, KeyDecoder, DataType}, errors::AsyncResult, errors::RTError, get_txn_client,
+    errors::AsyncResult,
+    errors::RTError,
 };
-use crate::utils::{resp_err, resp_array, resp_bulk, resp_int, resp_nil, resp_ok, resp_str};
-use super::errors::*;
-use crate::utils::{lua_resp_to_redis_resp};
+use crate::utils::{
+    resp_nil,
+    lua_resp_to_redis_resp,
+    redis_resp_to_lua_resp,
+};
 
 use mlua::{
     Lua,
@@ -72,21 +74,59 @@ impl LuaCommandCtx {
         let redis = lua.create_table()?;
         let txn_rc = self.txn;
         
-        let redis_call = lua.create_async_function(move |_lua, arg: String| {
+        let redis_call = lua.create_async_function(move |_lua, (arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9): 
+        (String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>)| {
             let txn_rc = txn_rc.clone();
-            async move {
-                match txn_rc {
-                    Some(txn) => {
-                        let mut txn = txn.lock().await;
-                        let value = txn.get(arg.clone()).await.unwrap();
-                        println!("{:?}", value.unwrap());
-                        //value.unwrap();
-                    }
-                    None => {
-                        
+            // package arguments(without cmd) to argv
+            // argc maximum is 8
+            let cmd_name = arg1.clone();
+            let mut argv = vec![];
+            if let Some(a2) = arg2.clone() {
+                argv.push(a2);
+                if let Some(a3) = arg3.clone() {
+                    argv.push(a3);
+                    if let Some(a4) = arg4.clone() {
+                        argv.push(a4);
+                        if let Some(a5) = arg5.clone() {
+                            argv.push(a5);
+                            if let Some(a6) = arg6.clone() {
+                                argv.push(a6);
+                                if let Some(a7) = arg7.clone() {
+                                    argv.push(a7);
+                                    if let Some(a8) = arg8.clone() {
+                                        argv.push(a8);
+                                        if let Some(a9) = arg9.clone() {
+                                            argv.push(a9);
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-                Ok(arg)
+            }
+
+            async move {
+                let cmd = Command::from_argv(&cmd_name, &argv).unwrap();
+                let result = match cmd {
+                    Command::Decr(cmd) => cmd.decr(txn_rc.clone()).await,
+                    Command::Del(cmd) => cmd.del(txn_rc.clone()).await,
+                    Command::Exists(cmd) => cmd.exists(txn_rc.clone()).await,
+                    Command::Get(cmd) => cmd.get(txn_rc.clone()).await,
+                    Command::Set(cmd) => cmd.set(txn_rc.clone()).await,
+                    Command::SetNX(cmd) => cmd.put_not_exists(txn_rc.clone()).await,
+                    _ => {Ok(resp_nil())}
+                };
+                match result {
+                    Ok(resp) => {
+                        let lua_resp = redis_resp_to_lua_resp(resp, _lua);
+                        return Ok(lua_resp);
+                    },
+                    Err(e) => {
+                        return Ok(LuaValue::String(_lua.create_string(&e.to_string()).unwrap()))
+                    }
+                }
+                
             }
         })?;
         redis.set("call", redis_call)?;
@@ -98,7 +138,7 @@ impl LuaCommandCtx {
         // TODO cache script
         // TODO async call
         let chunk = lua.load(script);
-        let resp: LuaValue = chunk.eval()?;
+        let resp: LuaValue = chunk.eval_async().await?;
         // convert lua value to redis value
         let redis_resp = lua_resp_to_redis_resp(resp);
 

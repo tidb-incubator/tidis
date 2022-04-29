@@ -1,19 +1,25 @@
+use std::sync::Arc;
+
 use crate::tikv::errors::AsyncResult;
-use crate::utils::resp_err;
+use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame, Parse};
 use crate::tikv::string::StringCommandCtx;
 use crate::config::is_use_txn_api;
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
 #[derive(Debug)]
 pub struct Del {
     keys: Vec<String>,
+    valid: bool,
 }
 
 impl Del {
     pub fn new() -> Del {
         Del {
             keys: vec![],
+            valid: true,
         }
     }
 
@@ -35,9 +41,16 @@ impl Del {
         Ok(del)
     }
 
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Del> {
+        if argv.len() == 0 {
+            return Ok(Del{keys: vec![], valid: false})
+        }
+        Ok(Del{keys: argv.to_owned(), valid: true})
+    }
+
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        let response = match self.del(&self.keys).await {
+        let response = match self.del(None).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
@@ -49,9 +62,12 @@ impl Del {
         Ok(())
     }
 
-    async fn del(&self, keys: &Vec<String>) -> AsyncResult<Frame> {
+    pub async fn del(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments());
+        }
         if is_use_txn_api() {
-            StringCommandCtx::new(None).do_async_txnkv_del(keys).await
+            StringCommandCtx::new(txn).do_async_txnkv_del(&self.keys).await
         } else {
             Ok(resp_err("not supported yet"))
         }

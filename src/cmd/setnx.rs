@@ -1,10 +1,15 @@
+use std::sync::Arc;
+
 use crate::cmd::{Parse};
 use crate::tikv::string::StringCommandCtx;
+use crate::utils::resp_invalid_arguments;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
 use crate::tikv::errors::AsyncResult;
 
 use bytes::Bytes;
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
 /// Set `key` to hold the string `value`.
@@ -26,6 +31,8 @@ pub struct SetNX {
 
     /// the value to be stored
     value: Bytes,
+
+    valid: bool,
 }
 
 impl SetNX {
@@ -37,6 +44,15 @@ impl SetNX {
         SetNX {
             key: key.to_string(),
             value,
+            valid: true,
+        }
+    }
+
+    pub fn new_invalid() -> SetNX {
+        SetNX {
+            key: "".to_owned(),
+            value: Bytes::new(),
+            valid: false,
         }
     }
 
@@ -50,26 +66,6 @@ impl SetNX {
         &self.value
     }
 
-    /// Parse a `Set` instance from a received frame.
-    ///
-    /// The `Parse` argument provides a cursor-like API to read fields from the
-    /// `Frame`. At this point, the entire frame has already been received from
-    /// the socket.
-    ///
-    /// The `SET` string has already been consumed.
-    ///
-    /// # Returns
-    ///
-    /// Returns the `Set` value on success. If the frame is malformed, `Err` is
-    /// returned.
-    ///
-    /// # Format
-    ///
-    /// Expects an array frame containing at least 3 entries.
-    ///
-    /// ```text
-    /// SETNX key value
-    /// ```
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<SetNX> {
         // Read the key to set. This is a required field
         let key = parse.next_string()?;
@@ -77,17 +73,23 @@ impl SetNX {
         // Read the value to set. This is a required field.
         let value = parse.next_bytes()?;
 
-        Ok(SetNX { key, value})
+        Ok(SetNX { key, value, valid: true})
     }
 
-    /// Apply the `Set` command to the specified `Db` instance.
-    ///
-    /// The response is written to `dst`. This is called by the server in order
-    /// to execute a received command.
+    pub fn parse_argv(argv: &Vec<String>) -> crate::Result<SetNX> {
+        if argv.len() != 2 {
+            return Ok(SetNX::new_invalid());
+        }
+        let key = argv[0].clone();
+        let value = Bytes::from(argv[1].clone());
+
+        Ok(SetNX {key, value, valid: true})
+    }
+
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         
-        let response = match self.put_not_exists(&self.key, &self.value).await {
+        let response = match self.put_not_exists(None).await {
                     Ok(val) => val,
                     Err(e) => Frame::Error(e.to_string()),
         };
@@ -97,11 +99,14 @@ impl SetNX {
         Ok(())
     }
 
-    async fn put_not_exists(&self, key: &String, value: &Bytes) -> AsyncResult<Frame> {
+    pub async fn put_not_exists(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments());
+        }
         if is_use_txn_api() {
-            StringCommandCtx::new(None).do_async_txnkv_put_not_exists(key, value).await
+            StringCommandCtx::new(txn).do_async_txnkv_put_not_exists(&self.key, &self.value).await
         } else {
-            StringCommandCtx::new(None).do_async_rawkv_put_not_exists(key, value).await
+            StringCommandCtx::new(txn).do_async_rawkv_put_not_exists(&self.key, &self.value).await
         }
     }
 }

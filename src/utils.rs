@@ -5,10 +5,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::frame::Frame;
 use mlua::{
     Value as LuaValue,
+    Lua,
+    Table,
 };
 
 pub fn resp_ok() -> Frame {
     Frame::Simple("OK".to_string())
+}
+
+pub fn resp_invalid_arguments() -> Frame {
+    Frame::Simple("Invalid arguments".to_string())
 }
 
 pub fn resp_err(e: &str) -> Frame {
@@ -73,6 +79,36 @@ pub fn lua_resp_to_redis_resp(resp: LuaValue) -> Frame {
         }
         LuaValue::Error(r) => { resp_err(&r.to_string())},
         _ => {resp_err("panic")},
+    }
+}
+
+pub fn redis_resp_to_lua_resp(resp: Frame, lua: &Lua) -> LuaValue {
+    match resp {
+        Frame::Simple(v) => {
+            LuaValue::String(lua.create_string(&v).unwrap())
+        },
+        Frame::Bulk(v) => {
+            let str = String::from_utf8_lossy(&v).to_string();
+            LuaValue::String(lua.create_string(&str).unwrap())
+        },
+        Frame::Error(e) => {
+            LuaValue::String(lua.create_string(&e).unwrap())
+        },
+        Frame::Integer(i) => {
+            LuaValue::Integer(i)
+        },
+        Frame::Null => {
+            LuaValue::Nil
+        },
+        Frame::Array(arr) => {
+            let table = lua.create_table().unwrap();
+            for idx in 0..arr.len() {
+                let v = redis_resp_to_lua_resp(arr[idx].clone(), lua);
+                table.set(idx, v).unwrap();
+            }
+            LuaValue::Table(table)
+        },
+        _ => {LuaValue::Nil}
     }
 }
 

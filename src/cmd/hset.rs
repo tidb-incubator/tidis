@@ -1,17 +1,21 @@
+use std::sync::Arc;
+
 use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::hash::HashCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
-use crate::utils::{resp_err};
+use crate::utils::{resp_err, resp_invalid_arguments};
 
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
-use tikv_client::{KvPair};
+use tikv_client::{KvPair, Transaction};
 
 #[derive(Debug)]
 pub struct Hset {
     key: String,
     field_and_value: Vec<KvPair>,
+    valid: bool,
 }
 
 impl Hset {
@@ -19,6 +23,15 @@ impl Hset {
         Hset {
             field_and_value:vec![],
             key: String::new(),
+            valid: true,
+        }
+    }
+
+    pub fn new_invalid() -> Hset {
+        Hset {
+            field_and_value: vec![],
+            key: String::new(),
+            valid: false,
         }
     }
 
@@ -61,19 +74,39 @@ impl Hset {
         Ok(hset)
     }
 
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Hset> {
+        if argv.len() % 2 != 1 {
+            return Ok(Hset::new_invalid());
+        }
+        let key = &argv[0];
+        let mut hset = Hset::new();
+        hset.set_key(key);
+
+        for idx in (1..argv.len()).step_by(2) {
+            let field = argv[idx].to_owned();
+            let value = argv[idx+1].to_owned().as_bytes().to_vec();
+            let kv = KvPair::new(field, value);
+            hset.add_field_value(kv);
+        }
+        Ok(hset)
+    }
+
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         
-        let response = self.hset().await?;
+        let response = self.hset(None).await?;
         debug!(?response);
         dst.write_frame(&response).await?;
 
         Ok(())
     }
 
-    async fn hset(&self) -> AsyncResult<Frame> {
+    pub async fn hset(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments());
+        }
         if is_use_txn_api() {
-            HashCommandCtx::new(None).do_async_txnkv_hset(&self.key, &self.field_and_value).await
+            HashCommandCtx::new(txn).do_async_txnkv_hset(&self.key, &self.field_and_value).await
         } else {
             Ok(resp_err("not supported yet"))
         }

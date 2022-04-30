@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::hash::HashCommandCtx;
@@ -5,6 +7,8 @@ use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
 use crate::utils::{resp_err};
 
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
 #[derive(Debug)]
@@ -12,6 +16,7 @@ pub struct Hincrby {
     key: String,
     field: String,
     step: i64,
+    valid: bool,
 }
 
 impl Hincrby {
@@ -20,6 +25,16 @@ impl Hincrby {
             key: key.to_string(),
             field: field.to_string(),
             step: step,
+            valid: true,
+        }
+    }
+
+    pub fn new_invalid() -> Hincrby {
+        Hincrby {
+            key: "".to_string(),
+            field: "".to_string(),
+            step: 0,
+            valid: false,
         }
     }
 
@@ -45,22 +60,35 @@ impl Hincrby {
         let key = parse.next_string()?;
         let field = parse.next_string()?;
         let step = parse.next_int()?;
-        Ok(Hincrby{key, field, step})
+        Ok(Hincrby{key, field, step, valid: true})
+    }
+
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Hincrby> {
+        if argv.len() != 3 {
+            return Ok(Hincrby::new_invalid());
+        }
+        let key = &argv[0];
+        let field = &argv[1];
+        let step = argv[2].parse::<i64>();
+        match step {
+            Ok(v) => Ok(Hincrby::new(key, field, v)),
+            Err(_) => Ok(Hincrby::new_invalid()), 
+        }
     }
 
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         
-        let response = self.hincrby().await?;
+        let response = self.hincrby(None).await?;
         debug!(?response);
         dst.write_frame(&response).await?;
 
         Ok(())
     }
 
-    async fn hincrby(&self) -> AsyncResult<Frame> {
+    pub async fn hincrby(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
         if is_use_txn_api() {
-            HashCommandCtx::new(None).do_async_txnkv_hincrby(&self.key, &self.field, self.step).await
+            HashCommandCtx::new(txn).do_async_txnkv_hincrby(&self.key, &self.field, self.step).await
         } else {
             Ok(resp_err("not supported yet"))
         }

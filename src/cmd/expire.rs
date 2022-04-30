@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::tikv::errors::AsyncResult;
-use crate::utils::{resp_err, timestamp_from_ttl};
+use crate::utils::{resp_err, timestamp_from_ttl, resp_invalid_arguments};
 use crate::{Connection, Frame, Parse};
 use crate::tikv::string::StringCommandCtx;
 use crate::config::{is_use_txn_api};
@@ -25,6 +25,14 @@ impl Expire {
         }
     }
 
+    pub fn new_invalid() -> Expire {
+        Expire {
+            key: "".to_owned(),
+            seconds: 0,
+            valid: false,
+        }
+    }
+
     /// Get the key
     pub fn key(&self) -> &str {
         &self.key
@@ -41,6 +49,17 @@ impl Expire {
         Ok(Expire { key: key, seconds: seconds, valid: true})
     }
 
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Expire> {
+        if argv.len() != 2 {
+            return Ok(Expire::new_invalid());
+        }
+        let key = argv[0].to_owned();
+        match argv[1].parse::<i64>() {
+            Ok(v) => Ok(Expire::new(key, v)),
+            Err(_) => Ok(Expire::new_invalid()),
+        }
+    }
+
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection, is_millis: bool, expire_at: bool) -> crate::Result<()> {
         let response = match self.expire(is_millis, expire_at, None).await {
@@ -55,6 +74,9 @@ impl Expire {
     }
 
     pub async fn expire(self, is_millis: bool, expire_at: bool, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments());
+        }
         let mut ttl = self.seconds as u64;
         if is_use_txn_api() {
             if !is_millis {

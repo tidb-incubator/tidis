@@ -1,7 +1,11 @@
+use std::sync::Arc;
+
 use crate::tikv::errors::AsyncResult;
 use crate::{Connection, Frame, Parse};
 use crate::tikv::string::StringCommandCtx;
 use crate::config::is_use_txn_api;
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
 /// Get the value of key.
@@ -13,6 +17,7 @@ use tracing::{debug, instrument};
 pub struct Mget {
     /// Name of the keys to get
     keys: Vec<String>,
+    valid: bool,
 }
 
 impl Mget {
@@ -20,6 +25,14 @@ impl Mget {
     pub fn new() -> Mget {
         Mget {
             keys: vec![],
+            valid: true,
+        }
+    }
+
+    pub fn new_invalid() -> Mget {
+        Mget {
+            keys: vec![],
+            valid: false,
         }
     }
 
@@ -45,9 +58,20 @@ impl Mget {
         Ok(mget)
     }
 
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Mget> {
+        if argv.len() == 0 {
+            return Ok(Mget::new_invalid());
+        }
+        let mut mget = Mget::new();
+        for arg in argv {
+            mget.add_key(arg.to_string());
+        }
+        return Ok(mget);
+    }
+
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        let response = match self.batch_get(&self.keys).await {
+        let response = match self.batch_get(None).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
@@ -60,11 +84,11 @@ impl Mget {
         Ok(())
     }
 
-    async fn batch_get(&self, keys: &Vec<String>) -> AsyncResult<Frame> {
+    pub async fn batch_get(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
         if is_use_txn_api() {
-            StringCommandCtx::new(None).do_async_txnkv_batch_get(keys).await
+            StringCommandCtx::new(txn).do_async_txnkv_batch_get(&self.keys).await
         } else {
-            StringCommandCtx::new(None).do_async_rawkv_batch_get(keys).await
+            StringCommandCtx::new(txn).do_async_rawkv_batch_get(&self.keys).await
         }
     }
 }

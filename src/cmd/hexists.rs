@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::hash::HashCommandCtx;
@@ -5,12 +7,15 @@ use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
 use crate::utils::{resp_err};
 
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
 #[derive(Debug)]
 pub struct Hexists {
     key: String,
     field: String,
+    valid: bool,
 }
 
 impl Hexists {
@@ -18,6 +23,15 @@ impl Hexists {
         Hexists {
             field: field.to_owned(),
             key: key.to_owned(),
+            valid: true,
+        }
+    }
+
+    pub fn new_invalid() -> Hexists {
+        Hexists {
+            field: "".to_owned(),
+            key: "".to_owned(),
+            valid: false,
         }
     }
 
@@ -35,19 +49,26 @@ impl Hexists {
         Ok(Hexists::new(&key, &field))
     }
 
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Hexists> {
+        if argv.len() != 2 {
+            return Ok(Hexists::new_invalid());
+        }
+        Ok(Hexists::new(&argv[0], &argv[1]))
+    }
+
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         
-        let response = self.hexists().await?;
+        let response = self.hexists(None).await?;
         debug!(?response);
         dst.write_frame(&response).await?;
 
         Ok(())
     }
 
-    async fn hexists(&self) -> AsyncResult<Frame> {
+    pub async fn hexists(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
         if is_use_txn_api() {
-            HashCommandCtx::new(None).do_async_txnkv_hexists(&self.key, &self.field).await
+            HashCommandCtx::new(txn).do_async_txnkv_hexists(&self.key, &self.field).await
         } else {
             Ok(resp_err("not supported yet"))
         }

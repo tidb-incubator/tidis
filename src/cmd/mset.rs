@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use crate::tikv::errors::AsyncResult;
 use crate::{Connection, Frame, Parse};
 use crate::tikv::string::StringCommandCtx;
-use tikv_client::{KvPair};
+use tikv_client::{KvPair, Transaction};
+use tokio::sync::Mutex;
 use crate::tikv::{
     encoding::{KeyEncoder}
 };
@@ -14,6 +17,7 @@ use tracing::{debug, instrument};
 pub struct Mset {
     keys: Vec<String>,
     vals: Vec<Bytes>,
+    valid: bool,
 }
 
 impl Mset {
@@ -22,6 +26,15 @@ impl Mset {
         Mset {
             keys: vec![],
             vals: vec![],
+            valid: true,
+        }
+    }
+
+    pub fn new_invalid() -> Mset {
+        Mset {
+            keys: vec![],
+            vals: vec![],
+            valid: false,
         }
     }
 
@@ -61,9 +74,21 @@ impl Mset {
         Ok(mset)
     }
 
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Mset> {
+        if argv.len() % 2 != 0 {
+            return Ok(Mset::new_invalid());
+        }
+        let mut mset = Mset::new();
+        for idx in (0..argv.len()).step_by(2) {
+            mset.add_key(argv[idx].clone());
+            mset.add_val(Bytes::from(argv[idx+1].clone()));
+        }
+        Ok(mset)
+    }
+
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        let response = match self.batch_put().await {
+        let response = match self.batch_put(None).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
@@ -76,7 +101,7 @@ impl Mset {
         Ok(())
     }
 
-    async fn batch_put(&self) -> AsyncResult<Frame> {
+    pub async fn batch_put(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
         let mut kvs = Vec::new();
         if is_use_txn_api() {
             for (idx, key) in self.keys.iter().enumerate() {
@@ -85,7 +110,7 @@ impl Mset {
                 let kvpair = KvPair::from((ekey, val.to_vec()));
                 kvs.push(kvpair);
             }
-            StringCommandCtx::new(None).do_async_txnkv_batch_put(kvs).await
+            StringCommandCtx::new(txn).do_async_txnkv_batch_put(kvs).await
         } else {
             for (idx, key) in self.keys.iter().enumerate() {
                 let val = &self.vals[idx];

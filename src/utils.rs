@@ -6,7 +6,6 @@ use crate::frame::Frame;
 use mlua::{
     Value as LuaValue,
     Lua,
-    Table,
 };
 
 pub fn resp_ok() -> Frame {
@@ -48,8 +47,6 @@ pub fn resp_array(val: Vec<Frame>) -> Frame {
 pub async fn sleep(ms: u32) {
     tokio::time::sleep(Duration::from_millis(ms as u64)).await;
 }
-
-
 
 pub fn lua_resp_to_redis_resp(resp: LuaValue) -> Frame {
     match resp {

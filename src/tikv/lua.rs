@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
-use crate::{Frame, Command};
+use crate::{Frame, Command, utils::resp_invalid_arguments};
 use tikv_client::{Transaction};
 use super::{
     errors::AsyncResult,
@@ -110,12 +110,33 @@ impl LuaCommandCtx {
                 let cmd = Command::from_argv(&cmd_name, &argv).unwrap();
                 let result = match cmd {
                     Command::Decr(cmd) => cmd.decr(txn_rc.clone()).await,
+                    Command::Incr(cmd) => cmd.incr(txn_rc.clone()).await,
                     Command::Del(cmd) => cmd.del(txn_rc.clone()).await,
                     Command::Exists(cmd) => cmd.exists(txn_rc.clone()).await,
                     Command::Get(cmd) => cmd.get(txn_rc.clone()).await,
                     Command::Set(cmd) => cmd.set(txn_rc.clone()).await,
                     Command::SetNX(cmd) => cmd.put_not_exists(txn_rc.clone()).await,
-                    _ => {Ok(resp_nil())}
+                    Command::SetEX(cmd) => cmd.setex(txn_rc.clone()).await,
+                    Command::Mget(cmd) => cmd.batch_get(txn_rc.clone()).await,
+                    Command::Mset(cmd) => cmd.batch_put(txn_rc.clone()).await,
+                    Command::TTL(cmd) => cmd.ttl(false, txn_rc.clone()).await,
+                    Command::PTTL(cmd) => cmd.ttl(true, txn_rc.clone()).await,
+                    Command::Expire(cmd) => cmd.expire(false, false, txn_rc.clone()).await,
+                    Command::ExpireAt(cmd) => cmd.expire(false, true, txn_rc.clone()).await,
+                    Command::Pexpire(cmd) => cmd.expire(true, false, txn_rc.clone()).await,
+                    Command::PexpireAt(cmd) => cmd.expire(true, true, txn_rc.clone()).await,
+                    Command::Hset(cmd) => cmd.hset(txn_rc.clone()).await,
+                    Command::Hget(cmd) => cmd.hget(txn_rc.clone()).await,
+                    Command::Hmget(cmd) => cmd.hmget(txn_rc.clone()).await,
+                    Command::Hlen(cmd) => cmd.hlen(txn_rc.clone()).await,
+                    Command::Hgetall(cmd) => cmd.hgetall(txn_rc.clone()).await,
+                    Command::Hdel(cmd) => cmd.hdel(txn_rc.clone()).await,
+                    Command::Hkeys(cmd) => cmd.hkeys(txn_rc.clone()).await,
+                    Command::Hvals(cmd) => cmd.hvals(txn_rc.clone()).await,
+                    Command::Hincrby(cmd) => cmd.hincrby(txn_rc.clone()).await,
+                    Command::Hexists(cmd) => cmd.hexists(txn_rc.clone()).await,
+                    Command::Hstrlen(cmd) => cmd.hstrlen(txn_rc.clone()).await,
+                    _ => {Ok(resp_invalid_arguments())}
                 };
                 match result {
                     Ok(resp) => {
@@ -123,7 +144,7 @@ impl LuaCommandCtx {
                         return Ok(lua_resp);
                     },
                     Err(e) => {
-                        return Ok(LuaValue::String(_lua.create_string(&e.to_string()).unwrap()))
+                        return Ok(LuaValue::String(_lua.create_string(&e.to_string()).unwrap()));
                     }
                 }
                 

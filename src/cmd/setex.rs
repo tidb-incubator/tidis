@@ -1,24 +1,16 @@
+use std::sync::Arc;
+
 use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::string::StringCommandCtx;
-use crate::utils::{timestamp_from_ttl, resp_err};
+use crate::utils::{timestamp_from_ttl, resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame, is_use_txn_api};
 
 use bytes::Bytes;
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
-/// Set `key` to hold the string `value`.
-///
-/// If `key` already holds a value, it is overwritten, regardless of its type.
-/// Any previous time to live associated with the key is discarded on successful
-/// SET operation.
-///
-/// # Options
-///
-/// Currently, the following options are supported:
-///
-/// * EX `seconds` -- Set the specified expire time, in seconds.
-/// * PX `milliseconds` -- Set the specified expire time, in milliseconds.
 #[derive(Debug)]
 pub struct SetEX {
     /// the lookup key
@@ -29,6 +21,8 @@ pub struct SetEX {
 
     /// When to expire the key
     expire: i64,
+
+    valid: bool,
 }
 
 impl SetEX {
@@ -41,6 +35,16 @@ impl SetEX {
             key: key.to_string(),
             value,
             expire,
+            valid: true,
+        }
+    }
+
+    pub fn new_invalid() -> SetEX {
+        SetEX {
+            key: "".to_owned(),
+            value: Bytes::new(),
+            expire: 0,
+            valid: false,
         }
     }
 
@@ -72,12 +76,25 @@ impl SetEX {
         // Read the value to set. This is a required field.
         let value = parse.next_bytes()?;
 
-        Ok(SetEX { key, value, expire })
+        Ok(SetEX { key, value, expire, valid: true })
+    }
+
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<SetEX> {
+        if argv.len() != 3 {
+            return Ok(SetEX::new_invalid());
+        }
+        let key = argv[0].clone();
+        let expire = argv[1].parse::<i64>();
+        let value = Bytes::from(argv[2].clone());
+        if let Ok(v) = expire {
+            return Ok(SetEX::new(key, value, v));
+        }
+        return Ok(SetEX::new_invalid());
     }
 
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        let response = match self.setex().await {
+        let response = match self.setex(None).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
@@ -87,10 +104,13 @@ impl SetEX {
         Ok(())
     }
 
-    async fn setex(self) -> AsyncResult<Frame> {
+    pub async fn setex(self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments());
+        }
         if is_use_txn_api() {
             let ts = timestamp_from_ttl(self.expire as u64);
-            StringCommandCtx::new(None).do_async_txnkv_put(&self.key, &self.value, ts).await
+            StringCommandCtx::new(txn).do_async_txnkv_put(&self.key, &self.value, ts).await
         } else {
             Ok(resp_err("not supported yet"))
         }

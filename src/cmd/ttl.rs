@@ -1,19 +1,25 @@
+use std::sync::Arc;
+
 use crate::tikv::errors::AsyncResult;
-use crate::utils::resp_err;
+use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame, Parse};
 use crate::tikv::string::StringCommandCtx;
 use crate::config::{is_use_txn_api};
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
 #[derive(Debug)]
 pub struct TTL {
     key: String,
+    valid: bool,
 }
 
 impl TTL {
     pub fn new(key: impl ToString) -> TTL {
         TTL {
             key: key.to_string(),
+            valid: true,
         }
     }
 
@@ -25,12 +31,19 @@ impl TTL {
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<TTL> {
         let key = parse.next_string()?;
 
-        Ok(TTL { key })
+        Ok(TTL { key, valid: true })
+    }
+
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<TTL> {
+        if argv.len() != 1 {
+            return Ok(TTL { key: "".to_owned(), valid: false });
+        }
+        return Ok(TTL { key: argv[0].to_owned(), valid: true });
     }
 
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection, is_millis: bool) -> crate::Result<()> {
-        let response = match self.ttl(is_millis).await {
+        let response = match self.ttl(is_millis, None).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
@@ -42,9 +55,12 @@ impl TTL {
         Ok(())
     }
 
-    async fn ttl(self, is_millis: bool) -> AsyncResult<Frame> {
+    pub async fn ttl(self, is_millis: bool, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments());
+        }
         if is_use_txn_api() {
-            StringCommandCtx::new(None).do_async_txnkv_ttl(&self.key, is_millis).await
+            StringCommandCtx::new(txn).do_async_txnkv_ttl(&self.key, is_millis).await
         } else {
             Ok(resp_err("not supported yet"))
         }

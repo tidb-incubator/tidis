@@ -1,7 +1,7 @@
 use tokio::{
     time::Duration
 };
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{time::{SystemTime, UNIX_EPOCH}, convert::TryInto};
 use crate::frame::Frame;
 use mlua::{
     Value as LuaValue,
@@ -64,12 +64,14 @@ pub fn lua_resp_to_redis_resp(resp: LuaValue) -> Frame {
             resp_bulk(r.to_string().as_bytes().to_vec())
         },
         LuaValue::Table(r) => {
-            let mut resp_arr = vec![];
-            for pair in r.pairs::<LuaValue, LuaValue>() {
-                let (_, v) = pair.unwrap();
-                resp_arr.push(lua_resp_to_redis_resp(v));
+            let len: usize = r.len().unwrap().try_into().unwrap();
+            let mut arr = Vec::with_capacity(len);
+            for idx in 0..len {
+                // key is start from 1
+                let v: LuaValue = r.get(idx+1).unwrap();
+                arr.push(lua_resp_to_redis_resp(v));
             }
-            resp_array(resp_arr)
+            resp_array(arr)
         },
         LuaValue::Nil => {
             resp_nil()
@@ -95,13 +97,17 @@ pub fn redis_resp_to_lua_resp(resp: Frame, lua: &Lua) -> LuaValue {
             LuaValue::Integer(i)
         },
         Frame::Null => {
-            LuaValue::Nil
+            //LuaValue::Nil
+            LuaValue::Boolean(false)
+            //LuaValue::String(lua.create_string("(nil)").unwrap())
         },
         Frame::Array(arr) => {
             let table = lua.create_table().unwrap();
             for idx in 0..arr.len() {
                 let v = redis_resp_to_lua_resp(arr[idx].clone(), lua);
-                table.set(idx, v).unwrap();
+                // TODO if v is nil, table set will remove the item in table, but we should save the the nil item in table
+                // let key start from 1, if key is 0, the table len will not count it
+                table.set(idx+1, v).unwrap();
             }
             LuaValue::Table(table)
         },

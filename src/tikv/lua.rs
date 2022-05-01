@@ -83,8 +83,8 @@ impl LuaCommandCtx {
                 }
                 let cmd_name = &args.as_slice()[0];
                 let mut argv = vec![];
-                for arg in args.clone() {
-                    argv.push(arg);
+                for arg in &args.as_slice()[1..] {
+                    argv.push(arg.to_owned());
                 }
 
                 let cmd = Command::from_argv(cmd_name, &argv).unwrap();

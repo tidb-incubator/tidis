@@ -1,16 +1,21 @@
+use std::sync::Arc;
+
 use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::list::ListCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
-use crate::utils::{resp_err};
+use crate::utils::{resp_err, resp_invalid_arguments};
 
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
 #[derive(Debug)]
 pub struct Pop {
     key: String,
     count: i64,
+    valid: bool,
 }
 
 impl Pop {
@@ -18,13 +23,38 @@ impl Pop {
         Pop {
             key: key.to_owned(),
             count: count,
+            valid: true,
+        }
+    }
+
+    pub fn new_invalid() -> Pop {
+        Pop {
+            key: "".to_owned(),
+            count: 0,
+            valid: false,
         }
     }
 
     pub fn key(&self) -> &str {
         &self.key
     }
-
+    
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Pop> {
+        if argv.len() == 0 || argv.len() > 2 {
+            return Ok(Pop::new_invalid());
+        }
+        let key = &argv[0];
+        let mut count  = 1;
+        if argv.len() == 2 {
+            match argv[1].parse::<i64>() {
+                Ok(v) => count = v,
+                Err(_) => {
+                    return Ok(Pop::new_invalid());
+                }
+            }
+        }
+        Ok(Pop::new(key, count))
+    }
 
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Pop> {
         let key = parse.next_string()?;
@@ -41,16 +71,19 @@ impl Pop {
 
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection, op_left: bool) -> crate::Result<()> {
-        let response = self.pop(op_left).await?;
+        let response = self.pop(None, op_left).await?;
         debug!(?response);
         dst.write_frame(&response).await?;
 
         Ok(())
     }
 
-    async fn pop(&self, op_left: bool) -> AsyncResult<Frame> {
+    pub async fn pop(&self, txn: Option<Arc<Mutex<Transaction>>>,op_left: bool) -> AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments())
+        }
         if is_use_txn_api() {
-            ListCommandCtx::new(None).do_async_txnkv_pop(&self.key, op_left, self.count).await
+            ListCommandCtx::new(txn).do_async_txnkv_pop(&self.key, op_left, self.count).await
         } else {
             Ok(resp_err("not supported yet"))
         }

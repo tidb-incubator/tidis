@@ -1,16 +1,21 @@
+use std::sync::Arc;
+
 use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::set::SetCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
-use crate::utils::{resp_err};
+use crate::utils::{resp_err, resp_invalid_arguments};
 
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
 #[derive(Debug)]
 pub struct Smismember {
     key: String,
     members: Vec<String>,
+    valid: bool,
 }
 
 impl Smismember {
@@ -18,6 +23,15 @@ impl Smismember {
         Smismember {
             key: key.to_string(),
             members: vec![],
+            valid: true,
+        }
+    }
+
+    pub fn new_invalid() -> Smismember {
+        Smismember {
+            key: "".to_string(),
+            members: vec![],
+            valid: false,
         }
     }
 
@@ -48,19 +62,33 @@ impl Smismember {
         Ok(smismember)
     }
 
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Smismember> {
+        if argv.len() < 2 {
+            return Ok(Smismember::new_invalid())
+        }
+        let mut s = Smismember::new(&argv[0]);
+        for arg in &argv[1..] {
+            s.add_member(arg);
+        }
+        Ok(s)
+    }
+
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         
-        let response = self.smismember().await?;
+        let response = self.smismember(None).await?;
         debug!(?response);
         dst.write_frame(&response).await?;
 
         Ok(())
     }
 
-    async fn smismember(&self) -> AsyncResult<Frame> {
+    pub async fn smismember(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments());
+        }
         if is_use_txn_api() {
-            SetCommandCtx::new(None).do_async_txnkv_sismember(&self.key, &self.members).await
+            SetCommandCtx::new(txn).do_async_txnkv_sismember(&self.key, &self.members).await
         } else {
             Ok(resp_err("not supported yet"))
         }

@@ -3,13 +3,12 @@ use crate::tikv::errors::AsyncResult;
 use crate::tikv::string::StringCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
-use crate::utils::{timestamp_from_ttl, resp_err, resp_invalid_arguments};
+use crate::utils::{timestamp_from_ttl, resp_invalid_arguments};
 
 use bytes::Bytes;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
 use std::sync::Arc;
-use std::time::Duration;
 use tracing::{debug, instrument};
 
 /// Set `key` to hold the string `value`.
@@ -212,13 +211,13 @@ impl Set {
         }
         let response = match self.nx {
             Some(_) => {
-                match self.put_not_exists(None).await {
+                match self.put_not_exists(txn).await {
                     Ok(val) => val,
                     Err(e) => Frame::Error(e.to_string()),
                 }
             },
             None => {
-                match self.put(None).await {
+                match self.put(txn).await {
                     Ok(val) => val,
                     Err(e) => Frame::Error(e.to_string()),
                 }

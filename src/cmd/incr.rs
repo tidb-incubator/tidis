@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::utils::resp_invalid_arguments;
 use crate::{Connection, Frame, Parse};
 use crate::tikv::string::StringCommandCtx;
 use crate::config::{is_use_txn_api};
@@ -64,6 +65,9 @@ impl Incr {
     }
 
     pub async fn incr(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments());
+        }
         if is_use_txn_api() {
             StringCommandCtx::new(txn).do_async_txnkv_incr(&self.key, true, 1).await
         } else {

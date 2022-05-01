@@ -1,10 +1,14 @@
+use std::sync::Arc;
+
 use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::list::ListCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
-use crate::utils::{resp_err};
+use crate::utils::{resp_err, resp_invalid_arguments};
 
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
 #[derive(Debug)]
@@ -12,6 +16,7 @@ pub struct Lrange {
     key: String,
     left: i64,
     right: i64,
+    valid: bool,
 }
 
 impl Lrange {
@@ -20,6 +25,16 @@ impl Lrange {
             key: key.to_owned(),
             left: left,
             right: right,
+            valid: true,
+        }
+    }
+
+    pub fn new_invalid() -> Lrange {
+        Lrange {
+            key: "".to_owned(),
+            left: 0,
+            right: 0,
+            valid: false,
         }
     }
 
@@ -32,21 +47,43 @@ impl Lrange {
         let left = parse.next_int()?;
         let right = parse.next_int()?;
 
-        Ok(Lrange { key, left, right })
+        Ok(Lrange { key, left, right, valid: true })
+    }
+
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Lrange> {
+        if argv.len() != 3 {
+            return Ok(Lrange::new_invalid());
+        }
+        let key = &argv[0];
+        let left;
+        let right;
+        match argv[1].parse::<i64>() {
+            Ok(v) => left = v,
+            Err(_) => return Ok(Lrange::new_invalid()),
+        }
+
+        match argv[2].parse::<i64>() {
+            Ok(v) => right = v,
+            Err(_) => return Ok(Lrange::new_invalid()),
+        }
+        Ok(Lrange::new(key, left, right))
     }
 
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        let response = self.lrange().await?;
+        let response = self.lrange(None).await?;
         debug!(?response);
         dst.write_frame(&response).await?;
 
         Ok(())
     }
 
-    async fn lrange(&self) -> AsyncResult<Frame> {
+    pub async fn lrange(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments());
+        }
         if is_use_txn_api() {
-            ListCommandCtx::new(None).do_async_txnkv_lrange(&self.key, self.left, self.right).await
+            ListCommandCtx::new(txn).do_async_txnkv_lrange(&self.key, self.left, self.right).await
         } else {
             Ok(resp_err("not supported yet"))
         }

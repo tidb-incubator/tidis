@@ -1,21 +1,27 @@
+use std::sync::Arc;
+
 use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::set::SetCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
-use crate::utils::{resp_err};
+use crate::utils::{resp_err, resp_invalid_arguments};
 
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
 #[derive(Debug)]
 pub struct Scard {
     key: String,
+    valid: bool,
 }
 
 impl Scard {
     pub fn new(key: &str) -> Scard {
         Scard {
             key: key.to_string(),
+            valid: true,
         }
     }
 
@@ -33,19 +39,29 @@ impl Scard {
         Ok(Scard::new(&key))
     }
 
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Scard> {
+        if argv.len() != 1 {
+            return Ok(Scard {key: "".to_owned(), valid: false })
+        }
+        Ok(Scard::new(&argv[0]))
+    }
+
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         
-        let response = self.scard().await?;
+        let response = self.scard(None).await?;
         debug!(?response);
         dst.write_frame(&response).await?;
 
         Ok(())
     }
 
-    async fn scard(&self) -> AsyncResult<Frame> {
+    pub async fn scard(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments());
+        }
         if is_use_txn_api() {
-            SetCommandCtx::new(None).do_async_txnkv_scard(&self.key).await
+            SetCommandCtx::new(txn).do_async_txnkv_scard(&self.key).await
         } else {
             Ok(resp_err("not supported yet"))
         }

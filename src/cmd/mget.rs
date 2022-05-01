@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::tikv::errors::AsyncResult;
+use crate::utils::resp_invalid_arguments;
 use crate::{Connection, Frame, Parse};
 use crate::tikv::string::StringCommandCtx;
 use crate::config::is_use_txn_api;
@@ -85,6 +86,9 @@ impl Mget {
     }
 
     pub async fn batch_get(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments());
+        }
         if is_use_txn_api() {
             StringCommandCtx::new(txn).do_async_txnkv_batch_get(&self.keys).await
         } else {

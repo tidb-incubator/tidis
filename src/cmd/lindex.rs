@@ -1,17 +1,21 @@
+use std::sync::Arc;
+
 use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::list::ListCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
-use crate::utils::{resp_err};
+use crate::utils::{resp_err, resp_invalid_arguments};
 
-use bytes::Bytes;
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
 #[derive(Debug)]
 pub struct Lindex {
     key: String,
     idx: i64,
+    valid: bool,
 }
 
 impl Lindex {
@@ -19,6 +23,15 @@ impl Lindex {
         Lindex {
             key: key.to_owned(),
             idx: idx,
+            valid: true,
+        }
+    }
+
+    pub fn new_invalid() -> Lindex {
+        Lindex {
+            key: "".to_owned(),
+            idx: 0,
+            valid: false,
         }
     }
 
@@ -30,21 +43,37 @@ impl Lindex {
         let key = parse.next_string()?;
         let idx = parse.next_int()?;
 
-        Ok(Lindex { key, idx })
+        Ok(Lindex { key, idx, valid: true})
+    }
+
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Lindex> {
+        if argv.len() != 2 {
+            return Ok(Lindex::new_invalid());
+        }
+        let key = &argv[0];
+        let idx;
+        match argv[1].parse::<i64>() {
+            Ok(v) => idx = v,
+            Err(_) => return Ok(Lindex::new_invalid()),
+        }
+        Ok(Lindex::new(key, idx))
     }
 
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        let response = self.lindex().await?;
+        let response = self.lindex(None).await?;
         debug!(?response);
         dst.write_frame(&response).await?;
 
         Ok(())
     }
 
-    async fn lindex(&self) -> AsyncResult<Frame> {
+    pub async fn lindex(self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments());
+        }
         if is_use_txn_api() {
-            ListCommandCtx::new(None).do_async_txnkv_lindex(&self.key, self.idx).await
+            ListCommandCtx::new(txn).do_async_txnkv_lindex(&self.key, self.idx).await
         } else {
             Ok(resp_err("not supported yet"))
         }

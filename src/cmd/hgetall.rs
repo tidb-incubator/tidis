@@ -5,7 +5,7 @@ use crate::tikv::errors::AsyncResult;
 use crate::tikv::hash::HashCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
-use crate::utils::{resp_err};
+use crate::utils::{resp_err, resp_invalid_arguments};
 
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -66,6 +66,9 @@ impl Hgetall {
     }
 
     pub async fn hgetall(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments());
+        }
         if is_use_txn_api() {
             HashCommandCtx::new(txn).do_async_txnkv_hgetall(&self.key, true, true).await
         } else {

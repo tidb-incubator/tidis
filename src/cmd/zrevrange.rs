@@ -1,10 +1,14 @@
+use std::sync::Arc;
+
 use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::zset::ZsetCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
-use crate::utils::{resp_err};
+use crate::utils::{resp_err, resp_invalid_arguments};
 
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
 #[derive(Debug)]
@@ -13,6 +17,7 @@ pub struct Zrevrange {
     min: i64,
     max: i64,
     withscores: bool,
+    valid: bool,
 }
 
 impl Zrevrange {
@@ -22,6 +27,17 @@ impl Zrevrange {
             min: min,
             max: max,
             withscores: withscores,
+            valid: true,
+        }
+    }
+
+    pub fn new_invalid() -> Zrevrange {
+        Zrevrange {
+            key: "".to_string(),
+            min: 0,
+            max: 0,
+            withscores: false,
+            valid: false,
         }
     }
 
@@ -48,18 +64,51 @@ impl Zrevrange {
         Ok(z)
     }
 
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Zrevrange> {
+        if argv.len() < 3 {
+            return Ok(Zrevrange::new_invalid());
+        }
+        let min;
+        let max;
+        match argv[1].parse::<i64>() {
+            Ok(v) => min = v,
+            Err(_) => return Ok(Zrevrange::new_invalid())
+        }
+        match argv[2].parse::<i64>() {
+            Ok(v) => max = v,
+            Err(_) => return Ok(Zrevrange::new_invalid())
+        }
+        let mut withscores = false;
+
+        for arg in &argv[2..] {
+            match arg.as_str() {
+                // flags implement in signle command, such as ZRANGEBYSCORE
+                "WITHSCORES" => {
+                    withscores = true;
+                },
+                _ => {}
+            }
+        }
+        let z = Zrevrange::new(&argv[0], min, max, withscores);
+
+        Ok(z)
+    }
+
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        let response = self.zrevrange().await?;
+        let response = self.zrevrange(None).await?;
         debug!(?response);
         dst.write_frame(&response).await?;
 
         Ok(())
     }
 
-    async fn zrevrange(&self) -> AsyncResult<Frame> {
+    pub async fn zrevrange(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments());
+        }
         if is_use_txn_api() {
-            ZsetCommandCtx::new(None).do_async_txnkv_zrange(&self.key, self.min, self.max, self.withscores, true).await
+            ZsetCommandCtx::new(txn).do_async_txnkv_zrange(&self.key, self.min, self.max, self.withscores, true).await
         } else {
             Ok(resp_err("not supported yet"))
         }

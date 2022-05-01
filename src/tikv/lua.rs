@@ -8,7 +8,6 @@ use super::{
     errors::RTError,
 };
 use crate::utils::{
-    resp_nil,
     lua_resp_to_redis_resp,
     redis_resp_to_lua_resp,
 };
@@ -116,6 +115,34 @@ impl LuaCommandCtx {
                     Command::Hincrby(cmd) => cmd.hincrby(txn_rc.clone()).await,
                     Command::Hexists(cmd) => cmd.hexists(txn_rc.clone()).await,
                     Command::Hstrlen(cmd) => cmd.hstrlen(txn_rc.clone()).await,
+                    Command::Lpush(cmd) => cmd.push(txn_rc.clone(), true).await,
+                    Command::Rpush(cmd) => cmd.push(txn_rc.clone(), false).await,
+                    Command::Lpop(cmd) => cmd.pop(txn_rc.clone(), true).await,
+                    Command::Rpop(cmd) => cmd.pop(txn_rc.clone(), false).await,
+                    Command::Lrange(cmd) => cmd.lrange(txn_rc.clone()).await,
+                    Command::Llen(cmd) => cmd.llen(txn_rc.clone()).await,
+                    Command::Lindex(cmd) => cmd.lindex(txn_rc.clone()).await,
+                    Command::Lset(cmd) => cmd.lset(txn_rc.clone()).await,
+                    Command::Ltrim(cmd) => cmd.ltrim(txn_rc.clone()).await,
+                    Command::Sadd(cmd) => cmd.sadd(txn_rc.clone()).await,
+                    Command::Scard(cmd) => cmd.scard(txn_rc.clone()).await,
+                    Command::Sismember(cmd) => cmd.sismember(txn_rc.clone()).await,
+                    Command::Smismember(cmd) => cmd.smismember(txn_rc.clone()).await,
+                    Command::Smembers(cmd) => cmd.smembers(txn_rc.clone()).await,
+                    Command::Spop(cmd) => cmd.spop(txn_rc.clone()).await,
+                    Command::Srem(cmd) => cmd.srem(txn_rc.clone()).await,
+                    Command::Zadd(cmd) => cmd.zadd(txn_rc.clone()).await,
+                    Command::Zcard(cmd) => cmd.zcard(txn_rc.clone()).await,
+                    Command::Zscore(cmd) => cmd.zscore(txn_rc.clone()).await,
+                    Command::Zrem(cmd) => cmd.zrem(txn_rc.clone()).await,
+                    Command::Zremrangebyscore(cmd) => cmd.zremrangebyscore(txn_rc.clone()).await,
+                    Command::Zrange(cmd) => cmd.zrange(txn_rc.clone()).await,
+                    Command::Zrevrange(cmd) => cmd.zrevrange(txn_rc.clone()).await,
+                    Command::Zrangebyscore(cmd) => cmd.zrangebyscore(txn_rc.clone(), false).await,
+                    Command::Zrevrangebyscore(cmd) => cmd.zrangebyscore(txn_rc.clone(), true).await,
+                    Command::Zcount(cmd) => cmd.zcount(txn_rc.clone()).await,
+                    Command::Zpopmin(cmd) => cmd.zpop(txn_rc.clone(), true).await,
+                    Command::Zrank(cmd) => cmd.zrank(txn_rc.clone()).await,
                     _ => {Ok(resp_invalid_arguments())}
                 };
                 match result {

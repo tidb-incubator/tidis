@@ -283,7 +283,7 @@ impl<'a> ListCommandCtx {
         }.boxed()).await;
     
         match resp {
-            Ok(values) => {
+            Ok(_) => {
                 Ok(resp_ok())
             },
             Err(e) => Ok(resp_err(&e.to_string()))
@@ -397,7 +397,7 @@ impl<'a> ListCommandCtx {
                 if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::List) {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
-                let (ttl, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
+                let (ttl, left, _) = KeyDecoder::new().decode_key_list_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone().do_async_txnkv_list_expire_if_needed(&key).await?;
                     return Ok(resp_nil());

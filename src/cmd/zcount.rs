@@ -1,11 +1,15 @@
+use std::sync::Arc;
+
 use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::zset::ZsetCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
-use crate::utils::{resp_err};
+use crate::utils::{resp_err, resp_invalid_arguments};
 
-use bytes::Buf;
+use bytes::{Buf, Bytes};
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
 #[derive(Debug)]
@@ -15,6 +19,7 @@ pub struct Zcount {
     min_inclusive: bool,
     max: i64,
     max_inclusive: bool,
+    valid: bool,
 }
 
 impl Zcount {
@@ -25,6 +30,18 @@ impl Zcount {
             min_inclusive: min_inclusive,
             max: max,
             max_inclusive: max_inclusive,
+            valid: true,
+        }
+    }
+
+    pub fn new_invalid() -> Zcount {
+        Zcount {
+            key: "".to_string(),
+            min: 0,
+            min_inclusive: false,
+            max: 0,
+            max_inclusive: false,
+            valid: false,
         }
     }
 
@@ -55,16 +72,47 @@ impl Zcount {
         Ok(z)
     }
 
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Zcount> {
+        if argv.len() < 3 {
+            return Ok(Zcount::new_invalid());
+        }
+        let mut min_inclusive = true;
+        let mut max_inclusive = true;
+
+        // parse score range as bytes, to handle exclusive bounder
+        let mut bmin = Bytes::from(argv[1].clone());
+        // check first byte
+        if bmin[0] == b'(' {
+            // drain the first byte
+            bmin.advance(1);
+            min_inclusive = false;
+        }
+        let min = String::from_utf8_lossy(&bmin.to_vec()).parse::<i64>().unwrap();
+        
+        let mut bmax = Bytes::from(argv[2].clone());
+        if bmax[0] == b'(' {
+            bmax.advance(1);
+            max_inclusive = false;
+        }
+        let max = String::from_utf8_lossy(&bmax.to_vec()).parse::<i64>().unwrap();
+
+        let z = Zcount::new(&argv[0], min, min_inclusive, max, max_inclusive);
+        Ok(z)
+    }
+
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        let response = self.zcount().await?;
+        let response = self.zcount(None).await?;
         debug!(?response);
         dst.write_frame(&response).await?;
 
         Ok(())
     }
 
-    async fn zcount(&self) -> AsyncResult<Frame> {
+    pub async fn zcount(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments())
+        }
         if is_use_txn_api() {
             ZsetCommandCtx::new(None).do_async_txnkv_zcount(&self.key, self.min, self.min_inclusive, self.max, self.max_inclusive).await
         } else {

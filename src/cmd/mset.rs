@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::tikv::errors::AsyncResult;
+use crate::utils::resp_invalid_arguments;
 use crate::{Connection, Frame, Parse};
 use crate::tikv::string::StringCommandCtx;
 use tikv_client::{KvPair, Transaction};
@@ -102,6 +103,9 @@ impl Mset {
     }
 
     pub async fn batch_put(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments());
+        }
         let mut kvs = Vec::new();
         if is_use_txn_api() {
             for (idx, key) in self.keys.iter().enumerate() {

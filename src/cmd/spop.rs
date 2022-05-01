@@ -1,16 +1,21 @@
+use std::sync::Arc;
+
 use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::set::SetCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
-use crate::utils::{resp_err};
+use crate::utils::{resp_err, resp_invalid_arguments};
 
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
 #[derive(Debug)]
 pub struct Spop {
     key: String,
     count: i64,
+    valid: bool,
 }
 
 impl Spop {
@@ -18,6 +23,15 @@ impl Spop {
         Spop {
             key: key.to_string(),
             count: count,
+            valid: true,
+        }
+    }
+
+    pub fn new_invalid() -> Spop {
+        Spop {
+            key: "".to_string(),
+            count: 0,
+            valid: false,
         }
     }
 
@@ -28,22 +42,39 @@ impl Spop {
         if let Ok(v) = parse.next_int() {
             count = v;
         }
-        Ok(Spop{ key, count })
+        Ok(Spop{ key, count, valid: true})
+    }
+
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Spop> {
+        if argv.len() == 0 || argv.len() > 2 {
+            return Ok(Spop::new_invalid())
+        }
+        let mut count = 1;
+        if argv.len() == 2 {
+            match argv[1].parse::<i64>() {
+                Ok(v) => count = v,
+                Err(_) => return Ok(Spop::new_invalid()),
+            }
+        }
+        Ok(Spop::new(&argv[0], count))
     }
 
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         
-        let response = self.spop().await?;
+        let response = self.spop(None).await?;
         debug!(?response);
         dst.write_frame(&response).await?;
 
         Ok(())
     }
 
-    async fn spop(&self) -> AsyncResult<Frame> {
+    pub async fn spop(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments())
+        }
         if is_use_txn_api() {
-            SetCommandCtx::new(None).do_async_txnkv_spop(&self.key, self.count as u64).await
+            SetCommandCtx::new(txn).do_async_txnkv_spop(&self.key, self.count as u64).await
         } else {
             Ok(resp_err("not supported yet"))
         }

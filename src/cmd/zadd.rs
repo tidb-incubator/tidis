@@ -1,10 +1,14 @@
+use std::sync::Arc;
+
 use crate::cmd::{Parse};
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::zset::ZsetCommandCtx;
 use crate::{Connection, Frame};
 use crate::config::{is_use_txn_api};
-use crate::utils::{resp_err};
+use crate::utils::{resp_err, resp_invalid_arguments};
 
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
 #[derive(Debug)]
@@ -14,6 +18,7 @@ pub struct Zadd {
     scores: Vec<i64>,
     exists: Option<bool>,
     changed_only: bool,
+    valid: bool,
 }
 
 impl Zadd {
@@ -24,6 +29,18 @@ impl Zadd {
             scores: vec![],
             exists: None,
             changed_only: false,
+            valid: true,
+        }
+    }
+
+    pub fn new_invalid() -> Zadd {
+        Zadd {
+            key: "".to_string(),
+            members: vec![],
+            scores: vec![],
+            exists: None,
+            changed_only: false,
+            valid: false,
         }
     }
 
@@ -56,7 +73,7 @@ impl Zadd {
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Zadd> {
         let key = parse.next_string()?;
         let mut zadd = Zadd::new(&key);
-        let mut first_score:Option<i64> = None;
+        let mut first_score:Option<i64>;
 
         // try to parse the flag
         loop {
@@ -124,19 +141,110 @@ impl Zadd {
         Ok(zadd)
     }
 
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Zadd> {
+        if argv.len() == 0 {
+            return Ok(Zadd::new_invalid());
+        }
+        let mut zadd = Zadd::new(&argv[0]);
+        let mut first_score:Option<i64>;
+
+        // try to parse the flag
+        let mut idx = 1;
+        loop {
+            let arg =  argv[idx].to_uppercase();
+            if idx >= argv.len() {
+                return Ok(Zadd::new_invalid());
+            }
+            match arg.as_str() {
+                "NX" => {
+                    zadd.set_exists(false);
+                }
+                "XX" => {
+                    zadd.set_exists(true);
+                }
+                "CH" => {
+                    zadd.set_changed_only(true)
+                }
+                "GT" => {
+                    // TODO:
+                }
+                "LT" => {
+                    // TODO:
+                }
+                "INCR" => {
+                    // TODO:
+                }
+                _ => {
+                    // check if this is a score args
+                    match String::from_utf8_lossy(&arg.as_bytes().to_vec()).parse::<i64>() {
+                        Ok(score) => {
+                            first_score = Some(score);
+                            // flags parse done
+                            break;
+                        },
+                        Err(_) => {
+                            // not support flags
+                            return Ok(Zadd::new_invalid());
+                        }
+                    }
+                }
+            }
+            idx += 1;
+        }
+
+        // parse the score and member
+        loop {
+            if let Some(score) = first_score {
+                // consume the score in last parse
+                zadd.add_score(score);
+                // reset first_score to None
+                first_score = None;
+
+                // parse next member
+                idx += 1;
+                if idx >= argv.len() {
+                    return Ok(Zadd::new_invalid());
+                }
+                let member = &argv[idx];
+                zadd.add_member(member);
+            } else {
+                idx += 1;
+                if idx == argv.len() {
+                    break;
+                }
+                if let Ok(score) = argv[idx].parse::<i64>() {
+                    idx += 1;
+                    if idx >= argv.len() {
+                        return Ok(Zadd::new_invalid());
+                    }
+                    let member = &argv[idx];
+                    zadd.add_score(score);
+                    zadd.add_member(member);
+                } else {
+                    return Ok(Zadd::new_invalid());
+                }
+            }
+        }
+
+        Ok(zadd)
+    }
+
     #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         
-        let response = self.zadd().await?;
+        let response = self.zadd(None).await?;
         debug!(?response);
         dst.write_frame(&response).await?;
 
         Ok(())
     }
 
-    async fn zadd(&self) -> AsyncResult<Frame> {
+    pub async fn zadd(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments());
+        }
         if is_use_txn_api() {
-            ZsetCommandCtx::new(None).do_async_txnkv_zadd(&self.key, &self.members, &self.scores, self.exists, self.changed_only, false).await
+            ZsetCommandCtx::new(txn).do_async_txnkv_zadd(&self.key, &self.members, &self.scores, self.exists, self.changed_only, false).await
         } else {
             Ok(resp_err("not supported yet"))
         }

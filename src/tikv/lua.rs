@@ -19,7 +19,7 @@ use mlua::{
     prelude::*,
     StdLib,
     LuaOptions,
-    Result,
+    Result, Variadic,
 };
 
 #[derive(Clone)]
@@ -74,40 +74,20 @@ impl LuaCommandCtx {
         let redis = lua.create_table()?;
         let txn_rc = self.txn;
         
-        let redis_call = lua.create_async_function(move |_lua, (arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9): 
-        (String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>)| {
+        let redis_call = lua.create_async_function(move |_lua, args: Variadic<String>| {
             let txn_rc = txn_rc.clone();
             // package arguments(without cmd) to argv
-            // argc maximum is 8
-            let cmd_name = arg1.clone();
-            let mut argv = vec![];
-            if let Some(a2) = arg2.clone() {
-                argv.push(a2);
-                if let Some(a3) = arg3.clone() {
-                    argv.push(a3);
-                    if let Some(a4) = arg4.clone() {
-                        argv.push(a4);
-                        if let Some(a5) = arg5.clone() {
-                            argv.push(a5);
-                            if let Some(a6) = arg6.clone() {
-                                argv.push(a6);
-                                if let Some(a7) = arg7.clone() {
-                                    argv.push(a7);
-                                    if let Some(a8) = arg8.clone() {
-                                        argv.push(a8);
-                                        if let Some(a9) = arg9.clone() {
-                                            argv.push(a9);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
             async move {
-                let cmd = Command::from_argv(&cmd_name, &argv).unwrap();
+                if (&args).len() == 0 {
+                    return Ok(LuaValue::String(_lua.create_string("invalid arguments").unwrap()));
+                }
+                let cmd_name = &args.as_slice()[0];
+                let mut argv = vec![];
+                for arg in args.clone() {
+                    argv.push(arg);
+                }
+
+                let cmd = Command::from_argv(cmd_name, &argv).unwrap();
                 let result = match cmd {
                     Command::Decr(cmd) => cmd.decr(txn_rc.clone()).await,
                     Command::Incr(cmd) => cmd.incr(txn_rc.clone()).await,
@@ -147,7 +127,6 @@ impl LuaCommandCtx {
                         return Ok(LuaValue::String(_lua.create_string(&e.to_string()).unwrap()));
                     }
                 }
-                
             }
         })?;
         redis.set("call", redis_call)?;

@@ -61,7 +61,7 @@ impl Hmget {
     }
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Hmget> {
-        if argv.len() != 0 {
+        if argv.len() < 2 {
             return Ok(Hmget::new_invalid());
         }
         let key = &argv[0];

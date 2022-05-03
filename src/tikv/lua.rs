@@ -156,9 +156,8 @@ impl LuaCommandCtx {
                 }
             }
         })?;
-        redis.set("call", redis_call)?;
-        let redis_pcall = lua.create_async_function(redis_pcall)?;
-        redis.set("pcall", redis_pcall)?;
+        redis.set("call", redis_call.clone())?;
+        redis.set("pcall", redis_call)?;
         // register to global table
         globals.set("redis", redis)?;
 

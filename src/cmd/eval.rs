@@ -6,7 +6,6 @@ use crate::{Connection, Frame, Parse};
 use crate::tikv::lua::LuaCommandCtx;
 use crate::config::{is_use_txn_api};
 use crate::tikv::errors::AsyncResult;
-use bytes::Bytes;
 use mlua::{
     Lua
 };

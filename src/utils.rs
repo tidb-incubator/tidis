@@ -64,11 +64,14 @@ pub fn lua_resp_to_redis_resp(resp: LuaValue) -> Frame {
             resp_bulk(r.to_string().as_bytes().to_vec())
         },
         LuaValue::Table(r) => {
-            let len: usize = r.len().unwrap().try_into().unwrap();
-            let mut arr = Vec::with_capacity(len);
+            let len: i64 = r.raw_get("__self_length__").unwrap();
+            //let len: usize = r.len().unwrap().try_into().unwrap();
+            let mut arr = Vec::with_capacity(len.try_into().unwrap());
             for idx in 0..len {
                 // key is start from 1
-                let v: LuaValue = r.get(idx+1).unwrap();
+                // if key not exists in lua table, it means the value is nil
+                let key = idx+1;//.to_string();
+                let v: LuaValue = r.raw_get(key).unwrap();
                 arr.push(lua_resp_to_redis_resp(v));
             }
             resp_array(arr)
@@ -97,18 +100,22 @@ pub fn redis_resp_to_lua_resp(resp: Frame, lua: &Lua) -> LuaValue {
             LuaValue::Integer(i)
         },
         Frame::Null => {
-            //LuaValue::Nil
-            LuaValue::Boolean(false)
-            //LuaValue::String(lua.create_string("(nil)").unwrap())
+            LuaValue::Nil
         },
         Frame::Array(arr) => {
+            let len = arr.len();
             let table = lua.create_table().unwrap();
-            for idx in 0..arr.len() {
+            for idx in 0..len {
                 let v = redis_resp_to_lua_resp(arr[idx].clone(), lua);
-                // TODO if v is nil, table set will remove the item in table, but we should save the the nil item in table
-                // let key start from 1, if key is 0, the table len will not count it
-                table.set(idx+1, v).unwrap();
+                // if v is nil, table set will remove the item in table, but we should save the the nil item in table
+                if v != LuaValue::Nil {
+                    let key = idx+1;//.to_string();
+                    table.raw_set(key, v).unwrap();
+                }
+                // save the length of the redis array in table, but this will have side effect 
+                table.raw_set("__self_length__", LuaValue::Integer(len as i64)).unwrap();
             }
+            
             LuaValue::Table(table)
         },
         _ => {LuaValue::Nil}

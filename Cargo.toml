@@ -33,7 +33,7 @@ async-std = { version = "1.11.0", features = ["unstable"] }
 toml = { version = "0.5.8" }
 serde = { version = "1.0", features = ["derive"] }
 futures = { version = "0.3", default-features = false }
-mlua = { version = "0.7.4", features = ["lua51", "async", "vendored", "macros", "send" ]}
+mlua = { version = "0.7.4", features = ["luajit", "async", "vendored", "macros", "send" ]}
 
 [dev-dependencies]
 # Enable test-utilities in dev mode only. This is mostly for tests.

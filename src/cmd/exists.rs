@@ -19,7 +19,7 @@ impl Exists {
     pub fn new() -> Exists {
         Exists {
             keys: vec![],
-            valid: false,
+            valid: true,
         }
     }
 

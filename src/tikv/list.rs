@@ -322,17 +322,17 @@ impl<'a> ListCommandCtx {
                 if r_right < 0 {
                     r_right += llen;
                 }
-                if r_left > r_right {
+                if r_left > r_right || r_left > llen {
                     return Ok(resp_nil())
                 }
     
-                let real_left = r_left as u64 + left;
+                let real_left = r_left + left as i64;
                 let mut real_length = r_right - r_left + 1;
                 if real_length > llen {
                     real_length = llen;
                 }
     
-                let data_key_start = KeyEncoder::new().encode_txnkv_list_data_key(key, real_left);
+                let data_key_start = KeyEncoder::new().encode_txnkv_list_data_key(key, real_left as u64);
                 let range: RangeFrom<Key> = data_key_start..;
                 let from_range: BoundRange = range.into();
                 let iter = ss.scan(from_range, real_length.try_into().unwrap()).await?;
@@ -380,7 +380,7 @@ impl<'a> ListCommandCtx {
         }
     }
     
-    pub async fn do_async_txnkv_lindex(self, key: &str, idx: i64) -> AsyncResult<Frame> {
+    pub async fn do_async_txnkv_lindex(self, key: &str, mut idx: i64) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
     
         let mut ss = match self.txn.clone() {
@@ -397,16 +397,22 @@ impl<'a> ListCommandCtx {
                 if !matches!(KeyDecoder::new().decode_key_type(&meta_value), DataType::List) {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
-                let (ttl, left, _) = KeyDecoder::new().decode_key_list_meta(&meta_value);
+                let (ttl, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone().do_async_txnkv_list_expire_if_needed(&key).await?;
                     return Ok(resp_nil());
                 }
+
+                let len = right - left;
+                // try convert idx to positive if needed
+                if idx < 0 {
+                    idx += len as i64;
+                }
     
-                let real_idx = left + idx as u64;
+                let real_idx = left as i64 + idx;
     
                 // get value from data key
-                let data_key = KeyEncoder::new().encode_txnkv_list_data_key(&key, real_idx);
+                let data_key = KeyEncoder::new().encode_txnkv_list_data_key(&key, real_idx as u64);
                 if let Some(value) = ss.get(data_key).await? {
                     Ok(resp_bulk(value))
                 } else {
@@ -448,12 +454,12 @@ impl<'a> ListCommandCtx {
                         idx = idx + (right - left) as i64;
                     }
     
-                    let uidx = idx as u64 + left;
-                    if idx < 0 || uidx < left || uidx > right - 1 {
+                    let uidx = idx + left as i64;
+                    if idx < 0 || uidx < left as i64|| uidx > (right - 1) as i64 {
                         return Err(RTError::StringError(REDIS_INDEX_OUT_OF_RANGE.into()));
                     }
     
-                    let data_key = KeyEncoder::new().encode_txnkv_list_data_key(&key, uidx);
+                    let data_key = KeyEncoder::new().encode_txnkv_list_data_key(&key, uidx as u64);
                     // data keys exists, update it to new value
                     txn.put(data_key, ele.to_vec()).await?;
                     Ok(())

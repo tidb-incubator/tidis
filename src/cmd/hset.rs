@@ -92,21 +92,21 @@ impl Hset {
     }
 
     #[instrument(skip(self, dst))]
-    pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
+    pub(crate) async fn apply(self, dst: &mut Connection, is_hmset: bool) -> crate::Result<()> {
         
-        let response = self.hset(None).await?;
+        let response = self.hset(None, is_hmset).await?;
         debug!(?response);
         dst.write_frame(&response).await?;
 
         Ok(())
     }
 
-    pub async fn hset(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+    pub async fn hset(&self, txn: Option<Arc<Mutex<Transaction>>>, is_hmset: bool) -> AsyncResult<Frame> {
         if !self.valid {
             return Ok(resp_invalid_arguments());
         }
         if is_use_txn_api() {
-            HashCommandCtx::new(txn).do_async_txnkv_hset(&self.key, &self.field_and_value).await
+            HashCommandCtx::new(txn).do_async_txnkv_hset(&self.key, &self.field_and_value, is_hmset).await
         } else {
             Ok(resp_err("not supported yet"))
         }

@@ -1,5 +1,5 @@
 use futures::future::{FutureExt};
-use crate::{Frame, utils::key_is_expired};
+use crate::{Frame, utils::{key_is_expired, resp_ok}};
 use tikv_client::{Key, KvPair, BoundRange, Transaction};
 use core::ops::RangeFrom;
 use std::sync::Arc;
@@ -22,7 +22,7 @@ impl<'a> HashCommandCtx {
         HashCommandCtx { txn }
     }
 
-    pub async fn do_async_txnkv_hset(mut self, key: &str, fvs: &Vec<KvPair>) -> AsyncResult<Frame> {
+    pub async fn do_async_txnkv_hset(mut self, key: &str, fvs: &Vec<KvPair>, is_hmset: bool) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
         let key = key.to_owned();
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
@@ -91,7 +91,11 @@ impl<'a> HashCommandCtx {
         }.boxed()).await;
         match resp {
             Ok(num) => {
-                Ok(Frame::Integer(num as i64)) 
+                if is_hmset {
+                    Ok(resp_ok())
+                } else {
+                    Ok(resp_int(num as i64))
+                }
             },
             Err(e) => {
                 Ok(resp_err(&e.to_string()))

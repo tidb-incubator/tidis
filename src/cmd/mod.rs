@@ -1,5 +1,4 @@
 mod get;
-use std::sync::Arc;
 
 pub use get::Get;
 
@@ -25,8 +24,6 @@ mod setex;
 pub use setex::SetEX;
 
 mod ttl;
-use tikv_client::Transaction;
-use tokio::sync::Mutex;
 pub use ttl::TTL;
 
 mod subscribe;
@@ -191,6 +188,7 @@ pub enum Command {
     
     // hash
     Hset(Hset),
+    Hmset(Hset),
     Hget(Hget),
     Hmget(Hmget),
     Hlen(Hlen),
@@ -283,7 +281,7 @@ impl Command {
             "incr" => Command::Incr(Incr::parse_frames(&mut parse)?),
             "decr" => Command::Decr(Decr::parse_frames(&mut parse)?),
             "hset" => Command::Hset(Hset::parse_frames(&mut parse)?),
-            "hmset" => Command::Hset(Hset::parse_frames(&mut parse)?),
+            "hmset" => Command::Hmset(Hset::parse_frames(&mut parse)?),
             "hget" => Command::Hget(Hget::parse_frames(&mut parse)?),
             "hmget" => Command::Hmget(Hmget::parse_frames(&mut parse)?),
             "hlen" => Command::Hlen(Hlen::parse_frames(&mut parse)?),
@@ -365,7 +363,7 @@ impl Command {
             "pexpire" => Command::Pexpire(Expire::parse_argv(argv)?),
             "pexpireat" => Command::PexpireAt(Expire::parse_argv(argv)?),
             "hset" => Command::Hset(Hset::parse_argv(argv)?),
-            "hmset" => Command::Hset(Hset::parse_argv(argv)?),
+            "hmset" => Command::Hmset(Hset::parse_argv(argv)?),
             "hget" => Command::Hget(Hget::parse_argv(argv)?),
             "hmget" => Command::Hmget(Hmget::parse_argv(argv)?),
             "hlen" => Command::Hlen(Hlen::parse_argv(argv)?),
@@ -447,7 +445,8 @@ impl Command {
             Exists(cmd) => cmd.apply(dst).await,
             Incr(cmd) => cmd.apply(dst).await,
             Decr(cmd) => cmd.apply(dst).await,
-            Hset(cmd) => cmd.apply(dst).await,
+            Hset(cmd) => cmd.apply(dst, false).await,
+            Hmset(cmd) => cmd.apply(dst, true).await,
             Hget(cmd) => cmd.apply(dst).await,
             Hmget(cmd) => cmd.apply(dst).await,
             Hlen(cmd) => cmd.apply(dst).await,
@@ -518,6 +517,7 @@ impl Command {
             Command::Incr(_) => "incr",
             Command::Decr(_) => "decr",
             Command::Hset(_) => "hset",
+            Command::Hmset(_) => "hmset",
             Command::Hget(_) => "hget",
             Command::Hmget(_) => "hmget",
             Command::Hlen(_) => "hlen",

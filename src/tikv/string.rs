@@ -1,5 +1,5 @@
 use ::futures::future::{FutureExt};
-use crate::{Frame, utils::{resp_bulk, resp_nil}};
+use crate::{Frame, utils::{resp_bulk, resp_nil, resp_ok}};
 use std::{collections::HashMap};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -75,7 +75,7 @@ impl StringCommandCtx {
         let client = get_client()?;
         let ekey = KeyEncoder::new().encode_rawkv_string(key);
         let _ = client.put(ekey, val.to_vec()).await?;
-        Ok(Frame::Integer(1))
+        Ok(resp_ok())
     }
     
     pub async fn do_async_txnkv_put(self, key: &str, val: &Bytes, timestamp: u64) -> AsyncResult<Frame> {
@@ -89,7 +89,7 @@ impl StringCommandCtx {
         }.boxed()).await;
         match resp {
             Ok(_) => {
-                Ok(Frame::Integer(1)) 
+                Ok(resp_ok())
             },
             Err(e) => {
                 Err(RTError::StringError(e.to_string()))
@@ -188,9 +188,9 @@ impl StringCommandCtx {
         let ekey = KeyEncoder::new().encode_rawkv_string(key);
         let (_, swapped) = client.compare_and_swap(ekey, None.into(), value.to_vec()).await?;
         if swapped {
-            Ok(Frame::Integer(1))
+            Ok(resp_ok())
         } else {
-            Ok(Frame::Integer(0))
+            Ok(resp_nil())
         } 
     }
     
@@ -222,7 +222,11 @@ impl StringCommandCtx {
     
         match resp {
             Ok(n) => {
-                Ok(resp_int(n))
+                if n == 0 {
+                    Ok(resp_nil())
+                } else {
+                    Ok(resp_ok())
+                }
             },
             Err(e) => {
                 Ok(resp_err(&e.to_string()))

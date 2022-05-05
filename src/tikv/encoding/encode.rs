@@ -190,6 +190,11 @@ impl KeyEncoder {
         ret.into()
     }
 
+    pub fn encode_txnkv_zset_score_key_start(&self, key: &str) -> Key {
+        let ret = format!("x_{}_S_Z_{}_", self.instance_id, key);
+        ret.into()
+    }
+
 
     pub fn encode_string_end(&self) -> Key {
         let prefix = self.get_prefix(DataType::String);

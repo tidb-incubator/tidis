@@ -302,7 +302,7 @@ impl ZsetCommandCtx {
                     max += size as i64;
                 }
 
-                let start_key = KeyEncoder::new().encode_txnkv_zset_data_key_start(key);
+                let start_key = KeyEncoder::new().encode_txnkv_zset_score_key_start(key);
                 let range = start_key..;
                 let from_range: BoundRange = range.into();
                 let iter = ss.scan(from_range, size.try_into().unwrap()).await?;
@@ -310,6 +310,7 @@ impl ZsetCommandCtx {
                 let mut idx = 0;
                 for kv in iter {
                     if idx < min {
+                        idx += 1;
                         continue;
                     }
                     if idx > max {
@@ -318,7 +319,7 @@ impl ZsetCommandCtx {
                     idx += 1;
 
                     // decode member key from data key
-                    let member = KeyDecoder::new().decode_key_zset_member_from_datakey(key, kv.0);
+                    let member = kv.1;
                     if reverse {
                         resp.insert(0, resp_bulk(member));
                     } else {
@@ -326,7 +327,7 @@ impl ZsetCommandCtx {
                     }
                     if with_scores {
                         // decode vec[u8] to i64
-                        let score = KeyDecoder::new().decode_key_zset_data_value(&kv.1);
+                        let score = KeyDecoder::new().decode_key_zset_score_from_scorekey(key ,kv.0);
                         if reverse {
                             resp.insert(0, resp_bulk(score.to_string().as_bytes().to_vec()));
                         } else {

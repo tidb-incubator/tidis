@@ -12,6 +12,8 @@ use crate::utils::{
     redis_resp_to_lua_resp,
 };
 
+use crate::tikv::LUA_CTX;
+
 use mlua::{
     Lua,
     Value as LuaValue,
@@ -27,21 +29,11 @@ pub struct LuaCommandCtx {
     lua: Arc<Mutex<Lua>>,
 }
 
-
-pub async fn redis_pcall(_lua: &Lua, arg: String) -> Result<String> {
-    Ok(arg)
-}
-
 impl LuaCommandCtx {
     pub fn new(txn: Option<Arc<Mutex<Transaction>>>) -> Self {
         LuaCommandCtx {
             txn: txn,
-            lua: Arc::new(Mutex::new(Lua::new_with(StdLib::STRING
-                |StdLib::TABLE
-                |StdLib::IO
-                |StdLib::MATH
-                |StdLib::OS, 
-                LuaOptions::new()).unwrap())),
+            lua: LUA_CTX.clone(),
         }
     }
 
@@ -166,6 +158,7 @@ impl LuaCommandCtx {
         // TODO async call
         let chunk = lua.load(script);
         let resp: LuaValue = chunk.eval_async().await?;
+        //let resp: LuaValue = chunk.eval()?;
         // convert lua value to redis value
         let redis_resp = lua_resp_to_redis_resp(resp);
 

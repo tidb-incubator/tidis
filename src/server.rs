@@ -8,12 +8,14 @@ use crate::{Command, Connection, Db, DbDropGuard, Shutdown};
 
 use std::future::Future;
 use async_std::net::{TcpListener, TcpStream};
-use tokio::runtime::Runtime;
-use tokio::sync::{broadcast, mpsc, Semaphore};
-use tokio::time::{self, Duration, Instant};
-use tracing::{debug, error, info, instrument};
-use tokio::task;
 
+use tokio::sync::{broadcast, mpsc, Semaphore, Mutex};
+use tokio::time::{self, Duration, Instant};
+use tokio::task::{self, LocalSet};
+use tokio::runtime::{Runtime, Builder};
+use tokio_util::task::LocalPoolHandle;
+
+use tracing::{debug, error, info, instrument};
 /// Server listener state. Created in the `run` call. It includes a `run` method
 /// which performs the TCP listening and initialization of per-connection state.
 #[derive(Debug)]
@@ -168,45 +170,52 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) {
     // asynchronous Rust. See the API docs for more details:
     //
     // https://docs.rs/tokio/*/tokio/macro.select.html
-    tokio::select! {
-        res = server.run() => {
-            // If an error is received here, accepting connections from the TCP
-            // listener failed multiple times and the server is giving up and
-            // shutting down.
-            //
-            // Errors encountered when handling individual connections do not
-            // bubble up to this point.
-            if let Err(err) = res {
-                error!(cause = %err, "failed to accept");
+
+    let local = task::LocalSet::new();
+
+    local.run_until(async move {
+        tokio::select! {
+            res = server.run() => {
+                // If an error is received here, accepting connections from the TCP
+                // listener failed multiple times and the server is giving up and
+                // shutting down.
+                //
+                // Errors encountered when handling individual connections do not
+                // bubble up to this point.
+                if let Err(err) = res {
+                    error!(cause = %err, "failed to accept");
+                }
+            }
+            _ = shutdown => {
+                // The shutdown signal has been received.
+                info!("shutting down");
             }
         }
-        _ = shutdown => {
-            // The shutdown signal has been received.
-            info!("shutting down");
-        }
-    }
 
-    // Extract the `shutdown_complete` receiver and transmitter
-    // explicitly drop `shutdown_transmitter`. This is important, as the
-    // `.await` below would otherwise never complete.
-    let Listener {
-        mut shutdown_complete_rx,
-        shutdown_complete_tx,
-        notify_shutdown,
-        ..
-    } = server;
+        // Extract the `shutdown_complete` receiver and transmitter
+        // explicitly drop `shutdown_transmitter`. This is important, as the
+        // `.await` below would otherwise never complete.
+        let Listener {
+            mut shutdown_complete_rx,
+            shutdown_complete_tx,
+            notify_shutdown,
+            ..
+        } = server;
 
-    // When `notify_shutdown` is dropped, all tasks which have `subscribe`d will
-    // receive the shutdown signal and can exit
-    drop(notify_shutdown);
-    // Drop final `Sender` so the `Receiver` below can complete
-    drop(shutdown_complete_tx);
 
-    // Wait for all active connections to finish processing. As the `Sender`
-    // handle held by the listener has been dropped above, the only remaining
-    // `Sender` instances are held by connection handler tasks. When those drop,
-    // the `mpsc` channel will close and `recv()` will return `None`.
-    let _ = shutdown_complete_rx.recv().await;
+        // When `notify_shutdown` is dropped, all tasks which have `subscribe`d will
+        // receive the shutdown signal and can exit
+        drop(notify_shutdown);
+        // Drop final `Sender` so the `Receiver` below can complete
+        drop(shutdown_complete_tx);
+
+        // Wait for all active connections to finish processing. As the `Sender`
+        // handle held by the listener has been dropped above, the only remaining
+        // `Sender` instances are held by connection handler tasks. When those drop,
+        // the `mpsc` channel will close and `recv()` will return `None`.
+        let _ = shutdown_complete_rx.recv().await;
+        
+    }).await;
 }
 
 impl Listener {
@@ -227,10 +236,8 @@ impl Listener {
     /// strategy, which is what we do here.
     async fn run(&mut self) -> crate::Result<()> {
         info!("accepting inbound connections");
-
-        // Construct a local task set that can run `!Send` futures.
-        let local = task::LocalSet::new();
-
+        let local_pool = LocalPoolHandle::new(10);
+        
         loop {
             // Wait for a permit to become available
             //
@@ -285,17 +292,25 @@ impl Listener {
             //     }
             // });
 
+            
             // Use localset to spawn task, because of mlua async function is not `Send`
-            local.run_until(async move {
-                task::spawn_local(async move {
-                    // Process the connection. If an error is encountered, log it.
-                    CURRENT_CONNECTION_COUNTER.inc();
-                    if let Err(err) = handler.run().await {
-                        println!("Connection Error: {:?}", &err);
-                        error!(cause = ?err, "connection error");
-                    }
-                }).await.unwrap();
-            }).await;
+            task::spawn_local(async move {
+                // Process the connection. If an error is encountered, log it.
+                CURRENT_CONNECTION_COUNTER.inc();
+                if let Err(err) = handler.run().await {
+                    println!("Connection Error: {:?}", &err);
+                    error!(cause = ?err, "connection error");
+                }
+            });
+
+            // local_pool.spawn_pinned(|| async move {
+            //     // Process the connection. If an error is encountered, log it.
+            //     CURRENT_CONNECTION_COUNTER.inc();
+            //     if let Err(err) = handler.run().await {
+            //         println!("Connection Error: {:?}", &err);
+            //         error!(cause = ?err, "connection error");
+            //     }
+            // }).await.unwrap();
         }
     }
 

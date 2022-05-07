@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
+use crate::db::Db;
 use crate::{Frame, Command, utils::resp_invalid_arguments};
 use tikv_client::{Transaction};
 use super::{
@@ -9,7 +10,7 @@ use super::{
 };
 use crate::utils::{
     lua_resp_to_redis_resp,
-    redis_resp_to_lua_resp,
+    redis_resp_to_lua_resp, resp_err,
 };
 
 use crate::tikv::LUA_CTX;
@@ -154,8 +155,6 @@ impl LuaCommandCtx {
         // register to global table
         globals.set("redis", redis)?;
 
-        // TODO cache script
-        // TODO async call
         let chunk = lua.load(script);
         let resp: LuaValue = chunk.eval_async().await?;
         //let resp: LuaValue = chunk.eval()?;
@@ -166,7 +165,7 @@ impl LuaCommandCtx {
         Ok(redis_resp)
     }
 
-    pub async fn do_async_eval(self, script: &str, keys: &Vec<String>, args: &Vec<String>) -> AsyncResult<Frame> {
+    pub async fn do_async_eval(self, script: &str, db: &Db, keys: &Vec<String>, args: &Vec<String>) -> AsyncResult<Frame> {
         let lua_resp = self.clone().do_async_eval_inner(script, keys, args).await;
         match lua_resp {
             Ok(resp) => {
@@ -177,5 +176,28 @@ impl LuaCommandCtx {
                 Err(RTError::StringError(err.to_string()))
             }
         }
+    }
+
+    pub async fn do_async_evalsha(self, sha1: &str, db: &Db, keys: &Vec<String>, args: &Vec<String>) -> AsyncResult<Frame> {
+        // get script from cache with sha1 key
+        let script = db.get_script(sha1);
+        match script {
+            Some(script) => {
+                let lua_resp = self.clone().do_async_eval_inner(&String::from_utf8_lossy(&script.to_vec()), keys, args).await;
+                match lua_resp {
+                    Ok(resp) => {
+                        Ok(resp)
+                    },
+                    Err(err) => {
+                        //return Ok(resp_err(&err.to_string()));
+                        Err(RTError::StringError(err.to_string()))
+                    }
+                }
+            },
+            None => {
+                Ok(resp_err("NOSCRIPT No matching script. Please use EVAL."))
+            }
+        }
+        
     }
 }

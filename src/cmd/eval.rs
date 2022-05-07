@@ -1,14 +1,12 @@
 use std::sync::Arc;
 
+use crate::db::Db;
 use crate::tikv::get_txn_client;
 use crate::utils::{resp_err, resp_int, resp_sstr, resp_str};
 use crate::{Connection, Frame, Parse};
 use crate::tikv::lua::LuaCommandCtx;
 use crate::config::{is_use_txn_api};
 use crate::tikv::errors::AsyncResult;
-use mlua::{
-    Lua
-};
 
 
 use tokio::sync::Mutex;
@@ -70,8 +68,8 @@ impl Eval {
     }
 
     #[instrument(skip(self, dst))]
-    pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        let response = match self.eval().await {
+    pub(crate) async fn apply(self, dst: &mut Connection, is_sha: bool, db: &Db) -> crate::Result<()> {
+        let response = match self.eval(is_sha, db).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
@@ -83,7 +81,7 @@ impl Eval {
         Ok(())
     }
 
-    async fn eval(&self) -> AsyncResult<Frame> {
+    async fn eval(&self, is_sha: bool, db: &Db) -> AsyncResult<Frame> {
         if !is_use_txn_api() {
             return Ok(resp_err("not supported yet"));
         }
@@ -95,7 +93,12 @@ impl Eval {
 
         let ctx = LuaCommandCtx::new(Some(txn_rc.clone()));
 
-        let resp = ctx.do_async_eval(&self.script, &self.keys, &self.args).await;
+        let resp;
+        if is_sha {
+            resp = ctx.do_async_evalsha(&self.script, db, &self.keys, &self.args).await;
+        } else {
+            resp = ctx.do_async_eval(&self.script, db, &self.keys, &self.args).await;
+        }
         match resp {
             Ok(r) => {
                 let mut txn = txn_rc.lock().await;

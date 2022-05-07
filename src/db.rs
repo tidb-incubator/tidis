@@ -29,7 +29,7 @@ pub(crate) struct DbDropGuard {
 /// runs until all instances of `Db` are dropped, at which point the task
 /// terminates.
 #[derive(Debug, Clone)]
-pub(crate) struct Db {
+pub struct Db {
     /// Handle to shared state. The background task will also have an
     /// `Arc<Shared>`.
     shared: Arc<Shared>,
@@ -62,6 +62,8 @@ struct State {
     /// The key-value data. We are not trying to do anything fancy so a
     /// `std::collections::HashMap` works fine.
     entries: HashMap<String, Entry>,
+
+    scripts: HashMap<String, Bytes>,
 
     pub_sub: HashMap<String, broadcast::Sender<Bytes>>,
 
@@ -129,6 +131,7 @@ impl Db {
         let shared = Arc::new(Shared {
             state: Mutex::new(State {
                 entries: HashMap::new(),
+                scripts: HashMap::new(),
                 pub_sub: HashMap::new(),
                 expirations: BTreeMap::new(),
                 next_id: 0,
@@ -141,6 +144,21 @@ impl Db {
         tokio::spawn(purge_expired_tasks(shared.clone()));
 
         Db { shared }
+    }
+
+    pub(crate) fn get_script(&self, key: &str) -> Option<Bytes> {
+        let state = self.shared.state.lock().unwrap();
+        state.scripts.get(key).map(|s| s.clone())
+    }
+
+    pub(crate) fn set_script(&self, key: String, value: Bytes) {
+        let mut state = self.shared.state.lock().unwrap();
+        state.scripts.insert(key, value);
+    }
+
+    pub(crate) fn flush_script(&self) {
+        let mut state = self.shared.state.lock().unwrap();
+        state.scripts.clear();
     }
 
     /// Get the value associated with a key.

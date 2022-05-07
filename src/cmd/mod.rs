@@ -155,6 +155,9 @@ pub use zpop::Zpop;
 mod zrank;
 pub use zrank::Zrank;
 
+mod script;
+pub use script::Script;
+
 mod unknown;
 pub use unknown::Unknown;
 
@@ -233,6 +236,8 @@ pub enum Command {
 
     // scripts
     Eval(Eval),
+    Evalsha(Eval),
+    Script(Script),
     Unknown(Unknown),
 }
 
@@ -302,6 +307,8 @@ impl Command {
             "lset" => Command::Lset(Lset::parse_frames(&mut parse)?),
             "ltrim" => Command::Ltrim(Ltrim::parse_frames(&mut parse)?),
             "eval" => Command::Eval(Eval::parse_frames(&mut parse)?),
+            "evalsha" => Command::Evalsha(Eval::parse_frames(&mut parse)?),
+            "script" => Command::Script(Script::parse_frames(&mut parse)?),
             "sadd" => Command::Sadd(Sadd::parse_frames(&mut parse)?),
             "scard" => Command::Scard(Scard::parse_frames(&mut parse)?),
             "sismember" => Command::Sismember(Sismember::parse_frames(&mut parse)?),
@@ -466,7 +473,9 @@ impl Command {
             Lindex(cmd) => cmd.apply(dst).await,
             Lset(cmd) => cmd.apply(dst).await,
             Ltrim(cmd) => cmd.apply(dst).await,
-            Eval(cmd) => cmd.apply(dst).await,
+            Eval(cmd) => cmd.apply(dst, false, db).await,
+            Evalsha(cmd) => cmd.apply(dst, true, db).await,
+            Script(cmd) => cmd.apply(dst, db).await,
             Sadd(cmd) => cmd.apply(dst).await,
             Scard(cmd) => cmd.apply(dst).await,
             Sismember(cmd) => cmd.apply(dst).await,
@@ -538,6 +547,8 @@ impl Command {
             Command::Lset(_) => "lset",
             Command::Ltrim(_) => "ltrim",
             Command::Eval(_) => "eval",
+            Command::Evalsha(_) => "evalsha",
+            Command::Script(_) => "script",
             Command::Sadd(_) => "sadd",
             Command::Scard(_) => "scard",
             Command::Sismember(_) => "sismember",

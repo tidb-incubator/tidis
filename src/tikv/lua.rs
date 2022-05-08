@@ -165,7 +165,7 @@ impl LuaCommandCtx {
         Ok(redis_resp)
     }
 
-    pub async fn do_async_eval(self, script: &str, db: &Db, keys: &Vec<String>, args: &Vec<String>) -> AsyncResult<Frame> {
+    pub async fn do_async_eval(self, script: &str, _: &Db, keys: &Vec<String>, args: &Vec<String>) -> AsyncResult<Frame> {
         let lua_resp = self.clone().do_async_eval_inner(script, keys, args).await;
         match lua_resp {
             Ok(resp) => {

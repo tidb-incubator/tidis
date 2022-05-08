@@ -9,12 +9,12 @@ use crate::{Command, Connection, Db, DbDropGuard, Shutdown};
 use std::future::Future;
 use async_std::net::{TcpListener, TcpStream};
 
-use tokio::sync::{broadcast, mpsc, Semaphore, Mutex};
+use tokio::sync::{broadcast, mpsc, Semaphore};
 use tokio::time::{self, Duration, Instant};
 use tokio::task::{self, LocalSet};
-use tokio::runtime::{Runtime, Builder};
-use tokio_util::task::LocalPoolHandle;
 
+
+use tokio_util::task::LocalPoolHandle;
 use tracing::{debug, error, info, instrument};
 /// Server listener state. Created in the `run` call. It includes a `run` method
 /// which performs the TCP listening and initialization of per-connection state.
@@ -171,9 +171,8 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) {
     //
     // https://docs.rs/tokio/*/tokio/macro.select.html
 
-    let local = task::LocalSet::new();
-
-    local.run_until(async move {
+    //let local = task::LocalSet::new();
+    //local.run_until(async move {
         tokio::select! {
             res = server.run() => {
                 // If an error is received here, accepting connections from the TCP
@@ -215,7 +214,7 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) {
         // the `mpsc` channel will close and `recv()` will return `None`.
         let _ = shutdown_complete_rx.recv().await;
         
-    }).await;
+    //}).await;
 }
 
 impl Listener {
@@ -236,8 +235,8 @@ impl Listener {
     /// strategy, which is what we do here.
     async fn run(&mut self) -> crate::Result<()> {
         info!("accepting inbound connections");
-        let local_pool = LocalPoolHandle::new(10);
-        
+        //let local = task::LocalSet::new();
+        let local_pool = LocalPoolHandle::new(12);
         loop {
             // Wait for a permit to become available
             //
@@ -294,7 +293,16 @@ impl Listener {
 
             
             // Use localset to spawn task, because of mlua async function is not `Send`
-            task::spawn_local(async move {
+            // task::spawn_local(async move {
+            //     // Process the connection. If an error is encountered, log it.
+            //     CURRENT_CONNECTION_COUNTER.inc();
+            //     if let Err(err) = handler.run().await {
+            //         println!("Connection Error: {:?}", &err);
+            //         error!(cause = ?err, "connection error");
+            //     }
+            // });
+
+            local_pool.spawn_pinned(|| async move {
                 // Process the connection. If an error is encountered, log it.
                 CURRENT_CONNECTION_COUNTER.inc();
                 if let Err(err) = handler.run().await {
@@ -303,14 +311,6 @@ impl Listener {
                 }
             });
 
-            // local_pool.spawn_pinned(|| async move {
-            //     // Process the connection. If an error is encountered, log it.
-            //     CURRENT_CONNECTION_COUNTER.inc();
-            //     if let Err(err) = handler.run().await {
-            //         println!("Connection Error: {:?}", &err);
-            //         error!(cause = ?err, "connection error");
-            //     }
-            // }).await.unwrap();
         }
     }
 

@@ -88,6 +88,21 @@ impl TxnClientWrapper<'static> {
         self.client.begin_with_options(txn_options).await
     }
 
+    fn error_retryable(&self, err: &Error) -> bool {
+        let ret = match err {
+            Error::RegionError(_) => true,
+            Error::EntryNotFoundInRegionCache => true,
+            Error::KvError { message: _ } => true,
+            Error::MultipleKeyErrors(_) => true,
+            Error::PessimisticLockError{inner: _, success_keys: _ } => true,
+            _ => false,
+        };
+        if ret {
+            TIKV_CLIENT_RETRIES.inc();
+        }
+        ret
+    }
+
     
     /// Auto begin new txn, call f with the txn, commit or callback due to the result
     pub async fn exec_in_txn<T, F>(&self, txn: Option<Arc<Mutex<Transaction>>>, f: F) -> AsyncResult<T> where 
@@ -110,7 +125,7 @@ impl TxnClientWrapper<'static> {
                 // begin new transaction
                 let txn = self.begin().await?;
                 let txn_arc = Arc::new(Mutex::new(txn));
-
+    
                 // call f
                 let result = f(txn_arc.clone()).await;
                 let mut txn = txn_arc.lock().await;

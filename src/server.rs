@@ -4,7 +4,8 @@
 //! spawning a task per connection.
 
 use crate::metrics::{CURRENT_CONNECTION_COUNTER, REQUEST_CMD_HANDLE_TIME, REQUEST_CMD_FINISH_COUNTER, REQUEST_CMD_COUNTER, REQUEST_COUNTER};
-use crate::{Command, Connection, Db, DbDropGuard, Shutdown};
+use crate::utils::{resp_err, resp_ok};
+use crate::{Command, Connection, Db, DbDropGuard, Shutdown, is_auth_enabled, is_auth_matched};
 
 use std::future::Future;
 use async_std::net::{TcpListener, TcpStream};
@@ -107,6 +108,11 @@ struct Handler {
     /// processed for the peer is continued until it reaches a safe state, at
     /// which point the connection is terminated.
     shutdown: Shutdown,
+
+    /// Connection authorized.
+    /// authorized is true when no requirepass set to the server, otherwise false by default
+    /// set authorized to true after `AUTH password` command executed.
+    authorized: bool,
 
     /// Not used directly. Instead, when `Handler` is dropped...?
     _shutdown_complete: mpsc::Sender<()>,
@@ -280,6 +286,8 @@ impl Listener {
                 // Receive shutdown notifications.
                 shutdown: Shutdown::new(self.notify_shutdown.subscribe()),
 
+                authorized: if is_auth_enabled() { false } else { true },
+
                 // Notifies the receiver half once all clones are
                 // dropped.
                 _shutdown_complete: self.shutdown_complete_tx.clone(),
@@ -399,6 +407,7 @@ impl Handler {
             REQUEST_COUNTER.inc();
             REQUEST_CMD_COUNTER.with_label_values(&[&cmd_name]).inc();
 
+
             // Logs the `cmd` object. The syntax here is a shorthand provided by
             // the `tracing` crate. It can be thought of as similar to:
             //
@@ -410,15 +419,37 @@ impl Handler {
             // as key-value pairs.
             debug!(?cmd);
 
-            // Perform the work needed to apply the command. This may mutate the
-            // database state as a result.
-            //
-            // The connection is passed into the apply function which allows the
-            // command to write response frames directly to the connection. In
-            // the case of pub/sub, multiple frames may be send back to the
-            // peer.
-            cmd.apply(&self.db, &mut self.connection, &mut self.shutdown)
-                .await?;
+            match cmd {
+                Command::Auth(c) => {
+                    // check password and update connection authorized flag
+                    if !is_auth_enabled() {
+                        self.connection.write_frame(&resp_err("ERR Client sent AUTH, but no password is set")).await?;
+                    } else {
+                        if is_auth_matched(c.passwd()) {
+                            self.connection.write_frame(&resp_ok()).await?;
+                            self.authorized = true;
+                        } else {
+                            self.connection.write_frame(&resp_err("ERR invalid password")).await?;
+                        }
+                    }
+                },
+                _ => {
+                    if !self.authorized {
+                        self.connection.write_frame(&resp_err("NOAUTH Authentication required.")).await?;
+                    } else {
+                        // Perform the work needed to apply the command. This may mutate the
+                        // database state as a result.
+                        //
+                        // The connection is passed into the apply function which allows the
+                        // command to write response frames directly to the connection. In
+                        // the case of pub/sub, multiple frames may be send back to the
+                        // peer.
+                        cmd.apply(&self.db, &mut self.connection, &mut self.shutdown)
+                            .await?;
+                    }
+                }
+            }
+
             let duration = Instant::now() - start_at;
             REQUEST_CMD_HANDLE_TIME.with_label_values(&[&cmd_name]).observe(duration_to_sec(duration));
             REQUEST_CMD_FINISH_COUNTER.with_label_values(&[&cmd_name]).inc();

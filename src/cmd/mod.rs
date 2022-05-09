@@ -161,6 +161,9 @@ pub use script::Script;
 mod unknown;
 pub use unknown::Unknown;
 
+mod auth;
+pub use auth::Auth;
+
 use crate::{Connection, Db, Frame, Parse, ParseError, Shutdown};
 
 /// Enumeration of supported Redis commands.
@@ -238,6 +241,8 @@ pub enum Command {
     Eval(Eval),
     Evalsha(Eval),
     Script(Script),
+
+    Auth(Auth),
     Unknown(Unknown),
 }
 
@@ -328,6 +333,7 @@ impl Command {
             "zcount" => Command::Zcount(Zcount::parse_frames(&mut parse)?),
             "zpopmin" => Command::Zpopmin(Zpop::parse_frames(&mut parse)?),
             "zrank" => Command::Zrank(Zrank::parse_frames(&mut parse)?),
+            "auth" => Command::Auth(Auth::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -495,6 +501,8 @@ impl Command {
             Zcount(cmd) => cmd.apply(dst).await,
             Zpopmin(cmd) => cmd.apply(dst, true).await,
             Zrank(cmd) => cmd.apply(dst).await,
+            Auth(cmd) => cmd.apply(dst).await,
+
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
             // context of a `Subscribe` command.
@@ -568,6 +576,7 @@ impl Command {
             Command::Zcount(_) => "zcount",
             Command::Zpopmin(_) => "zpopmin",
             Command::Zrank(_) => "zrank",
+            Command::Auth(_) => "auth",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

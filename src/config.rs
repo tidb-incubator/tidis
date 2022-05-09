@@ -15,7 +15,10 @@ struct Server {
     instance_id: Option<String>,
     prometheus_listen: Option<String>,
     prometheus_port: Option<u16>,
+    // username: Option<String>,
+    password: Option<String>,
 }
+
 #[derive(Debug, Deserialize, Clone)]
 struct Backend {
     use_txn_api: Option<bool>,
@@ -27,6 +30,29 @@ struct Backend {
 
 // Config
 pub static mut SERVER_CONFIG: Option<Config> = None;
+
+pub fn is_auth_enabled() -> bool {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(s) = c.server.password.clone() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+// return false only if auth is enabled and password mismatch
+pub fn is_auth_matched(password: &str) -> bool {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(s) = c.server.password.clone() {
+                return s == password;
+            }
+        }
+    }
+    true
+}
 
 pub fn config_listen_or_default() -> String {
     unsafe {

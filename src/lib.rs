@@ -80,6 +80,8 @@ pub use config::config_port_or_default;
 pub use config::config_prometheus_listen_or_default;
 pub use config::config_prometheus_port_or_default;
 pub use config::config_local_pool_number;
+pub use config::is_auth_enabled;
+pub use config::is_auth_matched;
 
 /// Default port that a redis server listens on.
 ///

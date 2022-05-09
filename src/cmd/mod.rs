@@ -501,12 +501,13 @@ impl Command {
             Zcount(cmd) => cmd.apply(dst).await,
             Zpopmin(cmd) => cmd.apply(dst, true).await,
             Zrank(cmd) => cmd.apply(dst).await,
-            Auth(cmd) => cmd.apply(dst).await,
 
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
             // context of a `Subscribe` command.
             Unsubscribe(_) => Err("`Unsubscribe` is unsupported in this context".into()),
+
+            _ => Ok(())
         }
     }
 

@@ -73,6 +73,13 @@ pub use config::is_try_one_pc_commit;
 pub use config::is_use_async_commit;
 pub use config::is_use_txn_api;
 pub use config::is_use_pessimistic_txn;
+pub use config::config_instance_id_or_default;
+pub use config::config_listen_or_default;
+pub use config::config_pd_addrs_or_default;
+pub use config::config_port_or_default;
+pub use config::config_prometheus_listen_or_default;
+pub use config::config_prometheus_port_or_default;
+pub use config::config_local_pool_number;
 
 /// Default port that a redis server listens on.
 ///

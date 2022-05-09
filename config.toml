@@ -11,3 +11,4 @@ use_txn_api = true
 use_async_commit = true
 try_one_pc_commit = true
 use_pessimistic_txn = true
+local_pool_number = 12

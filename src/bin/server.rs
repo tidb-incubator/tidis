@@ -1,5 +1,17 @@
-use tikv_service::{server, DEFAULT_PORT, set_instance_id, do_async_raw_connect, do_async_connect, PrometheusServer};
-use tikv_service::{Config, set_global_config};
+use tikv_service::{
+    server,
+    set_instance_id,
+    do_async_connect,
+    PrometheusServer,
+    Config,
+    set_global_config,
+    config_listen_or_default,
+    config_port_or_default,
+    config_prometheus_listen_or_default,
+    config_prometheus_port_or_default,
+    config_pd_addrs_or_default,
+    config_instance_id_or_default,
+};
 
 use structopt::StructOpt;
 use async_std::net::TcpListener;
@@ -22,8 +34,6 @@ pub async fn main() -> tikv_service::Result<()> {
             let config_content = fs::read_to_string(config_file_name)
             .expect("Failed to read config file");
 
-            println!("{:?}", config_content);
-
             // deserialize toml config
             config = match toml::from_str(&config_content) {
                 Ok(d) => Some(d),
@@ -44,12 +54,18 @@ pub async fn main() -> tikv_service::Result<()> {
         None => (),
     }
 
-    let port = cli.port.as_deref().unwrap_or(DEFAULT_PORT);
-    let listen_addr = cli.listen_addr.as_deref().unwrap_or("0.0.0.0");
-    let pd_addrs = cli.pd_addrs.as_deref().unwrap_or("127.0.0.1:2379");
-    let instance_id_str = cli.instance_id.as_deref().unwrap_or("1");
-    let prom_listen = cli.prom_listen_addr.as_deref().unwrap_or("0.0.0.0");
-    let prom_port = cli.prom_port.as_deref().unwrap_or("8080");
+    let c_port = config_port_or_default();
+    let port = cli.port.as_deref().unwrap_or(&c_port);
+    let c_listen = config_listen_or_default();
+    let listen_addr = cli.listen_addr.as_deref().unwrap_or(&c_listen);
+    let c_pd_addrs = config_pd_addrs_or_default();
+    let pd_addrs = cli.pd_addrs.as_deref().unwrap_or(&c_pd_addrs);
+    let c_instance_id = config_instance_id_or_default();
+    let instance_id_str = cli.instance_id.as_deref().unwrap_or(&c_instance_id);
+    let c_prom_listen = config_prometheus_listen_or_default();
+    let prom_listen = cli.prom_listen_addr.as_deref().unwrap_or(&c_prom_listen);
+    let c_prom_port = config_prometheus_port_or_default();
+    let prom_port = cli.prom_port.as_deref().unwrap_or(&c_prom_port);
     let mut instance_id: u64 = 0;
     match instance_id_str.parse::<u64>() {
         Ok(val) => {

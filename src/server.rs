@@ -11,10 +11,13 @@ use async_std::net::{TcpListener, TcpStream};
 
 use tokio::sync::{broadcast, mpsc, Semaphore};
 use tokio::time::{self, Duration, Instant};
-use tokio::task::{self, LocalSet};
+// use tokio::task::{self, LocalSet};
 
 
 use tokio_util::task::LocalPoolHandle;
+
+use crate::config_local_pool_number;
+
 use tracing::{debug, error, info, instrument};
 /// Server listener state. Created in the `run` call. It includes a `run` method
 /// which performs the TCP listening and initialization of per-connection state.
@@ -236,7 +239,9 @@ impl Listener {
     async fn run(&mut self) -> crate::Result<()> {
         info!("accepting inbound connections");
         //let local = task::LocalSet::new();
-        let local_pool = LocalPoolHandle::new(12);
+
+        let local_pool_number = config_local_pool_number();
+        let local_pool = LocalPoolHandle::new(local_pool_number);
         loop {
             // Wait for a permit to become available
             //

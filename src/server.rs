@@ -14,6 +14,12 @@ use tokio::sync::{broadcast, mpsc, Semaphore};
 use tokio::time::{self, Duration, Instant};
 // use tokio::task::{self, LocalSet};
 
+use mlua::{
+    Lua,
+    StdLib,
+    LuaOptions,
+};
+
 
 use tokio_util::task::LocalPoolHandle;
 
@@ -113,6 +119,9 @@ struct Handler {
     /// authorized is true when no requirepass set to the server, otherwise false by default
     /// set authorized to true after `AUTH password` command executed.
     authorized: bool,
+
+    /// Lua vm context, lazy initialized when eval/evalsha called
+    lua: Option<Lua>,
 
     /// Not used directly. Instead, when `Handler` is dropped...?
     _shutdown_complete: mpsc::Sender<()>,
@@ -288,6 +297,8 @@ impl Listener {
 
                 authorized: if is_auth_enabled() { false } else { true },
 
+                lua: None,
+
                 // Notifies the receiver half once all clones are
                 // dropped.
                 _shutdown_complete: self.shutdown_complete_tx.clone(),
@@ -437,6 +448,21 @@ impl Handler {
                     if !self.authorized {
                         self.connection.write_frame(&resp_err("NOAUTH Authentication required.")).await?;
                     } else {
+                        match cmd {
+                            Command::Eval(_) | Command::Evalsha(_) => {
+                                if self.lua.is_none() {
+                                    // initialize the mlua once in same connection
+                                    self.lua = Some(Lua::new_with(
+                                                StdLib::STRING
+                                                    |StdLib::TABLE
+                                                    |StdLib::IO
+                                                    |StdLib::MATH
+                                                    |StdLib::OS, 
+                                                    LuaOptions::new()).unwrap());
+                                }
+                            },
+                            _ => {}
+                        }
                         // Perform the work needed to apply the command. This may mutate the
                         // database state as a result.
                         //
@@ -444,7 +470,7 @@ impl Handler {
                         // command to write response frames directly to the connection. In
                         // the case of pub/sub, multiple frames may be send back to the
                         // peer.
-                        cmd.apply(&self.db, &mut self.connection, &mut self.shutdown)
+                        cmd.apply(&self.db, &mut self.connection, &mut self.lua, &mut self.shutdown)
                             .await?;
                     }
                 }

@@ -9,6 +9,7 @@ mod mget;
 pub use mget::Mget;
 
 mod mset;
+use mlua::Lua;
 pub use mset::Mset;
 
 mod publish;
@@ -434,6 +435,7 @@ impl Command {
         self,
         db: &Db,
         dst: &mut Connection,
+        lua: &mut Option<Lua>,
         shutdown: &mut Shutdown,
     ) -> crate::Result<()> {
         use Command::*;
@@ -479,8 +481,8 @@ impl Command {
             Lindex(cmd) => cmd.apply(dst).await,
             Lset(cmd) => cmd.apply(dst).await,
             Ltrim(cmd) => cmd.apply(dst).await,
-            Eval(cmd) => cmd.apply(dst, false, db).await,
-            Evalsha(cmd) => cmd.apply(dst, true, db).await,
+            Eval(cmd) => cmd.apply(dst, false, db, lua).await,
+            Evalsha(cmd) => cmd.apply(dst, true, db, lua).await,
             Script(cmd) => cmd.apply(dst, db).await,
             Sadd(cmd) => cmd.apply(dst).await,
             Scard(cmd) => cmd.apply(dst).await,

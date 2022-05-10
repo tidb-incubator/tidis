@@ -9,6 +9,7 @@ use crate::config::{is_use_txn_api};
 use crate::tikv::errors::AsyncResult;
 
 
+use mlua::Lua;
 use tokio::sync::Mutex;
 use tracing::{debug, instrument};
 
@@ -68,8 +69,8 @@ impl Eval {
     }
 
     #[instrument(skip(self, dst))]
-    pub(crate) async fn apply(self, dst: &mut Connection, is_sha: bool, db: &Db) -> crate::Result<()> {
-        let response = match self.eval(is_sha, db).await {
+    pub(crate) async fn apply(self, dst: &mut Connection, is_sha: bool, db: &Db, lua: &Option<Lua>) -> crate::Result<()> {
+        let response = match self.eval(is_sha, db, lua).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
@@ -81,7 +82,7 @@ impl Eval {
         Ok(())
     }
 
-    async fn eval(&self, is_sha: bool, db: &Db) -> AsyncResult<Frame> {
+    async fn eval(&self, is_sha: bool, db: &Db, lua: &Option<Lua>) -> AsyncResult<Frame> {
         if !is_use_txn_api() {
             return Ok(resp_err("not supported yet"));
         }
@@ -91,7 +92,7 @@ impl Eval {
         let txn = client.begin().await?;
         let txn_rc = Arc::new(Mutex::new(txn));
 
-        let ctx = LuaCommandCtx::new(Some(txn_rc.clone()));
+        let ctx = LuaCommandCtx::new(Some(txn_rc.clone()), lua);
 
         let resp;
         if is_sha {

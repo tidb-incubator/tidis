@@ -25,24 +25,29 @@ use mlua::{
 };
 
 #[derive(Clone)]
-pub struct LuaCommandCtx {
+pub struct LuaCommandCtx<'a> {
     txn: Option<Arc<Mutex<Transaction>>>,
-    lua: Arc<Mutex<Lua>>,
+    lua: &'a Option<Lua>,
 }
 
-impl LuaCommandCtx {
-    pub fn new(txn: Option<Arc<Mutex<Transaction>>>) -> Self {
+impl<'a> LuaCommandCtx<'a> {
+    pub fn new(txn: Option<Arc<Mutex<Transaction>>>, lua: &'a Option<Lua>) -> Self {
         LuaCommandCtx {
-            txn: txn,
-            lua: LUA_CTX.clone(),
+            txn,
+            lua,
         }
     }
 
     pub async fn do_async_eval_inner(self, script: &str, keys: &Vec<String>, args: &Vec<String>) -> LuaResult<Frame> {
         let keys = keys.clone();
         let args = args.clone();
-        let lua_rc = self.lua.clone();
-        let lua = lua_rc.lock().await;
+        let lua = match self.lua {
+            Some(lua) => lua,
+            None => {
+                return Ok(resp_err("lua context is not initialized"))
+            }
+        };
+        //let lua = lua_rc.lock().await;
 
         let globals = lua.globals();
 
@@ -157,7 +162,7 @@ impl LuaCommandCtx {
 
         let chunk = lua.load(script);
         let resp: LuaValue = chunk.eval_async().await?;
-        //let resp: LuaValue = chunk.eval()?;
+
         // convert lua value to redis value
         let redis_resp = lua_resp_to_redis_resp(resp);
 

@@ -1,6 +1,7 @@
 /target
 **/*.rs.bk
 **.DS_Store
+Cargo.lock
 
 ### IntelliJ IDEA ###
 .idea

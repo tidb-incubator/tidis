@@ -149,7 +149,7 @@ impl TxnClientWrapper<'static> {
                     let result = f(txn_arc.clone()).await;
                     let mut txn = txn_arc.lock().await;
                     match result {
-                        Ok(res) => { 
+                        Ok(res) => {
                             match txn.commit().await {
                                 Ok(_) => {
                                     return Ok(res);
@@ -173,8 +173,6 @@ impl TxnClientWrapper<'static> {
                 return Err(RTError::TikvClientError(StringError("retry count exceeded".to_string())));
             }
         }
-        // TODO: add retry policy
-
     }
 
 

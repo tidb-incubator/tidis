@@ -22,7 +22,7 @@ impl SetCommandCtx {
     }
 
     pub async fn do_async_txnkv_sadd(mut self, key: &str, members: &Vec<String>) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
 
         let key = key.to_owned();
         let members = members.to_owned();
@@ -229,7 +229,7 @@ impl SetCommandCtx {
     }
 
     pub async fn do_async_txnkv_srem(mut self, key: &str, members: &Vec<String>) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
 
         let key = key.to_owned();
         let members = members.to_owned();
@@ -290,7 +290,7 @@ impl SetCommandCtx {
 
     /// spop will pop members by alphabetical order
     pub async fn do_async_txnkv_spop(mut self, key: &str, count: u64) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
         let meta_key = KeyEncoder::new().encode_txnkv_set_meta_key(&key);
 
@@ -360,7 +360,7 @@ impl SetCommandCtx {
     }
 
     pub async fn do_async_txnkv_set_del(mut self, key: &str) -> AsyncResult<i64> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
         let meta_key = KeyEncoder::new().encode_txnkv_set_meta_key(&key);
 
@@ -392,7 +392,7 @@ impl SetCommandCtx {
     }
 
     pub async fn do_async_txnkv_set_expire_if_needed(mut self, key: &str) -> AsyncResult<i64> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
         let meta_key = KeyEncoder::new().encode_txnkv_set_meta_key(&key);
 

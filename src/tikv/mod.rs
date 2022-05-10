@@ -3,12 +3,6 @@ use std::sync::{Arc, RwLock};
 use tokio::sync::Mutex;
 use std::time::Duration;
 
-use mlua::{
-    Lua,
-    StdLib,
-    LuaOptions,
-};
-
 use tikv_client::{RawClient, Transaction, TransactionClient};
 
 use self::client::RawClientWrapper;
@@ -32,14 +26,6 @@ lazy_static! {
         Arc::new(RwLock::new(HashMap::new()));
     pub static ref TIKV_TNX_CONN_POOL: Arc<Mutex<LinkedList<TransactionClient>>> =
         Arc::new(Mutex::new(LinkedList::new()));
-
-    pub static ref LUA_CTX: Arc<Mutex<Lua>> = Arc::new(Mutex::new(Lua::new_with(
-        StdLib::STRING
-        |StdLib::TABLE
-        |StdLib::IO
-        |StdLib::MATH
-        |StdLib::OS, 
-        LuaOptions::new()).unwrap()));
 }
 
 pub static mut TIKV_RAW_CLIENT: Option<RawClient> = None;

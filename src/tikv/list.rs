@@ -26,7 +26,7 @@ impl<'a> ListCommandCtx {
     }
 
     pub async fn do_async_txnkv_push(mut self, key: &str, values: &Vec<Bytes>, op_left: bool) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
         let values = values.to_owned();
     
@@ -109,7 +109,7 @@ impl<'a> ListCommandCtx {
     }
     
     pub async fn do_async_txnkv_pop(mut self, key: &str, op_left: bool, count: i64) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
     
         let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(&key);
@@ -215,7 +215,7 @@ impl<'a> ListCommandCtx {
     }
 
     pub async fn do_async_txnkv_ltrim(mut self, key: &str, mut start: i64, mut end: i64) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
     
         let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(&key);
@@ -426,7 +426,7 @@ impl<'a> ListCommandCtx {
     }
     
     pub async fn do_async_txnkv_lset(mut self, key: &str, mut idx: i64, ele: &Bytes) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
         let ele = ele.to_owned();
     
@@ -478,7 +478,7 @@ impl<'a> ListCommandCtx {
     }
 
     pub async fn do_async_txnkv_list_del(mut self, key: &str) -> AsyncResult<i64> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
         let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(&key);
 
@@ -512,7 +512,7 @@ impl<'a> ListCommandCtx {
     }
 
     pub async fn do_async_txnkv_list_expire_if_needed(mut self, key: &str) -> AsyncResult<i64> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
         let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(&key);
 

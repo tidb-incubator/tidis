@@ -23,7 +23,7 @@ impl<'a> HashCommandCtx {
     }
 
     pub async fn do_async_txnkv_hset(mut self, key: &str, fvs: &Vec<KvPair>, is_hmset: bool) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
         let fvs_copy = fvs.clone();
@@ -357,7 +357,7 @@ impl<'a> HashCommandCtx {
     }
     
     pub async fn do_async_txnkv_hdel(mut self, key: &str, field: &str) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
         let field = field.to_owned();
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
@@ -413,15 +413,15 @@ impl<'a> HashCommandCtx {
     }
     
     pub async fn do_async_txnkv_hincrby(self, key: &str, field: &str, step: i64) -> AsyncResult<Frame> {
-        let client =  get_txn_client()?;
+        let mut client =  get_txn_client()?;
         let key = key.to_owned();
         let field = field.to_owned();
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
         let data_key = KeyEncoder::new().encode_txnkv_hash_data_key(&key, &field);
     
         let resp = client.exec_in_txn(self.txn.clone(), |txn_rc| async move {
-            let mut new_int = 0;
-            let mut prev_int = 0;
+            let new_int;
+            let prev_int ;
             let mut txn = txn_rc.lock().await;
             match txn.get_for_update(meta_key.clone()).await? {
                 Some(meta_value) => {
@@ -485,7 +485,7 @@ impl<'a> HashCommandCtx {
     }
 
     pub async fn do_async_txnkv_hash_del(mut self, key: &str) -> AsyncResult<i64> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
 
@@ -517,7 +517,7 @@ impl<'a> HashCommandCtx {
     }
 
     pub async fn do_async_txnkv_hash_expire_if_needed(mut self, key: &str) -> AsyncResult<i64> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
 

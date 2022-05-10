@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::db::Db;
 use crate::tikv::get_txn_client;
-use crate::utils::{resp_err, resp_int, resp_sstr, resp_str};
+use crate::utils::{resp_err};
 use crate::{Connection, Frame, Parse};
 use crate::tikv::lua::LuaCommandCtx;
 use crate::config::{is_use_txn_api};

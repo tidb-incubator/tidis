@@ -22,7 +22,7 @@ impl ZsetCommandCtx {
     }
 
     pub async fn do_async_txnkv_zadd(mut self, key: &str, members: &Vec<String>, scores: &Vec<i64>, exists: Option<bool>, changed_only: bool, incr: bool) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
 
         let key = key.to_owned();
         let members = members.to_owned();
@@ -406,12 +406,12 @@ impl ZsetCommandCtx {
         }
     }
 
-    pub async fn do_async_txnkv_zrange_by_lex(self, key: &str, min: &str, with_min: bool, max: &str, with_max: bool, with_scores: bool, reverse: bool) -> AsyncResult<Frame> {
-        Ok(resp_nil())
-    }
+    // pub async fn do_async_txnkv_zrange_by_lex(self, key: &str, min: &str, with_min: bool, max: &str, with_max: bool, with_scores: bool, reverse: bool) -> AsyncResult<Frame> {
+    //     Ok(resp_nil())
+    // }
 
     pub async fn do_async_txnkv_zpop(mut self, key: &str, from_min: bool, count: u64) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
         let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(&key);
 
@@ -537,7 +537,7 @@ impl ZsetCommandCtx {
     }
 
     pub async fn do_async_txnkv_zrem(mut self, key: &str, members: &Vec<String>) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
         let members = members.to_owned();
 
@@ -600,12 +600,12 @@ impl ZsetCommandCtx {
         }
     }
 
-    pub async fn do_async_txnkv_zremrange_by_lex(self, key: &str, min: &str, with_min: bool, max: &str, with_max: bool) -> AsyncResult<Frame> {
-        Ok(resp_nil())
-    }
+    // pub async fn do_async_txnkv_zremrange_by_lex(self, key: &str, min: &str, with_min: bool, max: &str, with_max: bool) -> AsyncResult<Frame> {
+    //     Ok(resp_nil())
+    // }
 
     pub async fn do_async_txnkv_zremrange_by_score(mut self, key: &str, min: i64, max: i64) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
         
         let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(&key);
@@ -672,7 +672,7 @@ impl ZsetCommandCtx {
     }
 
     pub async fn do_async_txnk_zset_del(mut self, key: &str) -> AsyncResult<i64> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
         let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(&key);
 
@@ -711,7 +711,7 @@ impl ZsetCommandCtx {
     }
 
     pub async fn do_async_txnkv_zset_expire_if_needed(mut self, key: &str) -> AsyncResult<i64> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
         let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(&key);
 

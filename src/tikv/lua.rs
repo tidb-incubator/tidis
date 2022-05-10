@@ -13,15 +13,11 @@ use crate::utils::{
     redis_resp_to_lua_resp, resp_err,
 };
 
-use crate::tikv::LUA_CTX;
-
 use mlua::{
     Lua,
     Value as LuaValue,
     prelude::*,
-    StdLib,
-    LuaOptions,
-    Result, Variadic,
+    Variadic,
 };
 
 #[derive(Clone)]

@@ -2,7 +2,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use tikv_client::{RawClient, Value, Key, Error, BoundRange, KvPair, ColumnFamily};
-
+use tikv_client::Error::StringError;
 use tikv_client::{
     TransactionClient,
     Timestamp,
@@ -16,8 +16,10 @@ use crate::{
     is_use_pessimistic_txn,
     is_try_one_pc_commit,
     is_use_async_commit,
+    txn_retry_count,
 };
 
+use super::errors::RTError;
 use super::{errors::AsyncResult};
 use futures::future::{BoxFuture};
 
@@ -34,7 +36,7 @@ impl TxnClientWrapper<'static> {
     pub fn new(c: &'static TransactionClient) -> Self {
         TxnClientWrapper {
             client: c,
-            retries: 2000,
+            retries: txn_retry_count(),
         }
     }
 
@@ -105,8 +107,8 @@ impl TxnClientWrapper<'static> {
 
     
     /// Auto begin new txn, call f with the txn, commit or callback due to the result
-    pub async fn exec_in_txn<T, F>(&self, txn: Option<Arc<Mutex<Transaction>>>, f: F) -> AsyncResult<T> where 
-    F: FnOnce(Arc<Mutex<Transaction>>) -> BoxFuture<'static, AsyncResult<T>>,
+    pub async fn exec_in_txn<T, F>(&mut self, txn: Option<Arc<Mutex<Transaction>>>, f: F) -> AsyncResult<T> where 
+    F: FnOnce(Arc<Mutex<Transaction>>) -> BoxFuture<'static, AsyncResult<T>> + Clone,
     {
         match txn {
             Some(txn) => {
@@ -122,24 +124,53 @@ impl TxnClientWrapper<'static> {
                 }
             },
             None => {
-                // begin new transaction
-                let txn = self.begin().await?;
-                let txn_arc = Arc::new(Mutex::new(txn));
-    
-                // call f
-                let result = f(txn_arc.clone()).await;
-                let mut txn = txn_arc.lock().await;
-                match result {
-                    Ok(res) => { 
-                        txn.commit().await?;
-                        Ok(res)
-                    },
-                    Err(err) => {
-                        // log and rollback
-                        txn.rollback().await?;
-                        Err(err)
+                while self.retries > 0 {
+                    self.retries -= 1;
+
+                    let f = f.clone();
+
+                    // begin new transaction
+                    let txn;
+                    match self.begin().await {
+                        Ok(t) => {
+                            txn = t;
+                        },
+                        Err(e) => {
+                            if self.retries == 0 {
+                                return Err(RTError::TikvClientError(e));
+                            }
+                            continue;
+                        }
+                    }
+
+                    let txn_arc = Arc::new(Mutex::new(txn));
+
+                    // call f
+                    let result = f(txn_arc.clone()).await;
+                    let mut txn = txn_arc.lock().await;
+                    match result {
+                        Ok(res) => { 
+                            match txn.commit().await {
+                                Ok(_) => {
+                                    return Ok(res);
+                                },
+                                Err(e) => {
+                                    if self.error_retryable(&e) {
+                                        if self.retries == 0 {
+                                            return Err(RTError::TikvClientError(e));
+                                        }
+                                        continue;
+                                    }
+                                }
+                            }
+                        },
+                        Err(err) => {
+                            txn.rollback().await?;
+                            return Err(err);
+                        }
                     }
                 }
+                return Err(RTError::TikvClientError(StringError("retry count exceeded".to_string())));
             }
         }
         // TODO: add retry policy

@@ -26,6 +26,7 @@ struct Backend {
     try_one_pc_commit: Option<bool>,
     use_pessimistic_txn: Option<bool>,
     local_pool_number: Option<usize>,
+    txn_retry_count: Option<u32>,
 }
 
 // Config
@@ -34,7 +35,7 @@ pub static mut SERVER_CONFIG: Option<Config> = None;
 pub fn is_auth_enabled() -> bool {
     unsafe {
         if let Some(c) = &SERVER_CONFIG {
-            if let Some(s) = c.server.password.clone() {
+            if let Some(_) = c.server.password.clone() {
                 return true;
             }
         }
@@ -52,6 +53,18 @@ pub fn is_auth_matched(password: &str) -> bool {
         }
     }
     true
+}
+
+pub fn txn_retry_count() -> u32 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(s) = c.backend.txn_retry_count {
+                return s;
+            }
+        }
+    }
+    // default to 1, no retry
+    1
 }
 
 pub fn config_listen_or_default() -> String {

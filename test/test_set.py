@@ -94,7 +94,7 @@ class SetTest(unittest.TestCase):
         # expire in 5s
         ts = int(round(time.time() * 1000)) + 5000
         self.assertTrue(self.r.execute_command('pexpireat', self.k1, ts))
-        self.assertLessEqual(self.r.execute_command('pttl', self.k1), ts)
+        self.assertLessEqual(self.r.execute_command('pttl', self.k1), 5000)
         self.assertEqual(self.r.scard(self.k1), 1)
         time.sleep(6)
         self.assertEqual(self.r.scard(self.k1), 0)

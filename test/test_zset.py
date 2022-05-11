@@ -58,10 +58,10 @@ class ZsetTest(unittest.TestCase):
         for i in range(100):
             self.assertEqual(self.r.zadd(self.k1, {str(i): 100 - i}), 1)
         self.assertListEqual(self.r.zrevrange(self.k1, 0, -1, False), [str(i) for i in range(100)])
-        self.assertListEqual(self.r.zrevrange(self.k1, 10, 20, False), [str(i) for i in range(10, 20)])
+        self.assertListEqual(self.r.zrevrange(self.k1, 10, 20, False), [str(i) for i in range(10, 21)])
         self.assertListEqual(self.r.zrevrange(self.k1, 20, 10, False), [])
         #  range with scores
-        self.assertListEqual(self.r.zrevrange(self.k1, 10, 20, True), [(str(i), 100 - i) for i in range(10, 20)])
+        self.assertListEqual(self.r.zrevrange(self.k1, 10, 20, True), [(str(i), 100 - i) for i in range(10, 21)])
 
     def test_zrangebyscore(self):
         for i in range(100):
@@ -122,7 +122,7 @@ class ZsetTest(unittest.TestCase):
         # expire in 5s
         ts = int(round(time.time() * 1000)) + 5000
         self.assertTrue(self.r.execute_command('pexpireat', self.k1, ts))
-        self.assertLessEqual(self.r.execute_command('pttl', self.k1), ts)
+        self.assertLessEqual(self.r.execute_command('pttl', self.k1), 5000)
         self.assertEqual(self.r.zcard(self.k1), 1)
         time.sleep(6)
         self.assertEqual(self.r.zcard(self.k1), 0)
@@ -141,7 +141,7 @@ class ZsetTest(unittest.TestCase):
         # expire in 5s
         ts = int(round(time.time())) + 5
         self.assertTrue(self.r.execute_command('expireat', self.k1, ts))
-        self.assertLessEqual(self.r.execute_command('ttl', self.k1), ts)
+        self.assertLessEqual(self.r.execute_command('ttl', self.k1), 5)
         self.assertEqual(self.r.zcard(self.k1), 1)
         time.sleep(6)
         self.assertEqual(self.r.zcard(self.k1), 0)

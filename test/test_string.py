@@ -35,7 +35,7 @@ class StringTest(unittest.TestCase):
         self.assertEqual(self.r.get(self.k1), v1)
 
         self.assertTrue(self.r.set(self.k2, self.v2, ex=5))
-        ttl = self.r.ttl(self.k1)
+        ttl = self.r.ttl(self.k2)
         self.assertLessEqual(ttl, 5)
         self.assertGreater(ttl, 0)
         self.assertIsNotNone(self.r.get(self.k2), "ttl = {}s, but the key has expired".format(ttl))
@@ -43,7 +43,7 @@ class StringTest(unittest.TestCase):
         self.assertIsNone(self.r.get(self.k2))
 
         self.assertTrue(self.r.set(self.k2, self.v2, px=5000))
-        pttl = self.r.pttl(self.k1)
+        pttl = self.r.pttl(self.k2)
         self.assertLessEqual(pttl, 5000)
         self.assertGreater(pttl, 0)
         self.assertIsNotNone(self.r.get(self.k2), "pttl = {}ms, but the key has expired".format(pttl))
@@ -127,7 +127,7 @@ class StringTest(unittest.TestCase):
         # expire in 5s
         ts = int(round(time.time() * 1000)) + 5000
         self.assertTrue(self.r.pexpireat(self.k1, ts))
-        self.assertLessEqual(self.r.pttl(self.k1), ts)
+        self.assertLessEqual(self.r.pttl(self.k1), 5000)
         self.assertEqual(self.r.get(self.k1), self.v1)
         time.sleep(6)
         self.assertIsNone(self.r.get(self.k1))

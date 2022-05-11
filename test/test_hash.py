@@ -99,7 +99,7 @@ class HashTest(unittest.TestCase):
         # expire in 5s
         ts = int(round(time.time() * 1000)) + 5000
         self.assertEqual(self.r.execute_command('pexpireat', self.k1, ts), 1)
-        self.assertLessEqual(self.r.execute_command('pttl', self.k1), ts)
+        self.assertLessEqual(self.r.execute_command('pttl', self.k1), 5000)
         self.assertEqual(self.r.hlen(self.k1), 3)
         time.sleep(6)
         self.assertEqual(self.r.hlen(self.k1), 0)
@@ -118,7 +118,7 @@ class HashTest(unittest.TestCase):
         # expire in 5s
         ts = int(round(time.time())) + 5
         self.assertEqual(self.r.execute_command('expireat', self.k1, ts), 1)
-        self.assertLessEqual(self.r.execute_command('ttl', self.k1), ts)
+        self.assertLessEqual(self.r.execute_command('ttl', self.k1), 5)
         self.assertEqual(self.r.hlen(self.k1), 3)
         time.sleep(6)
         self.assertEqual(self.r.hlen(self.k1), 0)

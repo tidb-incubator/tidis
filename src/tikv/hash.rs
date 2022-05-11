@@ -295,7 +295,7 @@ impl<'a> HashCommandCtx {
                 let ttl = KeyDecoder::new().decode_key_ttl(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone().do_async_txnkv_hash_expire_if_needed(&key).await?;
-                    return Ok(resp_nil());
+                    return Ok(resp_int(0));
                 }
     
                 let size = KeyDecoder::new().decode_key_hash_size(&meta_value);
@@ -356,10 +356,10 @@ impl<'a> HashCommandCtx {
         }
     }
     
-    pub async fn do_async_txnkv_hdel(mut self, key: &str, field: &str) -> AsyncResult<Frame> {
+    pub async fn do_async_txnkv_hdel(mut self, key: &str, fields: &Vec<String>) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
-        let field = field.to_owned();
+        let fields = fields.clone();
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
     
         let resp = client.exec_in_txn(self.txn.clone(), |txn_rc| async move {
@@ -374,27 +374,28 @@ impl<'a> HashCommandCtx {
                         return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
                     }
     
-                    let (ttl, mut size) = KeyDecoder::new().decode_key_hash_meta(&meta_value);
+                    let (ttl, size) = KeyDecoder::new().decode_key_hash_meta(&meta_value);
                     if key_is_expired(ttl) {
                         drop(txn);
                         self.clone().do_async_txnkv_hash_expire_if_needed(&key).await?;
                         return Ok(0);
                     }
+
+                    let mut deleted: i64 = 0;
     
-                    // check data key exists
-                    let data_key = KeyEncoder::new().encode_txnkv_hash_data_key(&key, &field);
-                    if txn.key_exists(data_key.clone()).await? {
-                        // delete in txn
-                        txn.delete(data_key).await?;
-                        size -= 1;
-    
-                        // update meta key
-                        let new_meta_value = KeyEncoder::new().encode_txnkv_hash_meta_value(ttl, size);
-                        txn.put(meta_key, new_meta_value).await?;
-    
-                        return Ok(1)
+                    for field in fields {
+                        // check data key exists
+                        let data_key = KeyEncoder::new().encode_txnkv_hash_data_key(&key, &field);
+                        if txn.key_exists(data_key.clone()).await? {
+                            // delete in txn
+                            txn.delete(data_key).await?;
+                            deleted += 1;
+                        }
                     }
-                    Ok(0)
+                    // update meta key
+                    let new_meta_value = KeyEncoder::new().encode_txnkv_hash_meta_value(ttl, size - deleted as u64);
+                    txn.put(meta_key, new_meta_value).await?;
+                    Ok(deleted)
                 },
                 None => {
                     Ok(0)

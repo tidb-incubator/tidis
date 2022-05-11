@@ -14,14 +14,14 @@ use tracing::{debug, instrument};
 #[derive(Debug)]
 pub struct Hdel {
     key: String,
-    field: String,
+    fields: Vec<String>,
     valid: bool,
 }
 
 impl Hdel {
-    pub fn new(key: &str, field: &str) -> Hdel {
+    pub fn new(key: &str) -> Hdel {
         Hdel {
-            field: field.to_owned(),
+            fields: vec![],
             key: key.to_owned(),
             valid: true,
         }
@@ -29,7 +29,7 @@ impl Hdel {
 
     pub fn new_invalid() -> Hdel {
         Hdel {
-            field: "".to_owned(),
+            fields: vec![],
             key: "".to_owned(),
             valid: false,
         }
@@ -39,21 +39,28 @@ impl Hdel {
         &self.key
     }
 
-    pub fn field(&self) -> &str {
-        &self.field
+    pub fn add_field(&mut self, field: &str) {
+        &self.fields.push(field.to_owned());
     }
 
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Hdel> {
         let key = parse.next_string()?;
-        let field = parse.next_string()?;
-        Ok(Hdel::new(&key, &field))
+        let mut hdel = Hdel::new(&key);
+        while let Ok(f) = parse.next_string() {
+            hdel.add_field(&f);
+        }
+        Ok(hdel)
     }
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Hdel> {
-        if argv.len() != 2 {
+        if argv.len() < 2 {
             return Ok(Hdel::new_invalid());
         }
-        Ok(Hdel::new(&argv[0], &argv[1]))
+        let mut hdel = Hdel::new(&argv[0]);
+        for arg in &argv[1..] {
+            hdel.add_field(arg);
+        }
+        Ok(hdel)
     }
 
     #[instrument(skip(self, dst))]
@@ -71,7 +78,7 @@ impl Hdel {
             return Ok(resp_invalid_arguments());
         }
         if is_use_txn_api() {
-            HashCommandCtx::new(txn).do_async_txnkv_hdel(&self.key, &self.field).await
+            HashCommandCtx::new(txn).do_async_txnkv_hdel(&self.key, &self.fields).await
         } else {
             Ok(resp_err("not supported yet"))
         }

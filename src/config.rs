@@ -63,8 +63,8 @@ pub fn txn_retry_count() -> u32 {
             }
         }
     }
-    // default to 1, no retry
-    1
+    // default to 3
+    3
 }
 
 pub fn config_listen_or_default() -> String {

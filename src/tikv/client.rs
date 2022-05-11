@@ -174,9 +174,6 @@ impl TxnClientWrapper<'static> {
             }
         }
     }
-
-
-
 }
 
 pub struct RawClientWrapper {

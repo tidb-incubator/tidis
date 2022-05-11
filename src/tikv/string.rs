@@ -154,14 +154,12 @@ impl StringCommandCtx {
     
     pub async fn do_async_rawkv_batch_put(self, kvs: Vec<KvPair>) -> AsyncResult<Frame> {
         let client = get_client()?;
-        let num_keys = kvs.len();
         let _ = client.batch_put(kvs).await?;
-        Ok(Frame::Integer(num_keys as i64))
+        Ok(resp_ok())
     }
     
     pub async fn do_async_txnkv_batch_put(mut self, kvs: Vec<KvPair>) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
-        let num_keys = kvs.len();
         let resp = client.exec_in_txn(self.txn.clone(), |txn_rc| async move {
             if self.txn.is_none() {
                 self.txn = Some(txn_rc.clone());
@@ -174,7 +172,7 @@ impl StringCommandCtx {
         }.boxed()).await;
         match resp {
             Ok(_) => {
-                Ok(Frame::Integer(num_keys as i64))
+                Ok(resp_ok())
             },
             Err(e) => {
                 Ok(resp_err(&e.to_string()))

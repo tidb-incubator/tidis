@@ -121,7 +121,7 @@ impl Set {
                 // An expiration is specified in seconds. The next value is an
                 // integer.
                 let secs = parse.next_int()?;
-                expire = Some(secs);
+                expire = Some(secs * 1000);
             }
             Ok(s) if s.to_uppercase() == "PX" => {
                 // An expiration is specified in milliseconds. The next value is
@@ -159,7 +159,7 @@ impl Set {
                 idx += 1;
                 let secs = argv[idx].parse::<i64>();
                 if let Ok(v) = secs {
-                    expire = Some(v);
+                    expire = Some(v * 1000);
                 } else {
                     return Ok(Set::new_invalid());
                 }

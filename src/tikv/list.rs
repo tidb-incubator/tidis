@@ -253,20 +253,28 @@ impl<'a> ListCommandCtx {
                     end += left as i64;
 
                     // trim left->start-1
-                    for idx in left..(start-1) as u64 {
+                    for idx in left..start as u64 {
                         let data_key = KeyEncoder::new().encode_txnkv_list_data_key(&key, idx);
                         txn.delete(data_key).await?;
-                        left += 1;
                     }
-                    // trim right+1->end
-                    for idx in end as u64..right {
+                    let left_trim = start - left as i64;
+                    if left_trim > 0 {
+                        left += left_trim as u64;
+                    }
+
+                    // trim end+1->right
+                    for idx in (end+1) as u64..right {
                         let data_key = KeyEncoder::new().encode_txnkv_list_data_key(&key, idx);
                         txn.delete(data_key).await?;
-                        right -= 1;
+                    }
+
+                    let right_trim = right as i64 - end - 1;
+                    if right_trim > 0 {
+                        right -= right_trim as u64;
                     }
 
                     // check key if empty
-                    if left == right {
+                    if left >= right {
                         // delete meta key
                         txn.delete(meta_key).await?;
                     } else {

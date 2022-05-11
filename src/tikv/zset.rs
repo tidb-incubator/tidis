@@ -302,6 +302,13 @@ impl ZsetCommandCtx {
                     max += size as i64;
                 }
 
+                if reverse {
+                    let r_min = size as i64-max-1;
+                    let r_max = size as i64-min-1;
+                    min = r_min;
+                    max = r_max;
+                }
+
                 let start_key = KeyEncoder::new().encode_txnkv_zset_score_key_start(key);
                 let range = start_key..;
                 let from_range: BoundRange = range.into();
@@ -329,7 +336,7 @@ impl ZsetCommandCtx {
                         // decode vec[u8] to i64
                         let score = KeyDecoder::new().decode_key_zset_score_from_scorekey(key ,kv.0);
                         if reverse {
-                            resp.insert(0, resp_bulk(score.to_string().as_bytes().to_vec()));
+                            resp.insert(1, resp_bulk(score.to_string().as_bytes().to_vec()));
                         } else {
                             resp.push(resp_bulk(score.to_string().as_bytes().to_vec()));
                         }

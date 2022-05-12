@@ -12,7 +12,8 @@ use crate::tikv::{
 use crate::config::is_use_txn_api;
 
 use bytes::Bytes;
-use tracing::{debug, instrument};
+use crate::config::LOGGER;
+use slog::debug;
 
 #[derive(Debug)]
 pub struct Mset {
@@ -87,14 +88,13 @@ impl Mset {
         Ok(mset)
     }
 
-    #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         let response = match self.batch_put(None).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
 
-        debug!(?response);
+        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
 
         // Write the response back to the client
         dst.write_frame(&response).await?;

@@ -11,7 +11,9 @@ use crate::tikv::errors::AsyncResult;
 
 use mlua::Lua;
 use tokio::sync::Mutex;
-use tracing::{debug, instrument};
+
+use crate::config::LOGGER;
+use slog::debug;
 
 #[derive(Debug)]
 pub struct Eval {
@@ -68,14 +70,13 @@ impl Eval {
         Ok(eval)
     }
 
-    #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection, is_sha: bool, db: &Db, lua: &Option<Lua>) -> crate::Result<()> {
         let response = match self.eval(is_sha, db, lua).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
 
-        debug!(?response);
+        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
 
         dst.write_frame(&response).await?;
 

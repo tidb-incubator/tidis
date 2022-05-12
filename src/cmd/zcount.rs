@@ -10,7 +10,8 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use bytes::{Buf, Bytes};
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
-use tracing::{debug, instrument};
+use crate::config::LOGGER;
+use slog::debug;
 
 #[derive(Debug)]
 pub struct Zcount {
@@ -100,10 +101,9 @@ impl Zcount {
         Ok(z)
     }
 
-    #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         let response = self.zcount(None).await?;
-        debug!(?response);
+        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
         dst.write_frame(&response).await?;
 
         Ok(())
@@ -114,7 +114,7 @@ impl Zcount {
             return Ok(resp_invalid_arguments())
         }
         if is_use_txn_api() {
-            ZsetCommandCtx::new(None).do_async_txnkv_zcount(&self.key, self.min, self.min_inclusive, self.max, self.max_inclusive).await
+            ZsetCommandCtx::new(txn).do_async_txnkv_zcount(&self.key, self.min, self.min_inclusive, self.max, self.max_inclusive).await
         } else {
             Ok(resp_err("not supported yet"))
         }

@@ -10,6 +10,11 @@ use crate::{Command, Connection, Db, DbDropGuard, Shutdown, is_auth_enabled, is_
 use std::future::Future;
 use async_std::net::{TcpListener, TcpStream};
 
+use slog::{
+    error,
+    info,
+    debug,
+};
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::{self, Duration, Instant};
 
@@ -19,12 +24,14 @@ use mlua::{
     LuaOptions,
 };
 
+use crate::config::LOGGER;
 
 use tokio_util::task::LocalPoolHandle;
 
 use crate::config_local_pool_number;
 
-use tracing::{debug, error, info, instrument};
+
+
 /// Server listener state. Created in the `run` call. It includes a `run` method
 /// which performs the TCP listening and initialization of per-connection state.
 #[derive(Debug)]
@@ -199,12 +206,12 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) {
                 // Errors encountered when handling individual connections do not
                 // bubble up to this point.
                 if let Err(err) = res {
-                    error!(cause = %err, "failed to accept");
+                    error!(LOGGER, "failed to accept, cause {}", err.to_string());
                 }
             }
             _ = shutdown => {
                 // The shutdown signal has been received.
-                info!("shutting down");
+                info!(LOGGER, "shutting down");
             }
         }
 
@@ -251,7 +258,7 @@ impl Listener {
     /// itself. One strategy for handling this is to implement a back off
     /// strategy, which is what we do here.
     async fn run(&mut self) -> crate::Result<()> {
-        info!("accepting inbound connections");
+        info!(LOGGER, "accepting inbound connections");
         //let local = task::LocalSet::new();
 
         let local_pool_number = config_local_pool_number();
@@ -329,8 +336,7 @@ impl Listener {
                 // Process the connection. If an error is encountered, log it.
                 CURRENT_CONNECTION_COUNTER.inc();
                 if let Err(err) = handler.run().await {
-                    println!("Connection Error: {:?}", &err);
-                    error!(cause = ?err, "connection error");
+                    error!(LOGGER, "connection error {:?}", err);
                 }
             });
 
@@ -354,7 +360,7 @@ impl Listener {
             match self.listener.accept().await {
                 Ok((socket, _)) => return Ok(socket),
                 Err(err) => {
-                    println!("Accept Error! {:?}", &err);
+                    error!(LOGGER, "Accept Error! {:?}", &err);
                     if backoff > 64 {
                         // Accept has failed too many times. Return the error.
                         return Err(err.into());
@@ -384,7 +390,6 @@ impl Handler {
     ///
     /// When the shutdown signal is received, the connection is processed until
     /// it reaches a safe state, at which point it is terminated.
-    #[instrument(skip(self))]
     async fn run(&mut self) -> crate::Result<()> {
         // As long as the shutdown signal has not been received, try to read a
         // new request frame.
@@ -417,17 +422,7 @@ impl Handler {
             REQUEST_COUNTER.inc();
             REQUEST_CMD_COUNTER.with_label_values(&[&cmd_name]).inc();
 
-
-            // Logs the `cmd` object. The syntax here is a shorthand provided by
-            // the `tracing` crate. It can be thought of as similar to:
-            //
-            // ```
-            // debug!(cmd = format!("{:?}", cmd));
-            // ```
-            //
-            // `tracing` provides structured logging, so information is "logged"
-            // as key-value pairs.
-            debug!(?cmd);
+            debug!(LOGGER, "req {} -> {}, {:?}", self.connection.peer_addr(), self.connection.local_addr(), cmd);
 
             match cmd {
                 Command::Auth(c) => {

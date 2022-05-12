@@ -5,6 +5,11 @@ use hyper::{
 };
 use prometheus::{TextEncoder, Encoder};
 use crate::Result;
+use crate::config::LOGGER;
+use slog::{
+    info,
+    error,
+};
 
 use crate::metrics::{INSTANCE_ID_GAUGER, TIKV_CLIENT_RETRIES, REQUEST_COUNTER, CURRENT_CONNECTION_COUNTER};
 
@@ -25,11 +30,11 @@ impl PrometheusServer {
     }
 
     pub async fn run(&self) {
-        println!("Prometheus Server Listen on: {}", &self.listen_addr);
+        info!(LOGGER, "Prometheus Server Listen on: {}", &self.listen_addr);
         match self.serve().await {
             Ok(_) => {}
             Err(e) => {
-                println!("Prometheus Got Error: {}", e.to_string());
+                error!(LOGGER, "Prometheus Got Error: {}", e.to_string());
             }
         }
     }

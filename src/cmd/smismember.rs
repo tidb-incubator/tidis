@@ -9,7 +9,8 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
-use tracing::{debug, instrument};
+use crate::config::LOGGER;
+use slog::debug;
 
 #[derive(Debug)]
 pub struct Smismember {
@@ -73,11 +74,10 @@ impl Smismember {
         Ok(s)
     }
 
-    #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         
         let response = self.smismember(None).await?;
-        debug!(?response);
+        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
         dst.write_frame(&response).await?;
 
         Ok(())

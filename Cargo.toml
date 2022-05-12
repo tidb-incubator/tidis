@@ -19,12 +19,11 @@ async-stream = "0.3.0"
 atoi = "0.3.2"
 bytes = "1"
 structopt = "0.3.14"
+slog = { version = "2.3", features = ["max_level_trace", "release_max_level_debug"] }
+slog-term = { version = "2.4" }
 tokio = { version = "1", features = ["full"] }
 tokio-stream = "0.1"
 tokio-util = { version = "0.7.1", features = ["rt"] }
-tracing = "0.1.13"
-tracing-futures = { version = "0.2.3" }
-tracing-subscriber = "0.2.2"
 tikv-client = { git = "https://github.com/tikv/client-rust.git", branch = "master" }
 lazy_static = "1.4.0"
 thiserror = "1"

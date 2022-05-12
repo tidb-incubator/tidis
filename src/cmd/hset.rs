@@ -8,8 +8,9 @@ use crate::config::{is_use_txn_api};
 use crate::utils::{resp_err, resp_invalid_arguments};
 
 use tokio::sync::Mutex;
-use tracing::{debug, instrument};
 use tikv_client::{KvPair, Transaction};
+use crate::config::LOGGER;
+use slog::debug;
 
 #[derive(Debug)]
 pub struct Hset {
@@ -91,11 +92,9 @@ impl Hset {
         Ok(hset)
     }
 
-    #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection, is_hmset: bool) -> crate::Result<()> {
-        
         let response = self.hset(None, is_hmset).await?;
-        debug!(?response);
+        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
         dst.write_frame(&response).await?;
 
         Ok(())

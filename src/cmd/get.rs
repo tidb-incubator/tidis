@@ -6,7 +6,8 @@ use crate::{Connection, Frame, Parse};
 use crate::tikv::string::StringCommandCtx;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
-use tracing::{debug, instrument};
+use crate::config::LOGGER;
+use slog::debug;
 
 use crate::config::{is_use_txn_api};
 
@@ -84,7 +85,6 @@ impl Get {
     ///
     /// The response is written to `dst`. This is called by the server in order
     /// to execute a received command.
-    #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         // Get the value from the shared database state
         let response = match self.get(None).await {
@@ -92,7 +92,7 @@ impl Get {
             Err(e) => Frame::Error(e.to_string()),
         };
 
-        debug!(?response);
+        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
 
         // Write the response back to the client
         dst.write_frame(&response).await?;

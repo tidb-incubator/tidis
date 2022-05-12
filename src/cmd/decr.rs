@@ -3,11 +3,11 @@ use std::sync::Arc;
 use crate::utils::resp_invalid_arguments;
 use crate::{Connection, Frame, Parse};
 use crate::tikv::string::StringCommandCtx;
-use crate::config::{is_use_txn_api};
+use crate::config::{is_use_txn_api, LOGGER};
 use crate::tikv::errors::AsyncResult;
+use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
-use tracing::{debug, instrument};
 
 #[derive(Debug)]
 pub struct Decr {
@@ -49,14 +49,13 @@ impl Decr {
         Ok(Decr::new(key))
     }
 
-    #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         let response = match self.decr(None).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
 
-        debug!(?response);
+        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
 
         dst.write_frame(&response).await?;
 

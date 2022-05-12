@@ -65,7 +65,7 @@ pub use tikv::do_async_connect;
 
 mod utils;
 
-mod config;
+pub mod config;
 pub use config::Config;
 pub use config::set_global_config;
 pub use config::get_global_config;

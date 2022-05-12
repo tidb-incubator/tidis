@@ -5,6 +5,8 @@ pd_addrs = "127.0.0.1:2379"
 instance_id = "1"
 prometheus_listen = "0.0.0.0"
 prometheus_port = 8080
+log_level = "debug"
+log_file = "tikv-service.log"
 
 [backend]
 use_txn_api = true
@@ -12,3 +14,4 @@ use_async_commit = true
 try_one_pc_commit = true
 use_pessimistic_txn = true
 local_pool_number = 4
+txn_retry_count = 100

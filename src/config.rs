@@ -2,6 +2,28 @@ use serde::Deserialize;
 
 use crate::DEFAULT_PORT;
 
+use slog::{self, Drain};
+use slog_term;
+use std::fs::OpenOptions;
+
+lazy_static! {
+    pub static ref LOGGER: slog::Logger = slog::Logger::root(
+        slog_term::FullFormat::new(
+            slog_term::PlainSyncDecorator::new(OpenOptions::new()
+                                                .create(true)
+                                                .write(true)
+                                                .truncate(true)
+                                                .open(log_file())
+                                                .unwrap()
+            )
+        )
+        .build()
+        .filter_level(slog::Level::from_usize(log_level()).unwrap())
+        .fuse(),
+        slog::o!());
+        
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
     server: Server,
@@ -17,6 +39,8 @@ struct Server {
     prometheus_port: Option<u16>,
     // username: Option<String>,
     password: Option<String>,
+    log_level: Option<String>,
+    log_file: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -146,6 +170,42 @@ pub fn config_local_pool_number() -> usize {
     }
     // default use 8 localset pool to handle connections
     8
+}
+
+fn log_level_str() -> String {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(l) = c.server.log_level.clone() {
+                return l;
+            }
+        }
+    }
+    "info".to_owned()
+}
+
+pub fn log_level() -> usize {
+    let level_str = log_level_str();
+    match level_str.as_str() {
+        "off" => 0,
+        "critical" => 1,
+        "error" => 2,
+        "warning" => 3,
+        "info" => 4,
+        "debug" => 5,
+        "trace" => 6,
+        _ => 0,
+    }
+}
+
+pub fn log_file() -> String {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(l) = c.server.log_file.clone() {
+                return l;
+            }
+        }
+    }
+    "tikv-service.log".to_owned()
 }
 
 pub fn set_global_config(config: Config) {

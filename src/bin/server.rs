@@ -13,6 +13,8 @@ use tikv_service::{
     config_instance_id_or_default,
 };
 
+use slog::info;
+
 use structopt::StructOpt;
 use async_std::net::TcpListener;
 use tokio::signal;
@@ -21,10 +23,6 @@ use std::process::exit;
 
 #[tokio::main]
 pub async fn main() -> tikv_service::Result<()> {
-    // enable logging
-    // see https://docs.rs/tracing for more info
-    tracing_subscriber::fmt::try_init()?;
-
     let cli = Cli::from_args();
 
     let mut config: Option<Config> = None;
@@ -88,7 +86,7 @@ pub async fn main() -> tikv_service::Result<()> {
         server.run().await;
     });
 
-    println!("TiKV Service Server Listen on: {}:{}", &listen_addr, port);
+    info!(tikv_service::config::LOGGER, "TiKV Service Server Listen on: {}:{}", &listen_addr, port);
     // Bind a TCP listener
     let listener = TcpListener::bind(&format!("{}:{}", &listen_addr, port)).await?;
 

@@ -9,7 +9,8 @@ use bytes::Bytes;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
 use std::sync::Arc;
-use tracing::{debug, instrument};
+use crate::config::LOGGER;
+use slog::debug;
 
 /// Set `key` to hold the string `value`.
 ///
@@ -182,7 +183,6 @@ impl Set {
     ///
     /// The response is written to `dst`. This is called by the server in order
     /// to execute a received command.
-    #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         
         let response = match self.nx {
@@ -199,7 +199,7 @@ impl Set {
                 }
             },
         };
-        debug!(?response);
+        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
         dst.write_frame(&response).await?;
 
         Ok(())

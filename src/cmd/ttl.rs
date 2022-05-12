@@ -7,7 +7,8 @@ use crate::tikv::string::StringCommandCtx;
 use crate::config::{is_use_txn_api};
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
-use tracing::{debug, instrument};
+use crate::config::LOGGER;
+use slog::debug;
 
 #[derive(Debug)]
 pub struct TTL {
@@ -41,14 +42,13 @@ impl TTL {
         return Ok(TTL { key: argv[0].to_owned(), valid: true });
     }
 
-    #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection, is_millis: bool) -> crate::Result<()> {
         let response = match self.ttl(is_millis, None).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
 
-        debug!(?response);
+        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
 
         dst.write_frame(&response).await?;
 

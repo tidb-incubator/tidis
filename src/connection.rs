@@ -25,6 +25,9 @@ pub struct Connection {
     w: BufWriter<TcpStream>,
     r: BufReader<TcpStream>,
 
+    local_addr: String,
+    peer_addr: String,
+
     // The buffer for reading frames.
     buffer: BytesMut,
 }
@@ -34,6 +37,9 @@ impl Connection {
     /// are initialized.
     pub fn new(socket: TcpStream) -> Connection {
         Connection {
+            local_addr: (&socket).local_addr().unwrap().to_string(),
+            peer_addr: (&socket).peer_addr().unwrap().to_string(),
+
             w: BufWriter::new(socket.clone()),
             r: BufReader::new(socket),
             // Default to a 4KB read buffer. For the use case of mini redis,
@@ -42,6 +48,14 @@ impl Connection {
             // a larger read buffer will work better.
             buffer: BytesMut::with_capacity(32 * 1024),
         }
+    }
+
+    pub fn local_addr(&self) -> &str {
+        &self.local_addr
+    }
+
+    pub fn peer_addr(&self) -> &str {
+        &self.peer_addr
     }
 
     /// Read a single `Frame` value from the underlying stream.

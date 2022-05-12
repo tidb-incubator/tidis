@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use tikv_client::{RawClient, Value, Key, Error, BoundRange, KvPair, ColumnFamily};
 use tikv_client::Error::StringError;
 use tikv_client::{
     TransactionClient,
@@ -9,9 +8,18 @@ use tikv_client::{
     Result as TiKVResult,
     Snapshot,
     TransactionOptions,
-    Transaction
+    Transaction,
+    RawClient,
+    Value,
+    Key,
+    Error,
+    BoundRange,
+    KvPair,
+    ColumnFamily,
+    TimestampExt
 };
 
+use crate::config::LOGGER;
 use crate::{
     is_use_pessimistic_txn,
     is_try_one_pc_commit,
@@ -19,9 +27,14 @@ use crate::{
     txn_retry_count,
 };
 
-use super::errors::RTError;
-use super::{errors::AsyncResult};
-use futures::future::{BoxFuture};
+use super::errors::{
+    RTError,
+    AsyncResult
+};
+
+use futures::future::BoxFuture;
+
+use slog::error;
 
 use crate::metrics::TIKV_CLIENT_RETRIES;
 
@@ -66,7 +79,14 @@ impl TxnClientWrapper<'static> {
             TransactionOptions::new_optimistic()
         };
 
-        let current_timestamp = self.current_timestamp().await.unwrap();
+        let current_timestamp = 
+        match self.current_timestamp().await {
+            Ok(ts) => ts,
+            Err(e) => {
+                error!(LOGGER, "get current timestamp failed: {:?}, use max for this query", e);
+                Timestamp::from_version(u64::MAX)
+            }
+        };
         self.snapshot(current_timestamp, options)
     }
 

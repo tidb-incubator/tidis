@@ -9,7 +9,8 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
-use tracing::{debug, instrument};
+use crate::config::LOGGER;
+use slog::debug;
 
 #[derive(Debug)]
 pub struct Zpop {
@@ -59,11 +60,10 @@ impl Zpop {
         Ok(Zpop::new(&argv[0], count))
     }
 
-    #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection, from_min: bool) -> crate::Result<()> {
         
         let response = self.zpop(None, from_min).await?;
-        debug!(?response);
+        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
         dst.write_frame(&response).await?;
 
         Ok(())

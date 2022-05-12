@@ -5,7 +5,8 @@ use crate::tikv::errors::AsyncResult;
 use bytes::Bytes;
 use sha1::{Sha1, Digest};
 use hex::ToHex;
-use tracing::{debug, instrument};
+use crate::config::LOGGER;
+use slog::debug;
 
 #[derive(Debug)]
 pub struct Script {
@@ -83,14 +84,13 @@ impl Script {
         Ok(cmd)
     }
 
-    #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection, db: &Db) -> crate::Result<()> {
         let response = match self.script(db).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
 
-        debug!(?response);
+        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
 
         dst.write_frame(&response).await?;
 

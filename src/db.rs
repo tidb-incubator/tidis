@@ -4,7 +4,8 @@ use tokio::time::{self, Duration, Instant};
 use bytes::Bytes;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
-use tracing::debug;
+use slog::debug;
+use crate::config::LOGGER;
 
 /// A wrapper around a `Db` instance. This exists to allow orderly cleanup
 /// of the `Db` by signalling the background purge task to shut down when
@@ -390,5 +391,5 @@ async fn purge_expired_tasks(shared: Arc<Shared>) {
         }
     }
 
-    debug!("Purge background task shut down")
+    debug!(LOGGER, "Purge background task shut down")
 }

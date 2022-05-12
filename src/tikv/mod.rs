@@ -5,6 +5,8 @@ use std::time::Duration;
 
 use tikv_client::{RawClient, Transaction, TransactionClient};
 
+use crate::config::LOGGER;
+
 use self::client::RawClientWrapper;
 use self::client::TxnClientWrapper;
 
@@ -71,7 +73,7 @@ pub async fn sleep(ms: u32) {
 pub async fn do_async_txn_connect(addrs: Vec<String>) -> AsyncResult<()> {
     PD_ADDRS.write().unwrap().replace(addrs.clone());
 
-    let client = TransactionClient::new(addrs.clone(), None).await?;
+    let client = TransactionClient::new(addrs.clone(), Some(LOGGER.clone())).await?;
     unsafe {
         TIKV_TXN_CLIENT.replace(client);
     }
@@ -79,7 +81,7 @@ pub async fn do_async_txn_connect(addrs: Vec<String>) -> AsyncResult<()> {
 }
 
 pub async fn do_async_raw_connect(addrs: Vec<String>) -> AsyncResult<()> {
-    let client = RawClient::new(addrs.clone(), None).await?;
+    let client = RawClient::new(addrs.clone(), Some(LOGGER.clone())).await?;
     unsafe {
         TIKV_RAW_CLIENT.replace(client);
     }

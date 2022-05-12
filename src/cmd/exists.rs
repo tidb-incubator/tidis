@@ -7,7 +7,9 @@ use crate::config::{is_use_txn_api};
 use crate::tikv::errors::AsyncResult;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
-use tracing::{debug, instrument};
+
+use crate::config::LOGGER;
+use slog::debug;
 
 #[derive(Debug)]
 pub struct Exists {
@@ -49,14 +51,13 @@ impl Exists {
         Ok(Exists{keys: argv.to_owned(), valid: true})
     }
 
-    #[instrument(skip(self, dst))]
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         let response = match self.exists(None).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
 
-        debug!(?response);
+        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
 
         dst.write_frame(&response).await?;
 

@@ -13,6 +13,12 @@ use crate::utils::{
     redis_resp_to_lua_resp, resp_err,
 };
 
+use crate::config::LOGGER;
+use slog::{
+    debug,
+    error,
+};
+
 use mlua::{
     Lua,
     Value as LuaValue,
@@ -81,6 +87,7 @@ impl<'a> LuaCommandCtx<'a> {
                 }
 
                 let cmd = Command::from_argv(cmd_name, &argv).unwrap();
+                debug!(LOGGER, "command call from lua {:?}", cmd);
                 let result = match cmd {
                     Command::Decr(cmd) => cmd.decr(txn_rc.clone()).await,
                     Command::Incr(cmd) => cmd.incr(txn_rc.clone()).await,
@@ -142,10 +149,12 @@ impl<'a> LuaCommandCtx<'a> {
                 };
                 match result {
                     Ok(resp) => {
+                        debug!(LOGGER, "response call from lua {:?}", resp);
                         let lua_resp = redis_resp_to_lua_resp(resp, _lua);
                         return Ok(lua_resp);
                     },
                     Err(e) => {
+                        error!(LOGGER, "response call from lua failed {}", e);
                         return Ok(LuaValue::String(_lua.create_string(&e.to_string()).unwrap()));
                     }
                 }

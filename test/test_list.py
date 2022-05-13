@@ -1,9 +1,8 @@
-import random
-import string
 import time
 import unittest
 
 from rediswrap import RedisWrapper
+from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs
 
 
 class ListTest(unittest.TestCase):
@@ -21,9 +20,6 @@ class ListTest(unittest.TestCase):
         self.r.execute_command('del', self.k1)
         self.r.execute_command('del', self.k2)
         pass
-
-    def random_string(n):
-        return ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(n))
 
     def test_lpop(self):
         for i in range(200):
@@ -79,17 +75,24 @@ class ListTest(unittest.TestCase):
         self.assertListEqual([str(i) for i in range(0, 100)], self.r.lrange(self.k1, 0, -1))
 
     def test_del(self):
-        for i in range(200):
-            self.assertTrue(self.r.rpush(self.k1, str(i)))
-        self.assertEqual(self.r.llen(self.k1), 200)
+        self.assertTrue(self.r.rpush(self.k1, self.v1))
+        self.assertEqual(self.r.llen(self.k1), 1)
         self.assertEqual(self.r.execute_command('del', self.k1), 1)
         self.assertEqual(self.r.llen(self.k1), 0)
+
+        # multi keys
+        self.assertTrue(self.r.rpush(self.k2, self.v2))
+        self.assertEqual(self.r.llen(self.k2), 1)
+        self.assertEqual(self.r.execute_command("del", self.k1, self.k2), 1)
+        self.assertEqual(self.r.llen(self.k2), 0)
 
     def test_pexpire(self):
         self.assertTrue(self.r.lpush(self.k1, self.v1))
         # expire in 5s
         self.assertTrue(self.r.execute_command('pexpire', self.k1, 5000))
-        self.assertLessEqual(self.r.execute_command('pttl', self.k1), 5000)
+        pttl = self.r.execute_command('pttl', self.k1)
+        self.assertLessEqual(pttl, 5000)
+        self.assertGreater(pttl, 0)
         self.assertEqual(self.r.llen(self.k1), 1)
         time.sleep(6)
         self.assertEqual(self.r.llen(self.k1), 0)
@@ -97,9 +100,11 @@ class ListTest(unittest.TestCase):
     def test_pexpireat(self):
         self.assertTrue(self.r.lpush(self.k1, self.v1))
         # expire in 5s
-        ts = int(round(time.time() * 1000)) + 5000
-        self.assertTrue(self.r.execute_command('pexpireat', self.k1, ts))
-        self.assertLessEqual(self.r.execute_command('pttl', self.k1), 5000)
+        self.assertTrue(self.r.execute_command('pexpireat', self.k1, msec_ts_after_five_secs()))
+        time.sleep(1)
+        pttl = self.r.execute_command('pttl', self.k1)
+        self.assertLess(pttl, 5000)
+        self.assertGreater(pttl, 0)
         self.assertEqual(self.r.llen(self.k1), 1)
         time.sleep(6)
         self.assertEqual(self.r.llen(self.k1), 0)
@@ -108,7 +113,9 @@ class ListTest(unittest.TestCase):
         self.assertTrue(self.r.lpush(self.k1, self.v1))
         # expire in 5s
         self.assertTrue(self.r.execute_command('expire', self.k1, 5))
-        self.assertLessEqual(self.r.execute_command('ttl', self.k1), 5)
+        ttl = self.r.execute_command('ttl', self.k1)
+        self.assertLessEqual(ttl, 5)
+        self.assertGreater(ttl, 0)
         self.assertEqual(self.r.llen(self.k1), 1)
         time.sleep(6)
         self.assertEqual(self.r.llen(self.k1), 0)
@@ -116,9 +123,10 @@ class ListTest(unittest.TestCase):
     def test_expireat(self):
         self.assertTrue(self.r.lpush(self.k1, self.v1))
         # expire in 5s
-        ts = int(round(time.time())) + 5
-        self.assertTrue(self.r.execute_command('expireat', self.k1, 5))
-        self.assertLessEqual(self.r.execute_command('ttl', self.k1), 5)
+        self.assertTrue(self.r.execute_command('expireat', self.k1, sec_ts_after_five_secs()))
+        ttl = self.r.execute_command('ttl', self.k1)
+        self.assertLessEqual(ttl, 5)
+        self.assertGreater(ttl, 0)
         self.assertEqual(self.r.llen(self.k1), 1)
         time.sleep(6)
         self.assertEqual(self.r.llen(self.k1), 0)

@@ -2,6 +2,7 @@ import time
 import unittest
 
 from rediswrap import RedisWrapper
+from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs
 
 
 class StringTest(unittest.TestCase):
@@ -50,6 +51,21 @@ class StringTest(unittest.TestCase):
         time.sleep(6)
         self.assertIsNone(self.r.get(self.k2))
 
+    def test_setex(self):
+        self.assertTrue(self.r.setex(self.k1, 5, self.v1))
+        ttl = self.r.ttl(self.k1)
+        self.assertLessEqual(ttl, 5)
+        self.assertGreater(ttl, 0)
+        self.assertIsNotNone(self.r.get(self.k1), "ttl = {}s, but the key has expired".format(ttl))
+        time.sleep(6)
+        self.assertIsNone(self.r.get(self.k1))
+
+    def test_setnx(self):
+        self.assertTrue(self.r.setnx(self.k1, self.v1))
+        self.assertEqual(self.r.get(self.k1), self.v1)
+        self.assertFalse(self.r.setnx(self.k1, self.v2))
+        self.assertEqual(self.r.get(self.k1), self.v1)
+
     def test_set_expire(self):
         self.assertTrue(self.r.set(self.k2, self.v2, px=5000))
         v2 = self.r.get(self.k2)
@@ -59,24 +75,6 @@ class StringTest(unittest.TestCase):
         v1 = self.r.get(self.k2)
         self.assertEqual(self.v1, v1, '{} != {}'.format(v1, self.v1))
 
-    def test_del(self):
-        self.assertTrue(self.r.set(self.k1, self.v1))
-        v1 = self.r.get(self.k1)
-        self.assertEqual(self.v1, v1, '{} != {}'.format(v1, self.v1))
-        v1 = self.r.delete(self.k1)
-        self.assertEqual(v1, 1, '{} != 1'.format(v1))
-        v1 = self.r.delete(self.k1)
-        self.assertEqual(v1, 0, '{} != 0'.format(v1))
-        v1 = self.r.get(self.k1)
-        self.assertIsNone(v1, '{} != None'.format(v1))
-
-        # del multi keys
-        self.assertTrue(self.r.set(self.k1, self.v1))
-        self.assertTrue(self.r.set(self.k2, self.v2))
-        self.assertTrue(self.r.delete(self.k1, self.k2))
-        self.assertIsNone(self.r.get(self.k1))
-        self.assertIsNone(self.r.get(self.k2))
-
     def test_mget(self):
         self.assertTrue(self.r.mset({self.k1: self.v1, self.k2: self.v2}))
         self.assertListEqual(self.r.mget(self.k1, self.k2), [self.v1, self.v2])
@@ -84,6 +82,15 @@ class StringTest(unittest.TestCase):
     def test_mset(self):
         self.assertTrue(self.r.mset({self.k1: self.v1, self.k2: self.v2}))
         self.assertListEqual(self.r.mget(self.k1, self.k2), [self.v1, self.v2])
+
+    def test_exists(self):
+        self.assertFalse(self.r.exists(self.k1))
+        self.assertTrue(self.r.set(self.k1, self.v1))
+        self.assertTrue(self.r.exists(self.k1))
+
+        self.assertFalse(self.r.exists(self.k2))
+        self.assertTrue(self.r.set(self.k2, self.v2))
+        self.assertEqual(self.r.exists(self.k1, self.k2, 'not_exists'), 2)
 
     def test_incr(self):
         # incr a new key
@@ -113,11 +120,31 @@ class StringTest(unittest.TestCase):
         err = cm.exception
         self.assertEqual(str(err), 'invalid digit found in string')
 
+    def test_del(self):
+        self.assertTrue(self.r.set(self.k1, self.v1))
+        v1 = self.r.get(self.k1)
+        self.assertEqual(self.v1, v1, '{} != {}'.format(v1, self.v1))
+        v1 = self.r.delete(self.k1)
+        self.assertEqual(v1, 1, '{} != 1'.format(v1))
+        v1 = self.r.delete(self.k1)
+        self.assertEqual(v1, 0, '{} != 0'.format(v1))
+        v1 = self.r.get(self.k1)
+        self.assertIsNone(v1, '{} != None'.format(v1))
+
+        # del multi keys
+        self.assertTrue(self.r.set(self.k1, self.v1))
+        self.assertTrue(self.r.set(self.k2, self.v2))
+        self.assertTrue(self.r.delete(self.k1, self.k2))
+        self.assertIsNone(self.r.get(self.k1))
+        self.assertIsNone(self.r.get(self.k2))
+
     def test_pexpire(self):
         self.assertTrue(self.r.set(self.k1, self.v1))
         # expire in 5s
         self.assertTrue(self.r.pexpire(self.k1, 5000))
-        self.assertLessEqual(self.r.pttl(self.k1), 5000)
+        pttl = self.r.execute_command('pttl', self.k1)
+        self.assertLessEqual(pttl, 5000)
+        self.assertGreater(pttl, 0)
         self.assertEqual(self.r.get(self.k1), self.v1)
         time.sleep(6)
         self.assertIsNone(self.r.get(self.k1))
@@ -125,9 +152,11 @@ class StringTest(unittest.TestCase):
     def test_pexpireat(self):
         self.assertTrue(self.r.set(self.k1, self.v1))
         # expire in 5s
-        ts = int(round(time.time() * 1000)) + 5000
-        self.assertTrue(self.r.pexpireat(self.k1, ts))
-        self.assertLessEqual(self.r.pttl(self.k1), 5000)
+        self.assertTrue(self.r.pexpireat(self.k1, msec_ts_after_five_secs()))
+        time.sleep(1)
+        pttl = self.r.execute_command('pttl', self.k1)
+        self.assertLess(pttl, 5000)
+        self.assertGreater(pttl, 0)
         self.assertEqual(self.r.get(self.k1), self.v1)
         time.sleep(6)
         self.assertIsNone(self.r.get(self.k1))
@@ -136,7 +165,9 @@ class StringTest(unittest.TestCase):
         self.assertTrue(self.r.set(self.k1, self.v1))
         # expire in 5s
         self.assertTrue(self.r.expire(self.k1, 5))
-        self.assertLessEqual(self.r.ttl(self.k1), 5)
+        ttl = self.r.execute_command('ttl', self.k1)
+        self.assertLessEqual(ttl, 5)
+        self.assertGreater(ttl, 0)
         self.assertEqual(self.r.get(self.k1), self.v1)
         time.sleep(6)
         self.assertIsNone(self.r.get(self.k1))
@@ -144,9 +175,10 @@ class StringTest(unittest.TestCase):
     def test_expireat(self):
         self.assertTrue(self.r.set(self.k1, self.v1))
         # expire in 5s
-        ts = int(round(time.time())) + 5
-        self.assertTrue(self.r.expireat(self.k1, ts))
-        self.assertLessEqual(self.r.ttl(self.k1), 5)
+        self.assertTrue(self.r.expireat(self.k1, sec_ts_after_five_secs()))
+        ttl = self.r.execute_command('ttl', self.k1)
+        self.assertLessEqual(ttl, 5)
+        self.assertGreater(ttl, 0)
         self.assertEqual(self.r.get(self.k1), self.v1)
         time.sleep(6)
         self.assertIsNone(self.r.get(self.k1))

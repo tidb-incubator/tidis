@@ -123,6 +123,12 @@ impl ZsetCommandCtx {
                     }
                 },
                 None => {
+                    if let Some(ex) = exists {
+                        if ex {
+                            // xx flag specified, do not create new key
+                            return Ok(0);
+                        }
+                    }
                     // create new key
                     for idx in 0..members.len() {
                         let data_key = KeyEncoder::new().encode_txnkv_zset_data_key(&key, &members[idx]);

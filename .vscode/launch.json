@@ -20,11 +20,36 @@
                 }
             },
             "args": [
-                "--port=6666",
-                "--pdaddrs=192.168.31.6:2379",
                 "--config=config.toml"
             ],
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}",
+            "env": {
+                //"RUST_LOG": "debug"
+            }
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Run executable 'tikv-service-server'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "-r",
+                    "--bin=tikv-service-server",
+                    "--package=tikv-service"
+                ],
+                "filter": {
+                    "name": "tikv-service-server",
+                    "kind": "bin"
+                }
+            },
+            "args": [
+                "--config=config.toml"
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                //"RUST_LOG": "debug"
+            }
         }
     ]
 }

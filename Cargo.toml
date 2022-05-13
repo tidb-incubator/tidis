@@ -39,4 +39,11 @@ sha1 = "0.10.0"
 hex = "0.4.3"
 
 [profile.release]
-debug = true
+opt-level = 3
+debug = false
+lto = "thin"
+incremental = true
+panic = 'unwind'
+debug-assertions = false
+overflow-checks = false
+rpath = false

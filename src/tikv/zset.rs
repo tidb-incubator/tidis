@@ -62,15 +62,14 @@ impl ZsetCommandCtx {
                             member_exists = true;
                         }
 
-                        if !member_exists {
-                            added_count += 1;
-                        }
-
                         if let Some(v) = exists {
                             // NX|XX
                             if (v && member_exists) || (!v && !member_exists) {
-                                // XX Only update element that already exists
-                                // NX Only update element that not exists
+                                if !member_exists {
+                                    added_count += 1;
+                                }
+                                // XX Only update elements that already exists
+                                // NX Only add elements that not exists
                                 if changed_only {
                                     if !member_exists {
                                         updated_count += 1;
@@ -89,6 +88,9 @@ impl ZsetCommandCtx {
                                 // do not update member
                             }
                         } else {
+                            if !member_exists {
+                                added_count += 1;
+                            }
                             // no NX|XX argument
                             if changed_only {
                                 if !member_exists {

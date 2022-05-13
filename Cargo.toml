@@ -28,6 +28,7 @@ tikv-client = { git = "https://github.com/tikv/client-rust.git", branch = "maste
 lazy_static = "1.4.0"
 thiserror = "1"
 prometheus = "0.13.0"
+pprof = { version = "0.9", features = ["flamegraph", "protobuf-codec"] }
 hyper = { version = "0.14.17", features = ["full"] }
 async-std = { version = "1.11.0", features = ["unstable"] }
 toml = { version = "0.5.8" }
@@ -37,6 +38,5 @@ mlua = { version = "0.7.4", features = ["luajit", "async", "vendored", "macros",
 sha1 = "0.10.0"
 hex = "0.4.3"
 
-[dev-dependencies]
-# Enable test-utilities in dev mode only. This is mostly for tests.
-tokio = { version = "1", features = ["test-util"] }
+[profile.release]
+debug = true

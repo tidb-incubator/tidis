@@ -5,7 +5,7 @@ pd_addrs = "127.0.0.1:2379"
 instance_id = "1"
 prometheus_listen = "0.0.0.0"
 prometheus_port = 8080
-log_level = "debug"
+log_level = "info"
 log_file = "tikv-service.log"
 
 [backend]

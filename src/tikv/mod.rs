@@ -1,5 +1,8 @@
 use std::collections::{HashMap, LinkedList};
+use std::fs::File;
+use std::io::Write;
 use std::sync::{Arc, RwLock};
+use pprof::protos::Message;
 use tokio::sync::Mutex;
 use std::time::Duration;
 
@@ -28,6 +31,36 @@ lazy_static! {
         Arc::new(RwLock::new(HashMap::new()));
     pub static ref TIKV_TNX_CONN_POOL: Arc<Mutex<LinkedList<TransactionClient>>> =
         Arc::new(Mutex::new(LinkedList::new()));
+}
+
+pub static mut PROFILER_GUARD: Option<pprof::ProfilerGuard> = None;
+
+pub fn start_profiler() {
+    unsafe {
+        let guard = pprof::ProfilerGuardBuilder::default().frequency(1000).blocklist(&["libc", "libgcc", "pthread", "vdso"]).build().unwrap();
+        PROFILER_GUARD = Some(guard);
+    }
+}
+
+pub fn stop_profiler() {
+    unsafe {
+        if let Some(guard) = &PROFILER_GUARD {
+            if let Ok(report) = guard.report().build() {
+                // generate flamegraph file
+                let flame_graph_file = File::create("tikv-service-server-flamegraph.svg").unwrap();
+                report.flamegraph(flame_graph_file).unwrap();
+
+                // generate profile file
+                let mut profile_file = File::create("tikv-service-server-profile.pb").unwrap();
+                let profile = report.pprof().unwrap();
+                let mut content = Vec::new();
+                profile.write_to_vec(&mut content).unwrap();
+                profile_file.write_all(&content).unwrap();
+            };
+            drop(guard);
+            PROFILER_GUARD = None;
+        }
+    }
 }
 
 pub static mut TIKV_RAW_CLIENT: Option<RawClient> = None;

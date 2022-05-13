@@ -52,7 +52,7 @@ class StringTest(unittest.TestCase):
         self.assertIsNone(self.r.get(self.k2))
 
     def test_setex(self):
-        self.assertTrue(self.r.setex(self.k1, 10, self.v1))
+        self.assertTrue(self.r.setex(self.k1, 5, self.v1))
         ttl = self.r.ttl(self.k1)
         self.assertLessEqual(ttl, 5)
         self.assertGreater(ttl, 0)
@@ -153,8 +153,9 @@ class StringTest(unittest.TestCase):
         self.assertTrue(self.r.set(self.k1, self.v1))
         # expire in 5s
         self.assertTrue(self.r.pexpireat(self.k1, msec_ts_after_five_secs()))
+        time.sleep(1)
         pttl = self.r.execute_command('pttl', self.k1)
-        self.assertLessEqual(pttl, 5000)
+        self.assertLess(pttl, 5000)
         self.assertGreater(pttl, 0)
         self.assertEqual(self.r.get(self.k1), self.v1)
         time.sleep(6)

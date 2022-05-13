@@ -158,8 +158,9 @@ class ZsetTest(unittest.TestCase):
         self.assertEqual(self.r.zadd(self.k1, {self.v1: 10}), 1)
         # expire in 5s
         self.assertTrue(self.r.execute_command('pexpireat', self.k1, msec_ts_after_five_secs()))
+        time.sleep(1)
         pttl = self.r.execute_command('pttl', self.k1)
-        self.assertLessEqual(pttl, 5000)
+        self.assertLess(pttl, 5000)
         self.assertGreater(pttl, 0)
         self.assertEqual(self.r.zcard(self.k1), 1)
         time.sleep(6)

@@ -111,8 +111,9 @@ class HashTest(unittest.TestCase):
         self.assertTrue(self.r.hmset(self.k1, {self.f1: self.v1, self.f2: self.v2, self.f3: self.v3}))
         # expire in 5s
         self.assertEqual(self.r.execute_command('pexpireat', self.k1, msec_ts_after_five_secs()), 1)
+        time.sleep(1)
         pttl = self.r.execute_command('pttl', self.k1)
-        self.assertLessEqual(pttl, 5000)
+        self.assertLess(pttl, 5000)
         self.assertGreater(pttl, 0)
         self.assertEqual(self.r.hlen(self.k1), 3)
         time.sleep(6)

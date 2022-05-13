@@ -17,7 +17,7 @@ def sec_ts_after_five_secs():
 
 
 def msec_ts_after_five_secs():
-    return current_sec_ts() + 5000
+    return current_msec_ts() + 5000
 
 
 def random_string(n):

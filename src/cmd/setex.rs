@@ -72,7 +72,7 @@ impl SetEX {
         // Read the ttl to set.
         let uexpire = parse.next_int()?;
 
-        let expire = uexpire as i64;
+        let expire = uexpire as i64 * 1000;
 
         // Read the value to set. This is a required field.
         let value = parse.next_bytes()?;

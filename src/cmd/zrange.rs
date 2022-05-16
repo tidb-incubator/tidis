@@ -57,7 +57,7 @@ impl Zrange {
         // try to parse other flags
         while let Ok(v) = parse.next_string() {
             match v.to_uppercase().as_str() {
-                // flags implement in signle command, such as ZRANGEBYSCORE
+                // flags implement in single command, such as ZRANGEBYSCORE
                 "BYSCORE" => {},
                 "BYLEX" => {},
                 "REV" => {
@@ -94,8 +94,8 @@ impl Zrange {
         let mut reverse = false;
 
         for arg in &argv[2..] {
-            match arg.as_str() {
-                // flags implement in signle command, such as ZRANGEBYSCORE
+            match arg.to_uppercase().as_str() {
+                // flags implement in single command, such as ZRANGEBYSCORE
                 "BYSCORE" => {},
                 "BYLEX" => {},
                 "REV" => {

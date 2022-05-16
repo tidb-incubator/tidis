@@ -3,6 +3,8 @@ use tokio::sync::Mutex;
 
 use tikv_client::Error::StringError;
 use tikv_client::{
+    Backoff,
+    RetryOptions,
     TransactionClient,
     Timestamp,
     Result as TiKVResult,
@@ -25,6 +27,10 @@ use crate::{
     is_try_one_pc_commit,
     is_use_async_commit,
     txn_retry_count,
+    txn_region_backoff_delay_ms,
+    txn_region_backoff_delay_attemps,
+    txn_lock_backoff_delay_ms,
+    txn_lock_backoff_delay_attemps,
 };
 
 use super::errors::{
@@ -39,6 +45,8 @@ use slog::error;
 use crate::metrics::TIKV_CLIENT_RETRIES;
 
 use super::sleep;
+
+const MAX_DELAY_MS: u64 = 600000;
 
 pub struct TxnClientWrapper<'a> {
     client: &'a TransactionClient,
@@ -92,9 +100,19 @@ impl TxnClientWrapper<'static> {
 
     pub async fn begin(&self) -> TiKVResult<Transaction> {
         let mut txn_options = if is_use_pessimistic_txn() {
-            TransactionOptions::new_optimistic()
-        } else {
             TransactionOptions::new_pessimistic()
+        } else {
+            // add retry options
+            let region_backoff = Backoff::no_jitter_backoff(
+                txn_region_backoff_delay_ms(),
+                MAX_DELAY_MS,
+                txn_region_backoff_delay_attemps());
+            let lock_backoff = Backoff::no_jitter_backoff(
+                txn_lock_backoff_delay_ms(),
+                MAX_DELAY_MS,
+                txn_lock_backoff_delay_attemps());
+            let retry_options = RetryOptions::new(region_backoff, lock_backoff);
+            TransactionOptions::new_optimistic().retry_options(retry_options)
         };
         txn_options = if is_use_async_commit() {
             txn_options.use_async_commit()

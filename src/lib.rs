@@ -83,6 +83,10 @@ pub use config::config_local_pool_number;
 pub use config::is_auth_enabled;
 pub use config::is_auth_matched;
 pub use config::txn_retry_count;
+pub use config::txn_region_backoff_delay_ms;
+pub use config::txn_region_backoff_delay_attemps;
+pub use config::txn_lock_backoff_delay_ms;
+pub use config::txn_lock_backoff_delay_attemps;
 
 /// Default port that a redis server listens on.
 ///

@@ -51,6 +51,10 @@ struct Backend {
     use_pessimistic_txn: Option<bool>,
     local_pool_number: Option<usize>,
     txn_retry_count: Option<u32>,
+    txn_region_backoff_delay_ms: Option<u64>,
+    txn_region_backoff_delay_attemps: Option<u32>,
+    txn_lock_backoff_delay_ms: Option<u64>,
+    txn_lock_backoff_delay_attemps: Option<u32>,
 }
 
 // Config
@@ -222,7 +226,7 @@ pub fn is_use_txn_api() -> bool {
     unsafe {
         if let Some(c) = &SERVER_CONFIG {
             if let Some(b) = c.backend.use_txn_api {
-                return b
+                return b;
             }
         }
         false
@@ -233,7 +237,7 @@ pub fn is_use_async_commit() -> bool {
     unsafe {
         if let Some(c) = &SERVER_CONFIG {
             if let Some(b) = c.backend.use_async_commit {
-                return b
+                return b;
             }
         }
         false
@@ -244,7 +248,7 @@ pub fn is_try_one_pc_commit() -> bool {
     unsafe {
         if let Some(c) = &SERVER_CONFIG {
             if let Some(b) = c.backend.try_one_pc_commit {
-                return b
+                return b;
             }
         }
         false
@@ -255,10 +259,54 @@ pub fn is_use_pessimistic_txn() -> bool {
     unsafe {
         if let Some(c) = &SERVER_CONFIG {
             if let Some(b) = c.backend.use_pessimistic_txn {
-                return b
+                return b;
             }
         }
         // default use pessimistic txn mode
         true
     }
+}
+
+pub fn txn_region_backoff_delay_ms() -> u64 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.txn_region_backoff_delay_ms {
+                return b;
+            }
+        }
+    }
+    2
+}
+
+pub fn txn_region_backoff_delay_attemps() -> u32 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.txn_region_backoff_delay_attemps {
+                return b;
+            }
+        }
+    }
+    10
+}
+
+pub fn txn_lock_backoff_delay_ms() -> u64 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.txn_lock_backoff_delay_ms {
+                return b;
+            }
+        }
+    }
+    2
+}
+
+pub fn txn_lock_backoff_delay_attemps() -> u32 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.txn_lock_backoff_delay_attemps {
+                return b;
+            }
+        }
+    }
+    10
 }

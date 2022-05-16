@@ -1,13 +1,13 @@
-use std::{convert::TryInto};
+use std::convert::TryInto;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use ::futures::future::{FutureExt};
+use ::futures::future::FutureExt;
 use crate::Frame;
 use tikv_client::{Transaction, BoundRange};
 use super::{
     encoding::{KeyEncoder, KeyDecoder, DataType}, errors::AsyncResult, errors::RTError,
 };
-use super::{get_txn_client};
+use super::get_txn_client;
 use crate::utils::{resp_err, resp_int, resp_array, resp_bulk, resp_nil, key_is_expired};
 use super::errors::*;
 
@@ -21,7 +21,7 @@ impl ZsetCommandCtx {
         ZsetCommandCtx { txn }
     }
 
-    pub async fn do_async_txnkv_zadd(mut self, key: &str, members: &Vec<String>, scores: &Vec<i64>, exists: Option<bool>, changed_only: bool, incr: bool) -> AsyncResult<Frame> {
+    pub async fn do_async_txnkv_zadd(mut self, key: &str, members: &Vec<String>, scores: &Vec<i64>, exists: Option<bool>, changed_only: bool, _incr: bool) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
 
         let key = key.to_owned();

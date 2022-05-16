@@ -46,7 +46,7 @@ use crate::metrics::TIKV_CLIENT_RETRIES;
 
 use super::sleep;
 
-const MAX_DELAY_MS: u64 = 600000;
+const MAX_DELAY_MS: u64 = 500;
 
 pub struct TxnClientWrapper<'a> {
     client: &'a TransactionClient,

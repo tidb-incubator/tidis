@@ -105,6 +105,9 @@ pub fn redis_resp_to_lua_resp(resp: Frame, lua: &Lua) -> LuaValue {
         Frame::Array(arr) => {
             let len = arr.len();
             let table = lua.create_table().unwrap();
+            if len == 0 {
+                table.raw_set("__self_length__", LuaValue::Integer(len as i64)).unwrap();
+            }
             for idx in 0..len {
                 let v = redis_resp_to_lua_resp(arr[idx].clone(), lua);
                 // if v is nil, table set will remove the item in table, but we should save the the nil item in table

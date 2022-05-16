@@ -155,7 +155,11 @@ impl Set {
         let value = Bytes::from(argv[1].clone());
         let mut expire = None;
         let mut nx = None;
-        for mut idx in 2..argv.len() {
+        let mut idx = 2;
+        loop {
+            if idx >= argv.len() {
+                break;
+            }
             if argv[idx].to_uppercase() == "EX" {
                 idx += 1;
                 let secs = argv[idx].parse::<i64>();
@@ -175,6 +179,8 @@ impl Set {
             } else {
                 return Ok(Set::new_invalid());
             }
+
+            idx += 1;
         }
         Ok(Set { key, value, expire, nx, valid: true })
     }

@@ -88,7 +88,7 @@ impl SetEX {
         let expire = argv[1].parse::<i64>();
         let value = Bytes::from(argv[2].clone());
         if let Ok(v) = expire {
-            return Ok(SetEX::new(key, value, v));
+            return Ok(SetEX::new(key, value, v * 1000));
         }
         return Ok(SetEX::new_invalid());
     }

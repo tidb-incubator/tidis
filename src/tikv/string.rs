@@ -338,8 +338,8 @@ impl StringCommandCtx {
                             Ok(ival) => {
                                 prev_int = ival;
                             },
-                            Err(err) => {
-                                return Err(RTError::StringError(err.to_string()));
+                            Err(_) => {
+                                return Err(RTError::StringError("value is not an integer or out of range".to_string()));
                             }
                         }
                     }

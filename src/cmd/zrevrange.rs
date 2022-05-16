@@ -82,7 +82,7 @@ impl Zrevrange {
         let mut withscores = false;
 
         for arg in &argv[2..] {
-            match arg.as_str() {
+            match arg.to_uppercase().as_str() {
                 // flags implement in signle command, such as ZRANGEBYSCORE
                 "WITHSCORES" => {
                     withscores = true;

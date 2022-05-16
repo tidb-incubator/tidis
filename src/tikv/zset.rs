@@ -58,8 +58,10 @@ impl ZsetCommandCtx {
                         let score_key = KeyEncoder::new().encode_txnkv_zset_score_key(&key, new_score);
                         let mut member_exists = false;
                         let old_data_value = txn.get(data_key.clone()).await?;
+                        let mut old_data_value_data: Vec<u8> = vec![];
                         if old_data_value.is_some() {
                             member_exists = true;
+                            old_data_value_data = old_data_value.unwrap();
                         }
 
                         if let Some(v) = exists {
@@ -75,7 +77,7 @@ impl ZsetCommandCtx {
                                         updated_count += 1;
                                     } else {
                                         // check if score updated
-                                        let old_score = KeyDecoder::new().decode_key_zset_data_value(&old_data_value.unwrap());
+                                        let old_score = KeyDecoder::new().decode_key_zset_data_value(&old_data_value_data);
                                         if old_score != new_score {
                                             updated_count += 1;
                                         }
@@ -83,6 +85,15 @@ impl ZsetCommandCtx {
                                 }
                                 let data_value = KeyEncoder::new().encode_txnkv_zset_data_value(new_score);
                                 txn.put(data_key, data_value).await?;
+
+                                // delete old score key if exists
+                                if member_exists {
+                                    let old_score = KeyDecoder::new().decode_key_zset_data_value(&old_data_value_data);
+                                    if old_score != new_score {
+                                        let old_score_key = KeyEncoder::new().encode_txnkv_zset_score_key(&key, old_score);
+                                        txn.delete(old_score_key).await?;
+                                    }
+                                }
                                 txn.put(score_key, members[idx].clone()).await?;
                             } else {
                                 // do not update member
@@ -97,7 +108,7 @@ impl ZsetCommandCtx {
                                     updated_count += 1;
                                 } else {
                                    // check if score updated
-                                   let old_score = KeyDecoder::new().decode_key_zset_data_value(&old_data_value.unwrap());
+                                   let old_score = KeyDecoder::new().decode_key_zset_data_value(&old_data_value_data);
                                    if old_score != new_score {
                                        updated_count += 1;
                                    }
@@ -106,6 +117,15 @@ impl ZsetCommandCtx {
                             let data_value = KeyEncoder::new().encode_txnkv_zset_data_value(new_score);
                             let member = members[idx].clone();
                             txn.put(data_key, data_value).await?;
+
+                            // delete old score key if it exists
+                            if member_exists {
+                                let old_score = KeyDecoder::new().decode_key_zset_data_value(&old_data_value_data);
+                                if old_score != new_score {
+                                    let old_score_key = KeyEncoder::new().encode_txnkv_zset_score_key(&key, old_score);
+                                    txn.delete(old_score_key).await?;
+                                }
+                            }
                             txn.put(score_key, member).await?;
                         }
                     }
@@ -138,6 +158,7 @@ impl ZsetCommandCtx {
                         // add data key and score key
                         let data_value = KeyEncoder::new().encode_txnkv_zset_data_value(score);
                         txn.put(data_key, data_value).await?;
+                        // TODO check old score key exists, in case of zadd same field with different scores?
                         txn.put(score_key, member).await?;
                     }
                     // add meta key

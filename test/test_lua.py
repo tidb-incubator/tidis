@@ -98,7 +98,7 @@ class LuaTest(unittest.TestCase):
         self.assertEqual(self.execute_eval("incr", self.k1), 2)
 
         self.assertTrue(self.execute_eval('set', self.k2, self.v2))
-        self.assertEqual(self.execute_eval("incr", self.k2), 'value is not an integer or out of range')
+        self.assertEqual(self.execute_eval("incr", self.k2), 'ERR value is not an integer or out of range')
         # with self.assertRaises(Exception) as cm:
         #     self.execute_eval("incr", self.k2)
         # err = cm.exception
@@ -109,7 +109,7 @@ class LuaTest(unittest.TestCase):
         self.assertEqual(self.execute_eval("decr", self.k1), -2)
 
         self.assertTrue(self.execute_eval('set', self.k2, self.v2))
-        self.assertEqual(self.execute_eval("decr", self.k2), 'value is not an integer or out of range')
+        self.assertEqual(self.execute_eval("decr", self.k2), 'ERR value is not an integer or out of range')
         # with self.assertRaises(Exception) as cm:
         #     self.execute_eval("decr", self.k2)
         # err = cm.exception

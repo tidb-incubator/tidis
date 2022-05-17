@@ -339,7 +339,7 @@ impl StringCommandCtx {
                                 prev_int = ival;
                             },
                             Err(_) => {
-                                return Err(RTError::StringError("value is not an integer or out of range".to_string()));
+                                return Err(RTError::StringError(REDIS_VALUE_IS_NOT_INTEGER.to_string()));
                             }
                         }
                     }

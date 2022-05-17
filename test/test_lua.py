@@ -1,8 +1,9 @@
+import operator
 import random
 import time
 import unittest
-import operator
 from functools import reduce
+
 from rediswrap import RedisWrapper
 from test_util import msec_ts_after_five_secs, sec_ts_after_five_secs
 
@@ -33,15 +34,10 @@ class LuaTest(unittest.TestCase):
     def execute_eval(self, cmd, *args):
         arg_str = ", ".join(list(map(lambda arg: "'{}'".format(arg), args)))
         lua_script = "return redis.call('{}', {})".format(cmd, arg_str)
-        # print(lua_script)
         return self.r.execute_command('eval', lua_script, 0)
 
     # # ================ string ================
-    # def test_get(self):
-    #     self.assertTrue(self.execute_eval('set', self.k1, self.v1))
-    #     self.assertEqual(self.execute_eval('get', self.k1), self.v1)
-
-    def test_set(self):
+    def test_set_get(self):
         self.assertTrue(self.execute_eval('set', self.k1, self.v1))
         self.assertEqual(self.execute_eval('get', self.k1), self.v1)
 
@@ -99,10 +95,6 @@ class LuaTest(unittest.TestCase):
 
         self.assertTrue(self.execute_eval('set', self.k2, self.v2))
         self.assertEqual(self.execute_eval("incr", self.k2), 'ERR value is not an integer or out of range')
-        # with self.assertRaises(Exception) as cm:
-        #     self.execute_eval("incr", self.k2)
-        # err = cm.exception
-        # self.assertIn('value is not an integer or out of range', str(err))
 
     def test_decr(self):
         self.assertEqual(self.execute_eval("decr", self.k1), -1)
@@ -110,10 +102,6 @@ class LuaTest(unittest.TestCase):
 
         self.assertTrue(self.execute_eval('set', self.k2, self.v2))
         self.assertEqual(self.execute_eval("decr", self.k2), 'ERR value is not an integer or out of range')
-        # with self.assertRaises(Exception) as cm:
-        #     self.execute_eval("decr", self.k2)
-        # err = cm.exception
-        # self.assertIn('value is not an integer or out of range', str(err))
 
     def test_del(self):
         self.assertTrue(self.execute_eval('set', self.k1, self.v1))
@@ -150,8 +138,6 @@ class LuaTest(unittest.TestCase):
     def test_hstrlen(self):
         self.assertTrue(self.execute_eval('hset', self.k1, self.f1, self.v1), 1)
         self.assertEqual(self.execute_eval('hstrlen', self.k1, self.f1), len(self.v1))
-        # self.r.execute_command('eval', "return redis.call(hstrlen, KEYS[1],ARGV[1])", 1, "k1", "v1")
-        # self.assertEqual(self.execute_eval('hstrlen', self.k1, self.f1), len(self.v1))
 
     def test_hlen(self):
         prefix = '__'
@@ -363,7 +349,7 @@ class LuaTest(unittest.TestCase):
         self.assertListEqual(self.execute_eval('zrevrange', self.k1, 20, 10), [])
         #  range with scores
         self.assertListEqual(self.execute_eval('zrevrange', self.k1, 10, 20, 'withscores'),
-                             reduce(operator.add, [[str(i), str(100-i)] for i in range(10, 21)]))
+                             reduce(operator.add, [[str(i), str(100 - i)] for i in range(10, 21)]))
 
     def test_zrangebyscore(self):
         for i in range(100):

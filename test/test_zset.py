@@ -40,13 +40,14 @@ class ZsetTest(unittest.TestCase):
         self.assertEqual(self.r.zadd(self.k2, {self.v1: 1}), 1)
         self.assertListEqual(self.r.zrange(self.k2, 0, -1, False, True), [(self.v1, 1)])
         self.assertEqual(self.r.zadd(self.k2, {self.v1: 2}, xx=True), 0)
-        self.assertListEqual(self.r.zrange(self.k2, 0, -1, False, True), [(self.v1, 2)])
+        self.assertEqual(self.r.zadd(self.k2, {self.v1: 3}, xx=True, ch=True), 1)
+        self.assertListEqual(self.r.zrange(self.k2, 0, -1, False, True), [(self.v1, 3)])
 
         # zadd nx
-        self.assertEqual(self.r.zadd(self.k2, {self.v1: 3}, nx=True), 0)
-        self.assertListEqual(self.r.zrange(self.k2, 0, -1, False, True), [(self.v1, 2)])
+        self.assertEqual(self.r.zadd(self.k2, {self.v1: 4}, nx=True), 0)
+        self.assertListEqual(self.r.zrange(self.k2, 0, -1, False, True), [(self.v1, 3)])
         self.assertEqual(self.r.zadd(self.k2, {self.v2: 1}, nx=True), 1)
-        self.assertListEqual(self.r.zrange(self.k2, 0, -1, False, True), [(self.v2, 1), (self.v1, 2)])
+        self.assertListEqual(self.r.zrange(self.k2, 0, -1, False, True), [(self.v2, 1), (self.v1, 3)])
 
         # zadd ch
         self.assertEqual(self.r.zadd(self.k2, {self.v1: 1, self.v2: 1, 'new_ele': 2}), 1)

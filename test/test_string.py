@@ -100,7 +100,6 @@ class StringTest(unittest.TestCase):
 
         # incr a invalid number
         self.assertTrue(self.r.set(self.k2, self.v2))
-
         with self.assertRaises(Exception) as cm:
             self.r.execute_command("INCR", self.k2)
         err = cm.exception

@@ -92,7 +92,7 @@ impl TxnClientWrapper<'static> {
             Ok(ts) => ts,
             Err(e) => {
                 error!(LOGGER, "get current timestamp failed: {:?}, use max for this query", e);
-                Timestamp::from_version(u64::MAX)
+                Timestamp::from_version(i64::MAX as u64)
             }
         };
         self.snapshot(current_timestamp, options)

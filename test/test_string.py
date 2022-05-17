@@ -104,7 +104,7 @@ class StringTest(unittest.TestCase):
         with self.assertRaises(Exception) as cm:
             self.r.execute_command("INCR", self.k2)
         err = cm.exception
-        self.assertEqual(str(err), 'invalid digit found in string')
+        self.assertEqual(str(err), 'value is not an integer or out of range')
 
     def test_decr(self):
         # decr a new key
@@ -118,7 +118,7 @@ class StringTest(unittest.TestCase):
         with self.assertRaises(Exception) as cm:
             self.r.execute_command("DECR", self.k2)
         err = cm.exception
-        self.assertEqual(str(err), 'invalid digit found in string')
+        self.assertEqual(str(err), 'value is not an integer or out of range')
 
     def test_del(self):
         self.assertTrue(self.r.set(self.k1, self.v1))

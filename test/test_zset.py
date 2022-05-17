@@ -39,7 +39,7 @@ class ZsetTest(unittest.TestCase):
         self.assertEqual(self.r.zcard(self.k2), 0)
         self.assertEqual(self.r.zadd(self.k2, {self.v1: 1}), 1)
         self.assertListEqual(self.r.zrange(self.k2, 0, -1, False, True), [(self.v1, 1)])
-        self.assertEqual(self.r.zadd(self.k2, {self.v1: 2}, xx=True), 1)
+        self.assertEqual(self.r.zadd(self.k2, {self.v1: 2}, xx=True), 0)
         self.assertListEqual(self.r.zrange(self.k2, 0, -1, False, True), [(self.v1, 2)])
 
         # zadd nx

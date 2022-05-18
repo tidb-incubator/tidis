@@ -99,19 +99,21 @@ impl TxnClientWrapper<'static> {
     }
 
     pub async fn begin(&self) -> TiKVResult<Transaction> {
+        // add retry options
+        let region_backoff = Backoff::no_jitter_backoff(
+            txn_region_backoff_delay_ms(),
+            MAX_DELAY_MS,
+            txn_region_backoff_delay_attemps());
+        let lock_backoff = Backoff::no_jitter_backoff(
+            txn_lock_backoff_delay_ms(),
+            MAX_DELAY_MS,
+            txn_lock_backoff_delay_attemps());
+        let retry_options = RetryOptions::new(region_backoff, lock_backoff);
+
         let mut txn_options = if is_use_pessimistic_txn() {
-            TransactionOptions::new_pessimistic()
+            TransactionOptions::new_pessimistic().retry_options(retry_options)
         } else {
-            // add retry options
-            let region_backoff = Backoff::no_jitter_backoff(
-                txn_region_backoff_delay_ms(),
-                MAX_DELAY_MS,
-                txn_region_backoff_delay_attemps());
-            let lock_backoff = Backoff::no_jitter_backoff(
-                txn_lock_backoff_delay_ms(),
-                MAX_DELAY_MS,
-                txn_lock_backoff_delay_attemps());
-            let retry_options = RetryOptions::new(region_backoff, lock_backoff);
+            
             TransactionOptions::new_optimistic().retry_options(retry_options)
         };
         txn_options = if is_use_async_commit() {
@@ -206,8 +208,19 @@ impl TxnClientWrapper<'static> {
                         },
                         Err(e) => {
                             txn.rollback().await?;
-                            error!(LOGGER, "error to rollback transaction: {}", e);
-                            return Err(e);
+                            error!(LOGGER, "error occured so rollback transaction: {}", e);
+                            if let RTError::TikvClientError(client_err) = e {
+                                if self.error_retryable(&client_err) {
+                                    if self.retries == 0 {
+                                        return Err(RTError::TikvClientError(client_err));
+                                    }
+                                    continue;
+                                } else {
+                                    return Err(RTError::TikvClientError(client_err));
+                                }
+                            } else {
+                                return Err(e);
+                            }
                         }
                     }
                 }

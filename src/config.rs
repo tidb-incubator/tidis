@@ -286,7 +286,7 @@ pub fn txn_region_backoff_delay_attemps() -> u32 {
             }
         }
     }
-    10
+    2
 }
 
 pub fn txn_lock_backoff_delay_ms() -> u64 {
@@ -308,5 +308,5 @@ pub fn txn_lock_backoff_delay_attemps() -> u32 {
             }
         }
     }
-    10
+    2
 }

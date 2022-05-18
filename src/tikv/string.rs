@@ -78,12 +78,15 @@ impl StringCommandCtx {
         Ok(resp_ok())
     }
     
-    pub async fn do_async_txnkv_put(self, key: &str, val: &Bytes, timestamp: u64) -> AsyncResult<Frame> {
+    pub async fn do_async_txnkv_put(mut self, key: &str, val: &Bytes, timestamp: u64) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let ekey = KeyEncoder::new().encode_txnkv_string(key);
         let eval = KeyEncoder::new().encode_txnkv_string_value(&mut val.to_vec(), timestamp);
-        let resp = client.exec_in_txn(self.txn, |txn| async move {
-            let mut txn = txn.lock().await;
+        let resp = client.exec_in_txn(self.txn.clone(), |txn_rc| async move {
+            if self.txn.is_none() {
+                self.txn = Some(txn_rc.clone());
+            }
+            let mut txn = txn_rc.lock().await;
             txn.put(ekey, eval).await?;
             Ok(())
         }.boxed()).await;

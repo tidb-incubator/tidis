@@ -8,7 +8,7 @@ use super::{
     encoding::{KeyEncoder, KeyDecoder, DataType}, errors::AsyncResult, errors::RTError,
 };
 use super::{get_txn_client};
-use crate::utils::{resp_err, resp_int, resp_array, resp_bulk, key_is_expired};
+use crate::utils::{resp_err, resp_int, resp_array, resp_bulk, key_is_expired, resp_nil};
 use super::errors::*;
 
 #[derive(Clone)]
@@ -350,8 +350,16 @@ impl SetCommandCtx {
         }.boxed()).await;
 
         match resp {
-            Ok(v) => {
-                Ok(resp_array(v))
+            Ok(mut v) => {
+                if count == 1 {
+                    if v.len() == 0 {
+                        Ok(resp_nil())
+                    } else {
+                        Ok(v.pop().unwrap())
+                    }
+                } else {
+                    Ok(resp_array(v))
+                }
             },
             Err(e) => {
                 Ok(resp_err(&e.to_string()))

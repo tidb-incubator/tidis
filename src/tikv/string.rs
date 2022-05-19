@@ -549,13 +549,13 @@ impl StringCommandCtx {
         let keys = keys.to_owned();
         let keys_len = keys.len();
 
-        let resp = client.exec_in_txn(self.txn.clone(), |txn| async move {
+        let resp = client.exec_in_txn(self.txn.clone(), |txn_rc| async move {
             if self.txn.is_none() {
-                self.txn = Some(txn.clone());
+                self.txn = Some(txn_rc.clone());
             }
 
             let mut dts = vec![];
-            let mut txn = txn.lock().await;
+            let mut txn = txn_rc.lock().await;
 
             for key in &keys {
                 let ekey = KeyEncoder::new().encode_txnkv_string(&key);

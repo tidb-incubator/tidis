@@ -70,10 +70,21 @@ impl TxnClientWrapper<'static> {
     }
 
     pub async fn snapshot_from_txn(&self, txn: Arc<Mutex<Transaction>>) -> Snapshot {
+        // add retry options
+        let region_backoff = Backoff::no_jitter_backoff(
+            txn_region_backoff_delay_ms(),
+            MAX_DELAY_MS,
+            txn_region_backoff_delay_attemps());
+        let lock_backoff = Backoff::no_jitter_backoff(
+            txn_lock_backoff_delay_ms(),
+            MAX_DELAY_MS,
+            txn_lock_backoff_delay_attemps());
+        let retry_options = RetryOptions::new(region_backoff, lock_backoff);
+
         let options = if is_use_pessimistic_txn() {
-            TransactionOptions::new_pessimistic()
+            TransactionOptions::new_pessimistic().retry_options(retry_options)
         } else {
-            TransactionOptions::new_optimistic()
+            TransactionOptions::new_optimistic().retry_options(retry_options)
         };
         let txn = txn.lock().await;
         let ts = txn.start_timestamp();
@@ -81,10 +92,21 @@ impl TxnClientWrapper<'static> {
     }
 
     pub async fn newest_snapshot(&self) -> Snapshot {
+        // add retry options
+        let region_backoff = Backoff::no_jitter_backoff(
+            txn_region_backoff_delay_ms(),
+            MAX_DELAY_MS,
+            txn_region_backoff_delay_attemps());
+        let lock_backoff = Backoff::no_jitter_backoff(
+            txn_lock_backoff_delay_ms(),
+            MAX_DELAY_MS,
+            txn_lock_backoff_delay_attemps());
+        let retry_options = RetryOptions::new(region_backoff, lock_backoff);
+
         let options = if is_use_pessimistic_txn() {
-            TransactionOptions::new_pessimistic()
+            TransactionOptions::new_pessimistic().retry_options(retry_options)
         } else {
-            TransactionOptions::new_optimistic()
+            TransactionOptions::new_optimistic().retry_options(retry_options)
         };
 
         let current_timestamp = 

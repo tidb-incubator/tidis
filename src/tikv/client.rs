@@ -40,7 +40,7 @@ use super::errors::{
 
 use futures::future::BoxFuture;
 
-use slog::error;
+use slog::{error, debug};
 
 use crate::metrics::TIKV_CLIENT_RETRIES;
 
@@ -186,8 +186,10 @@ impl TxnClientWrapper<'static> {
                 }
             },
             None => {
+                let mut retry_count = 0;
                 while self.retries > 0 {
                     self.retries -= 1;
+                    retry_count += 1;
 
                     let f = f.clone();
 
@@ -223,6 +225,7 @@ impl TxnClientWrapper<'static> {
                                         if self.retries == 0 {
                                             return Err(RTError::TikvClientError(e));
                                         }
+                                        debug!(LOGGER, "retry transaction in the caller caused by error {}", e);
                                         continue;
                                     }
                                 }
@@ -236,6 +239,7 @@ impl TxnClientWrapper<'static> {
                                     if self.retries == 0 {
                                         return Err(RTError::TikvClientError(client_err));
                                     }
+                                    debug!(LOGGER, "retry transaction in the caller caused by error {}", client_err);
                                     continue;
                                 } else {
                                     return Err(RTError::TikvClientError(client_err));
@@ -245,6 +249,9 @@ impl TxnClientWrapper<'static> {
                             }
                         }
                     }
+
+                    // backoff retry
+                    sleep(std::cmp::min(2 + retry_count * 10, 200)).await;
                 }
                 error!(LOGGER, "transaction retry count reached limit");
                 return Err(RTError::TikvClientError(StringError("retry count exceeded".to_string())));

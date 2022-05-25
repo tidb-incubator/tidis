@@ -9,7 +9,7 @@ use mlua::{
 };
 
 use async_std::io;
-use rustls::internal::pemfile::{certs, rsa_private_keys};
+use rustls::{internal::pemfile::{certs, rsa_private_keys}, AllowAnyAuthenticatedClient, RootCertStore};
 use rustls::{Certificate, NoClientAuth, PrivateKey, ServerConfig};
 use std::fs::File;
 use std::io::BufReader;
@@ -175,12 +175,22 @@ fn load_keys(path: &Path) -> io::Result<Vec<PrivateKey>> {
 /// See https://docs.rs/rustls/0.19.0/rustls/struct.ServerConfig.html for details
 ///
 /// A TLS server needs a certificate and a fitting private key
-pub fn load_config(cert: &str, key: &str) -> io::Result<ServerConfig> {
+pub fn load_config(cert: &str, key: &str, auth_client: bool, ca_cert: &str) -> io::Result<ServerConfig> {
     let certs = load_certs(&Path::new(cert))?;
     let mut keys = load_keys(&Path::new(key))?;
 
-    // we don't use client authentication
-    let mut config = ServerConfig::new(NoClientAuth::new());
+    let client_auth = if auth_client {
+        let ca_certs = load_certs(&Path::new(ca_cert)).unwrap();
+        let mut client_auth_roots = RootCertStore::empty();
+        for ca in ca_certs {
+            client_auth_roots.add(&ca).unwrap();
+        }
+        AllowAnyAuthenticatedClient::new(client_auth_roots)
+    } else {
+        NoClientAuth::new()
+    };
+
+    let mut config = ServerConfig::new(client_auth);
     config
         // set this server to use one cert together with the loaded private key
         .set_single_cert(certs, keys.remove(0))

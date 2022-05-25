@@ -54,6 +54,8 @@ tls_listen = "0.0.0.0"
 tls_port = 6443                           # disable tls if tls_port set to 0
 tls_key_file = ""                         # disable tls if key or cert file not set
 tls_cert_file = ""
+tls_auth_client = false                   # tls_ca_cert_file must be specified if tls_auth_client is true
+tls_ca_cert_file = "path/ca.crt"
 pd_addrs = "127.0.0.1:2379"               # PD addresses of the TiKV cluster
 instance_id = "1"                         # instance_id can be used as tenant identifier
 prometheus_listen = "0.0.0.0"
@@ -120,6 +122,95 @@ tikv-service> ZRANGE myzset 0 5 WITHSCORES
 2) "2"
 3) "three"
 4) "3"
+```
+
+## TLS/SSL support
+
+### 1. Generate tls certs and key for test
+
+``` bash
+#!/bin/bash
+
+# Generate some test certificates which are used by the regression test suite:
+#
+#   tests/tls/ca.{crt,key}          Self signed CA certificate.
+#   tests/tls/redis.{crt,key}       A certificate with no key usage/policy restrictions.
+#   tests/tls/client.{crt,key}      A certificate restricted for SSL client usage.
+#   tests/tls/server.{crt,key}      A certificate restricted for SSL server usage.
+
+generate_cert() {
+    local name=$1
+    local cn="$2"
+    local opts="$3"
+
+    local keyfile=tests/tls/${name}.key
+    local certfile=tests/tls/${name}.crt
+
+    [ -f $keyfile ] || openssl genrsa -out $keyfile 2048
+    openssl req \
+        -new -sha256 \
+        -subj "/O=Redis Test/CN=$cn" \
+        -key $keyfile | \
+        openssl x509 \
+            -req -sha256 \
+            -CA tests/tls/ca.crt \
+            -CAkey tests/tls/ca.key \
+            -CAserial tests/tls/ca.txt \
+            -CAcreateserial \
+            -days 365 \
+            $opts \
+            -out $certfile
+}
+
+mkdir -p tests/tls
+[ -f tests/tls/ca.key ] || openssl genrsa -out tests/tls/ca.key 4096
+openssl req \
+    -x509 -new -nodes -sha256 \
+    -key tests/tls/ca.key \
+    -days 3650 \
+    -subj '/O=Redis Test/CN=Certificate Authority' \
+    -out tests/tls/ca.crt
+
+cat > tests/tls/openssl.cnf <<_END_
+[ server_cert ]
+keyUsage = digitalSignature, keyEncipherment
+nsCertType = server
+
+[ client_cert ]
+keyUsage = digitalSignature, keyEncipherment
+nsCertType = client
+_END_
+
+generate_cert server "Server-only" "-extfile tests/tls/openssl.cnf -extensions server_cert"
+generate_cert client "Client-only" "-extfile tests/tls/openssl.cnf -extensions client_cert"
+generate_cert redis "Generic-cert"
+```
+
+### 2. Server and client config
+
+- Server-side
+
+``` toml
+tls_listen = "0.0.0.0"
+tls_port = 6443
+tls_key_file = "path/server.key"
+tls_cert_file = "path/server.crt"
+tls_auth_client = false           # tls_ca_cert_file must be specified if tls_auth_client is true
+tls_ca_cert_file = "path/ca.crt"
+```
+
+- Client-side
+
+tls_auth_client is false, client just use root ca certificate
+
+``` shell
+./src/redis-cli --tls --cacert ./tests/tls/ca.crt
+```
+
+tls_auth_client is true, client must be configure certs and key file for client auth in server side
+
+``` shell
+./src/redis-cli --tls  --cert ./tests/tls/client.crt --key ./tests/tls/client.key --cacert ./tests/tls/ca.crt
 ```
 
 ## E2e tests

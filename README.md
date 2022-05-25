@@ -49,7 +49,11 @@ You can use the demo configuration below.
 ``` toml
 [server]
 listen = "0.0.0.0"
-port = 6379
+port = 6379                               # disable tcp port if set to 0
+tls_listen = "0.0.0.0"
+tls_port = 6443                           # disable tls if tls_port set to 0
+tls_key_file = ""                         # disable tls if key or cert file not set
+tls_cert_file = ""
 pd_addrs = "127.0.0.1:2379"               # PD addresses of the TiKV cluster
 instance_id = "1"                         # instance_id can be used as tenant identifier
 prometheus_listen = "0.0.0.0"

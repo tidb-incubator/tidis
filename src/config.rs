@@ -37,6 +37,8 @@ struct Server {
     tls_port: Option<u16>,
     tls_key_file: Option<String>,
     tls_cert_file: Option<String>,
+    tls_auth_client: Option<bool>,
+    tls_ca_cert_file: Option<String>,
     pd_addrs: Option<String>,
     instance_id: Option<String>,
     prometheus_listen: Option<String>,
@@ -163,6 +165,30 @@ pub fn config_tls_key_file_or_default() -> String {
     unsafe {
         if let Some(c) = &SERVER_CONFIG {
             if let Some(s) = c.server.tls_key_file.clone() {
+                return s.to_string();
+            }
+        }
+    }
+
+    "".to_owned()
+}
+
+pub fn config_tls_auth_client_or_default() -> bool {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(s) = c.server.tls_auth_client {
+                return s;
+            }
+        }
+    }
+
+    false
+}
+
+pub fn config_tls_ca_cert_file_or_default() -> String {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(s) = c.server.tls_ca_cert_file.clone() {
                 return s.to_string();
             }
         }

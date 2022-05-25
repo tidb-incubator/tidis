@@ -81,6 +81,8 @@ pub use config::config_tls_listen_or_default;
 pub use config::config_tls_port_or_default;
 pub use config::config_tls_cert_file_or_default;
 pub use config::config_tls_key_file_or_default;
+pub use config::config_tls_ca_cert_file_or_default;
+pub use config::config_tls_auth_client_or_default;
 pub use config::config_prometheus_listen_or_default;
 pub use config::config_prometheus_port_or_default;
 pub use config::config_local_pool_number;

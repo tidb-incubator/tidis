@@ -11,6 +11,8 @@ use tikv_service::{
     config_tls_port_or_default,
     config_tls_cert_file_or_default,
     config_tls_key_file_or_default,
+    config_tls_ca_cert_file_or_default,
+    config_tls_auth_client_or_default,
     config_prometheus_listen_or_default,
     config_prometheus_port_or_default,
     config_pd_addrs_or_default,
@@ -72,6 +74,10 @@ pub async fn main() -> tikv_service::Result<()> {
     let tls_cert_file = cli.tls_cert_file.as_deref().unwrap_or(&c_tls_cert_file);
     let c_tls_key_file = config_tls_key_file_or_default();
     let tls_key_file = cli.tls_key_file.as_deref().unwrap_or(&c_tls_key_file);
+    let c_tls_auth_client = config_tls_auth_client_or_default();
+    let tls_auth_client = cli.tls_auth_client.unwrap_or(c_tls_auth_client);
+    let c_tls_ca_cert_file = config_tls_ca_cert_file_or_default();
+    let tls_ca_cert_file = cli.tls_ca_cert_file.as_deref().unwrap_or(&c_tls_ca_cert_file);
     let c_pd_addrs = config_pd_addrs_or_default();
     let pd_addrs = cli.pd_addrs.as_deref().unwrap_or(&c_pd_addrs);
     let c_instance_id = config_instance_id_or_default();
@@ -114,7 +120,7 @@ pub async fn main() -> tikv_service::Result<()> {
     if tls_port != "0" && tls_cert_file != "" && tls_cert_file != "" {
         info!(tikv_service::config::LOGGER, "TiKV Service Server SSL Listen on: {}:{}", &tls_listen_addr, tls_port);
         tls_listener = Some(TcpListener::bind(&format!("{}:{}", &tls_listen_addr, tls_port)).await?);
-        let tls_config = utils::load_config(&tls_cert_file, &tls_key_file)?;
+        let tls_config = utils::load_config(&tls_cert_file, &tls_key_file, tls_auth_client, &tls_ca_cert_file)?;
         tls_acceptor = Some(TlsAcceptor::from(Arc::new(tls_config)));
     }
 
@@ -144,6 +150,12 @@ struct Cli {
 
     #[structopt(name = "tls_port", long = "--tls_port")]
     tls_port: Option<String>,
+
+    #[structopt(name = "tls_auth_client", long = "--tls_auth_client")]
+    tls_auth_client: Option<bool>,
+
+    #[structopt(name = "tls_ca_cert_file", long = "--tls_ca_cert_file")]
+    tls_ca_cert_file: Option<String>,
 
     #[structopt(name = "pdaddrs", long = "--pdaddrs")]
     pd_addrs: Option<String>,

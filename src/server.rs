@@ -10,6 +10,9 @@ use crate::{Command, Connection, Db, DbDropGuard, Shutdown, is_auth_enabled, is_
 use std::future::Future;
 use async_std::net::{TcpListener, TcpStream};
 
+use async_std::prelude::StreamExt;
+use async_tls::TlsAcceptor;
+use async_tls::server::TlsStream;
 use slog::{
     error,
     info,
@@ -29,8 +32,6 @@ use crate::config::LOGGER;
 use tokio_util::task::LocalPoolHandle;
 
 use crate::config_local_pool_number;
-
-
 
 /// Server listener state. Created in the `run` call. It includes a `run` method
 /// which performs the TCP listening and initialization of per-connection state.
@@ -82,6 +83,15 @@ struct Listener {
     /// is safe to exit the server process.
     shutdown_complete_rx: mpsc::Receiver<()>,
     shutdown_complete_tx: mpsc::Sender<()>,
+}
+
+struct TlsListener {
+    db_holder: DbDropGuard,
+    tls_listener: TcpListener,
+    tls_acceptor: TlsAcceptor,
+    tls_notify_shutdown: broadcast::Sender<()>,
+    tls_shutdown_complete_rx: mpsc::Receiver<()>,
+    tls_shutdown_complete_tx: mpsc::Sender<()>,
 }
 
 /// Per-connection handler. Reads requests from `connection` and applies the
@@ -156,55 +166,31 @@ struct Handler {
 ///
 /// `tokio::signal::ctrl_c()` can be used as the `shutdown` argument. This will
 /// listen for a SIGINT signal.
-pub async fn run(listener: TcpListener, shutdown: impl Future) {
+pub async fn run(listener: Option<TcpListener>, tls_listener: Option<TcpListener>, tls_acceptor: Option<TlsAcceptor>, shutdown: impl Future) {
+    let tcp_enabled = listener.is_some();
+    let tls_enabled = tls_listener.is_some();
     // When the provided `shutdown` future completes, we must send a shutdown
     // message to all active connections. We use a broadcast channel for this
     // purpose. The call below ignores the receiver of the broadcast pair, and when
     // a receiver is needed, the subscribe() method on the sender is used to create
     // one.
-    let (notify_shutdown, _) = broadcast::channel(1);
-    let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
+    let db_holder = DbDropGuard::new();
+    if tcp_enabled && !tls_enabled {
+        let (notify_shutdown, _) = broadcast::channel(1);
+        let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
+    
+        // Initialize the listener state
+        let mut server = Listener {
+            listener: listener.unwrap(),
+            db_holder: db_holder.clone(),
+            // limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
+            notify_shutdown,
+            shutdown_complete_tx,
+            shutdown_complete_rx,
+        };
 
-    // Initialize the listener state
-    let mut server = Listener {
-        listener,
-        db_holder: DbDropGuard::new(),
-        // limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
-        notify_shutdown,
-        shutdown_complete_tx,
-        shutdown_complete_rx,
-    };
-
-    // Concurrently run the server and listen for the `shutdown` signal. The
-    // server task runs until an error is encountered, so under normal
-    // circumstances, this `select!` statement runs until the `shutdown` signal
-    // is received.
-    //
-    // `select!` statements are written in the form of:
-    //
-    // ```
-    // <result of async op> = <async op> => <step to perform with result>
-    // ```
-    //
-    // All `<async op>` statements are executed concurrently. Once the **first**
-    // op completes, its associated `<step to perform with result>` is
-    // performed.
-    //
-    // The `select! macro is a foundational building block for writing
-    // asynchronous Rust. See the API docs for more details:
-    //
-    // https://docs.rs/tokio/*/tokio/macro.select.html
-
-    //let local = task::LocalSet::new();
-    //local.run_until(async move {
         tokio::select! {
             res = server.run() => {
-                // If an error is received here, accepting connections from the TCP
-                // listener failed multiple times and the server is giving up and
-                // shutting down.
-                //
-                // Errors encountered when handling individual connections do not
-                // bubble up to this point.
                 if let Err(err) = res {
                     error!(LOGGER, "failed to accept, cause {}", err.to_string());
                 }
@@ -215,9 +201,6 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) {
             }
         }
 
-        // Extract the `shutdown_complete` receiver and transmitter
-        // explicitly drop `shutdown_transmitter`. This is important, as the
-        // `.await` below would otherwise never complete.
         let Listener {
             mut shutdown_complete_rx,
             shutdown_complete_tx,
@@ -225,20 +208,108 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) {
             ..
         } = server;
 
-
-        // When `notify_shutdown` is dropped, all tasks which have `subscribe`d will
-        // receive the shutdown signal and can exit
         drop(notify_shutdown);
-        // Drop final `Sender` so the `Receiver` below can complete
         drop(shutdown_complete_tx);
 
-        // Wait for all active connections to finish processing. As the `Sender`
-        // handle held by the listener has been dropped above, the only remaining
-        // `Sender` instances are held by connection handler tasks. When those drop,
-        // the `mpsc` channel will close and `recv()` will return `None`.
-        let _ = shutdown_complete_rx.recv().await;
-        
-    //}).await;
+        shutdown_complete_rx.recv().await;
+    } else if tls_enabled && !tcp_enabled {
+        let (tls_notify_shutdown, _) = broadcast::channel(1);
+        let (tls_shutdown_complete_tx, tls_shutdown_complete_rx) = mpsc::channel(1);
+        let mut tls_server = TlsListener {
+            tls_listener: tls_listener.unwrap(),
+            db_holder: db_holder.clone(),
+            tls_acceptor: tls_acceptor.unwrap(),
+            tls_notify_shutdown,
+            tls_shutdown_complete_tx,
+            tls_shutdown_complete_rx,
+        };
+
+        tokio::select! {
+            tls_res = tls_server.run() => {
+                if let Err(err) = tls_res {
+                    error!(LOGGER, "failed to accept, cause {}", err.to_string());
+                }
+            }
+            _ = shutdown => {
+                // The shutdown signal has been received.
+                info!(LOGGER, "shutting down");
+            }
+        }
+
+        let TlsListener {
+            mut tls_shutdown_complete_rx,
+            tls_shutdown_complete_tx,
+            tls_notify_shutdown,
+            ..
+        } = tls_server;
+
+        drop(tls_notify_shutdown);
+        drop(tls_shutdown_complete_tx);
+        tls_shutdown_complete_rx.recv().await;
+    } else if tcp_enabled && tls_enabled {
+        let (notify_shutdown, _) = broadcast::channel(1);
+        let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
+    
+        // Initialize the listener state
+        let mut server = Listener {
+            listener: listener.unwrap(),
+            db_holder: db_holder.clone(),
+            // limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
+            notify_shutdown,
+            shutdown_complete_tx,
+            shutdown_complete_rx,
+        };
+
+        let (tls_notify_shutdown, _) = broadcast::channel(1);
+        let (tls_shutdown_complete_tx, tls_shutdown_complete_rx) = mpsc::channel(1);
+        let mut tls_server = TlsListener {
+            tls_listener: tls_listener.unwrap(),
+            db_holder: db_holder.clone(),
+            tls_acceptor: tls_acceptor.unwrap(),
+            tls_notify_shutdown,
+            tls_shutdown_complete_tx,
+            tls_shutdown_complete_rx,
+        };
+
+        tokio::select! {
+            res = server.run() => {
+                if let Err(err) = res {
+                    error!(LOGGER, "failed to accept, cause {}", err.to_string());
+                }
+            }
+            tls_res = tls_server.run() => {
+                if let Err(err) = tls_res {
+                    error!(LOGGER, "failed to accept, cause {}", err.to_string());
+                }
+            }
+            _ = shutdown => {
+                // The shutdown signal has been received.
+                info!(LOGGER, "shutting down");
+            }
+        }
+        let Listener {
+            mut shutdown_complete_rx,
+            shutdown_complete_tx,
+            notify_shutdown,
+            ..
+        } = server;
+
+        drop(notify_shutdown);
+        drop(shutdown_complete_tx);
+        shutdown_complete_rx.recv().await;
+
+        let TlsListener {
+            mut tls_shutdown_complete_rx,
+            tls_shutdown_complete_tx,
+            tls_notify_shutdown,
+            ..
+        } = tls_server;
+        drop(tls_notify_shutdown);
+        drop(tls_shutdown_complete_tx);
+        tls_shutdown_complete_rx.recv().await;
+    } else {
+        error!(LOGGER, "no listener enabled for tcp or tls");
+    }
 }
 
 impl Listener {
@@ -259,7 +330,6 @@ impl Listener {
     /// strategy, which is what we do here.
     async fn run(&mut self) -> crate::Result<()> {
         info!(LOGGER, "accepting inbound connections");
-        //let local = task::LocalSet::new();
 
         let local_pool_number = config_local_pool_number();
         let local_pool = LocalPoolHandle::new(local_pool_number);
@@ -310,28 +380,6 @@ impl Listener {
                 _shutdown_complete: self.shutdown_complete_tx.clone(),
             };
 
-            // Spawn a new task to process the connections. Tokio tasks are like
-            // asynchronous green threads and are executed concurrently.
-            // tokio::spawn(async move {
-            //     // Process the connection. If an error is encountered, log it.
-            //     CURRENT_CONNECTION_COUNTER.inc();
-            //     if let Err(err) = handler.run().await {
-            //         println!("Connection Error: {:?}", &err);
-            //         error!(cause = ?err, "connection error");
-            //     }
-            // });
-
-            
-            // Use localset to spawn task, because of mlua async function is not `Send`
-            // task::spawn_local(async move {
-            //     // Process the connection. If an error is encountered, log it.
-            //     CURRENT_CONNECTION_COUNTER.inc();
-            //     if let Err(err) = handler.run().await {
-            //         println!("Connection Error: {:?}", &err);
-            //         error!(cause = ?err, "connection error");
-            //     }
-            // });
-
             local_pool.spawn_pinned(|| async move {
                 // Process the connection. If an error is encountered, log it.
                 CURRENT_CONNECTION_COUNTER.inc();
@@ -339,7 +387,6 @@ impl Listener {
                     error!(LOGGER, "connection error {:?}", err);
                 }
             });
-
         }
     }
 
@@ -375,6 +422,60 @@ impl Listener {
             backoff *= 2;
         }
     }
+}
+
+impl TlsListener {
+    async fn run(&mut self) -> crate::Result<()> {
+        info!(LOGGER, "accepting inbound tls connections");
+
+        let local_pool_number = config_local_pool_number();
+        let local_pool = LocalPoolHandle::new(local_pool_number);
+
+        let mut incoming = self.tls_listener.incoming();
+        while let Some(stream) = incoming.next().await {
+            let acceptor = self.tls_acceptor.clone();
+            let stream = stream?;
+
+            let local_addr = (&stream).local_addr().unwrap().to_string();
+            let peer_addr = (&stream).peer_addr().unwrap().to_string();
+
+            // start tls handshake
+            let handshake = acceptor.accept(stream);
+            // handshake is a future, await to get an encrypted stream back
+            let tls_stream: TlsStream<TcpStream>;
+            match handshake.await {
+                Ok(stream) => {
+                    tls_stream = stream;
+                },
+                Err(e) => {
+                    error!(LOGGER, "{} -> {} handshake failed, {}", peer_addr, local_addr, e.to_string());
+                    continue;
+                }
+            }
+
+            let mut handler = Handler {
+                db: self.db_holder.db(),
+                connection: Connection::new_tls(&local_addr, &peer_addr, tls_stream),
+                shutdown: Shutdown::new(self.tls_notify_shutdown.subscribe()),
+                authorized: if is_auth_enabled() { false } else { true },
+                lua: None,
+                _shutdown_complete: self.tls_shutdown_complete_tx.clone(),
+            };
+
+            local_pool.spawn_pinned(|| async move {
+                // Process the connection. If an error is encountered, log it.
+                CURRENT_CONNECTION_COUNTER.inc();
+                if let Err(err) = handler.run().await {
+                    error!(LOGGER, "tls connection error {:?}", err);
+                }
+            });
+
+        }
+        
+        Ok(())
+    }
+
+    
 }
 
 impl Handler {

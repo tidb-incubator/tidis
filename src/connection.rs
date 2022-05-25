@@ -1,8 +1,10 @@
 use crate::frame::{self, Frame};
 
+use async_tls::server::TlsStream;
 use bytes::{Buf, BytesMut};
+use futures::AsyncReadExt;
 use std::io::{self, Cursor};
-use async_std::io::{ReadExt, WriteExt, BufWriter, BufReader};
+use async_std::io::{WriteExt, BufWriter, BufReader};
 use async_std::net::TcpStream;
 
 /// Send and receive `Frame` values from a remote peer.
@@ -19,11 +21,16 @@ use async_std::net::TcpStream;
 /// The contents of the write buffer are then written to the socket.
 #[derive(Debug)]
 pub struct Connection {
+    tls: bool,
+
     // The `TcpStream`. It is decorated with a `BufWriter`, which provides write
     // level buffering. The `BufWriter` implementation provided by Tokio is
     // sufficient for our needs.
-    w: BufWriter<TcpStream>,
-    r: BufReader<TcpStream>,
+    w: Option<BufWriter<TcpStream>>,
+    r: Option<BufReader<TcpStream>>,
+
+    tls_w: Option<BufWriter<futures::io::WriteHalf<TlsStream<TcpStream>>>>,
+    tls_r: Option<BufReader<futures::io::ReadHalf<TlsStream<TcpStream>>>>,
 
     local_addr: String,
     peer_addr: String,
@@ -37,15 +44,35 @@ impl Connection {
     /// are initialized.
     pub fn new(socket: TcpStream) -> Connection {
         Connection {
+            tls: false,
             local_addr: (&socket).local_addr().unwrap().to_string(),
             peer_addr: (&socket).peer_addr().unwrap().to_string(),
 
-            w: BufWriter::new(socket.clone()),
-            r: BufReader::new(socket),
+            w: Some(BufWriter::new(socket.clone())),
+            r: Some(BufReader::new(socket)),
+
+            tls_w: None,
+            tls_r: None,
             // Default to a 4KB read buffer. For the use case of mini redis,
             // this is fine. However, real applications will want to tune this
             // value to their specific use case. There is a high likelihood that
             // a larger read buffer will work better.
+            buffer: BytesMut::with_capacity(32 * 1024),
+        }
+    }
+
+    pub fn new_tls(local_addr: &str, peer_addr: &str, tls_stream: TlsStream<TcpStream>) -> Connection {
+        let (tls_r, tls_w) = tls_stream.split();
+        Connection {
+            tls: true,
+            local_addr: local_addr.to_string(),
+            peer_addr: peer_addr.to_string(),
+
+            w: None,
+            r: None,
+
+            tls_w: Some(BufWriter::new(tls_w)),
+            tls_r: Some(BufReader::new(tls_r)),
             buffer: BytesMut::with_capacity(32 * 1024),
         }
     }
@@ -56,6 +83,34 @@ impl Connection {
 
     pub fn peer_addr(&self) -> &str {
         &self.peer_addr
+    }
+
+    async fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        if self.tls {
+            self.tls_w.as_mut().unwrap().write_all(buf).await?;
+        } else {
+            self.w.as_mut().unwrap().write_all(buf).await?;
+        }
+        Ok(())
+    }
+
+    async fn flush(&mut self) -> io::Result<()> {
+        if self.tls {
+            self.tls_w.as_mut().unwrap().flush().await?;
+        } else {
+            self.w.as_mut().unwrap().flush().await?;
+        }
+        Ok(())
+    }
+
+    async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let read_size;
+        if self.tls {
+            read_size = self.tls_r.as_mut().unwrap().read(buf).await?;
+        } else {
+            read_size = self.r.as_mut().unwrap().read(buf).await?;
+        }
+        Ok(read_size)
     }
 
     /// Read a single `Frame` value from the underlying stream.
@@ -83,7 +138,7 @@ impl Connection {
             // On success, the number of bytes is returned. `0` indicates "end
             // of stream".
             let mut buf = vec![0; 1024];
-            let len = self.r.read(&mut buf).await?;
+            let len = self.read(&mut buf).await?;
             if 0 == len {
                 // The remote closed the connection. For this to be a clean
                 // shutdown, there should be no data in the read buffer. If
@@ -181,7 +236,7 @@ impl Connection {
         match frame {
             Frame::Array(val) => {
                 // Encode the frame type prefix. For an array, it is `*`.
-                self.w.write_all(b"*").await?;
+                self.write_all(b"*").await?;
 
                 // Encode the length of the array.
                 self.write_decimal(val.len() as i64).await?;
@@ -198,36 +253,36 @@ impl Connection {
         // Ensure the encoded frame is written to the socket. The calls above
         // are to the buffered stream and writes. Calling `flush` writes the
         // remaining contents of the buffer to the socket.
-        self.w.flush().await
+        self.flush().await
     }
 
     /// Write a frame literal to the stream
     async fn write_value(&mut self, frame: &Frame) -> io::Result<()> {
         match frame {
             Frame::Simple(val) => {
-                self.w.write_all(b"+").await?;
-                self.w.write_all(val.as_bytes()).await?;
-                self.w.write_all(b"\r\n").await?;
+                self.write_all(b"+").await?;
+                self.write_all(val.as_bytes()).await?;
+                self.write_all(b"\r\n").await?;
             }
             Frame::Error(val) => {
-                self.w.write_all(b"-").await?;
-                self.w.write_all(val.as_bytes()).await?;
-                self.w.write_all(b"\r\n").await?;
+                self.write_all(b"-").await?;
+                self.write_all(val.as_bytes()).await?;
+                self.write_all(b"\r\n").await?;
             }
             Frame::Integer(val) => {
-                self.w.write_all(b":").await?;
+                self.write_all(b":").await?;
                 self.write_decimal(*val).await?;
             }
             Frame::Null => {
-                self.w.write_all(b"$-1\r\n").await?;
+                self.write_all(b"$-1\r\n").await?;
             }
             Frame::Bulk(val) => {
                 let len = val.len();
 
-                self.w.write_all(b"$").await?;
+                self.write_all(b"$").await?;
                 self.write_decimal(len as i64).await?;
-                self.w.write_all(val).await?;
-                self.w.write_all(b"\r\n").await?;
+                self.write_all(val).await?;
+                self.write_all(b"\r\n").await?;
             }
             // Encoding an `Array` from within a value cannot be done using a
             // recursive strategy. In general, async fns do not support
@@ -249,8 +304,8 @@ impl Connection {
         write!(&mut buf, "{}", val)?;
 
         let pos = buf.position() as usize;
-        self.w.write_all(&buf.get_ref()[..pos]).await?;
-        self.w.write_all(b"\r\n").await?;
+        self.write_all(&buf.get_ref()[..pos]).await?;
+        self.write_all(b"\r\n").await?;
 
         Ok(())
     }

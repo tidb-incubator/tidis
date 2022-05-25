@@ -8,6 +8,13 @@ use mlua::{
     Lua,
 };
 
+use async_std::io;
+use rustls::internal::pemfile::{certs, rsa_private_keys};
+use rustls::{Certificate, NoClientAuth, PrivateKey, ServerConfig};
+use std::fs::File;
+use std::io::BufReader;
+use std::path::Path;
+
 pub fn resp_ok() -> Frame {
     Frame::Simple("OK".to_string())
 }
@@ -120,8 +127,7 @@ pub fn redis_resp_to_lua_resp(resp: Frame, lua: &Lua) -> LuaValue {
             }
             
             LuaValue::Table(table)
-        },
-        _ => {LuaValue::Nil}
+        }
     }
 }
 
@@ -151,4 +157,34 @@ pub fn ttl_from_timestamp(timestamp: u64) -> u64 {
     } else {
         return timestamp - now;
     }
+}
+
+/// Load the passed certificates file
+fn load_certs(path: &Path) -> io::Result<Vec<Certificate>> {
+    certs(&mut BufReader::new(File::open(path)?))
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid cert"))
+}
+
+/// Load the passed keys file
+fn load_keys(path: &Path) -> io::Result<Vec<PrivateKey>> {
+    rsa_private_keys(&mut BufReader::new(File::open(path)?))
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid key"))
+}
+
+/// Configure the server using rusttls
+/// See https://docs.rs/rustls/0.19.0/rustls/struct.ServerConfig.html for details
+///
+/// A TLS server needs a certificate and a fitting private key
+pub fn load_config(cert: &str, key: &str) -> io::Result<ServerConfig> {
+    let certs = load_certs(&Path::new(cert))?;
+    let mut keys = load_keys(&Path::new(key))?;
+
+    // we don't use client authentication
+    let mut config = ServerConfig::new(NoClientAuth::new());
+    config
+        // set this server to use one cert together with the loaded private key
+        .set_single_cert(certs, keys.remove(0))
+        .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
+
+    Ok(config)
 }

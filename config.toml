@@ -1,11 +1,15 @@
 [server]
 listen = "0.0.0.0"
 port = 6666
+tls_listen = "0.0.0.0"
+tls_port = 6443
+tls_key_file = ""
+tls_cert_file = ""
 pd_addrs = "127.0.0.1:2379"
 instance_id = "1"
 prometheus_listen = "0.0.0.0"
 prometheus_port = 8080
-log_level = "info"
+log_level = "debug"
 log_file = "tikv-service.log"
 
 [backend]

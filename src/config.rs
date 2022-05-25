@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::DEFAULT_PORT;
+use crate::{DEFAULT_PORT, DEFAULT_TLS_PORT};
 
 use slog::{self, Drain};
 use slog_term;
@@ -33,6 +33,10 @@ pub struct Config {
 struct Server {
     listen: Option<String>,
     port: Option<u16>,
+    tls_listen: Option<String>,
+    tls_port: Option<u16>,
+    tls_key_file: Option<String>,
+    tls_cert_file: Option<String>,
     pd_addrs: Option<String>,
     instance_id: Option<String>,
     prometheus_listen: Option<String>,
@@ -117,6 +121,54 @@ pub fn config_port_or_default() -> String {
     }
 
     DEFAULT_PORT.to_owned()
+}
+
+pub fn config_tls_listen_or_default() -> String {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(s) = c.server.tls_listen.clone() {
+                return s;
+            }
+        }
+    }
+
+    "0.0.0.0".to_owned()
+}
+
+pub fn config_tls_port_or_default() -> String {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(s) = c.server.tls_port {
+                return s.to_string();
+            }
+        }
+    }
+
+    DEFAULT_TLS_PORT.to_owned()
+}
+
+pub fn config_tls_cert_file_or_default() -> String {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(s) = c.server.tls_cert_file.clone() {
+                return s.to_string();
+            }
+        }
+    }
+
+    "".to_owned()
+}
+
+pub fn config_tls_key_file_or_default() -> String {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(s) = c.server.tls_key_file.clone() {
+                return s.to_string();
+            }
+        }
+    }
+
+    "".to_owned()
 }
 
 pub fn config_pd_addrs_or_default() -> String {

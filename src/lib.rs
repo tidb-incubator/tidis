@@ -63,7 +63,7 @@ pub use tikv::do_async_raw_connect;
 pub use tikv::do_async_txn_connect;
 pub use tikv::do_async_connect;
 
-mod utils;
+pub mod utils;
 
 pub mod config;
 pub use config::Config;
@@ -77,6 +77,10 @@ pub use config::config_instance_id_or_default;
 pub use config::config_listen_or_default;
 pub use config::config_pd_addrs_or_default;
 pub use config::config_port_or_default;
+pub use config::config_tls_listen_or_default;
+pub use config::config_tls_port_or_default;
+pub use config::config_tls_cert_file_or_default;
+pub use config::config_tls_key_file_or_default;
 pub use config::config_prometheus_listen_or_default;
 pub use config::config_prometheus_port_or_default;
 pub use config::config_local_pool_number;
@@ -92,6 +96,7 @@ pub use config::txn_lock_backoff_delay_attemps;
 ///
 /// Used if no port is specified.
 pub const DEFAULT_PORT: &str = "6379";
+pub const DEFAULT_TLS_PORT: &str = "6443";
 
 /// Error returned by most functions.
 ///

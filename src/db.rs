@@ -10,7 +10,7 @@ use crate::config::LOGGER;
 /// A wrapper around a `Db` instance. This exists to allow orderly cleanup
 /// of the `Db` by signalling the background purge task to shut down when
 /// this struct is dropped.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct DbDropGuard {
     /// The `Db` instance that will be shut down when this `DbHolder` struct
     /// is dropped.

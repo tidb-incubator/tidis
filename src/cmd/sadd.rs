@@ -52,12 +52,8 @@ impl Sadd {
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Sadd> {
         let key = parse.next_string()?;
         let mut sadd = Sadd::new(&key);
-        loop {
-            if let Ok(member) = parse.next_string() {
-                sadd.add_member(&member);
-            } else {
-                break;
-            }
+        while let Ok(member) = parse.next_string() {
+            sadd.add_member(&member);
         }
         Ok(sadd)
     }

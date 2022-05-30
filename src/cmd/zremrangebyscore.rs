@@ -56,18 +56,15 @@ impl Zremrangebyscore {
             return Ok(Zremrangebyscore::new_invalid());
         }
         // TODO
-        let min;
-        let max;
-
-        match argv[1].parse::<i64>() {
-            Ok(v) => min = v,
+        let min = match argv[1].parse::<i64>() {
+            Ok(v) => v,
             Err(_) => return Ok(Zremrangebyscore::new_invalid()),
-        }
+        };
 
-        match argv[2].parse::<i64>() {
-            Ok(v) => max = v,
+        let max = match argv[2].parse::<i64>() {
+            Ok(v) => v,
             Err(_) => return Ok(Zremrangebyscore::new_invalid()),
-        }
+        };
 
         Ok(Zremrangebyscore::new(&argv[0], min, max))
     }

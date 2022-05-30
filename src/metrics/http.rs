@@ -23,9 +23,7 @@ impl PrometheusServer {
         REQUEST_COUNTER.get();
         CURRENT_CONNECTION_COUNTER.get();
 
-        PrometheusServer {
-            listen_addr,
-        }
+        PrometheusServer { listen_addr }
     }
 
     pub async fn run(&self) {

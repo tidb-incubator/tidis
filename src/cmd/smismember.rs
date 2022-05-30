@@ -52,12 +52,8 @@ impl Smismember {
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Smismember> {
         let key = parse.next_string()?;
         let mut smismember = Smismember::new(&key);
-        loop {
-            if let Ok(member) = parse.next_string() {
-                smismember.add_member(&member);
-            } else {
-                break;
-            }
+        while let Ok(member) = parse.next_string() {
+            smismember.add_member(&member);
         }
         Ok(smismember)
     }

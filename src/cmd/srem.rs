@@ -52,12 +52,8 @@ impl Srem {
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Srem> {
         let key = parse.next_string()?;
         let mut srem = Srem::new(&key);
-        loop {
-            if let Ok(member) = parse.next_string() {
-                srem.add_member(&member);
-            } else {
-                break;
-            }
+        while let Ok(member) = parse.next_string() {
+            srem.add_member(&member);
         }
         Ok(srem)
     }

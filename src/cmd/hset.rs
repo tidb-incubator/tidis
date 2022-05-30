@@ -20,14 +20,6 @@ pub struct Hset {
 }
 
 impl Hset {
-    pub fn new() -> Hset {
-        Hset {
-            field_and_value: vec![],
-            key: String::new(),
-            valid: true,
-        }
-    }
-
     pub fn new_invalid() -> Hset {
         Hset {
             field_and_value: vec![],
@@ -55,21 +47,17 @@ impl Hset {
     }
 
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Hset> {
-        let mut hset = Hset::new();
+        let mut hset = Hset::default();
 
         let key = parse.next_string()?;
         hset.set_key(&key);
 
-        loop {
-            if let Ok(field) = parse.next_string() {
-                if let Ok(value) = parse.next_bytes() {
-                    let kv = KvPair::new(field, value.to_vec());
-                    hset.add_field_value(kv);
-                } else {
-                    return Err("protocol error".into());
-                }
+        while let Ok(field) = parse.next_string() {
+            if let Ok(value) = parse.next_bytes() {
+                let kv = KvPair::new(field, value.to_vec());
+                hset.add_field_value(kv);
             } else {
-                break;
+                return Err("protocol error".into());
             }
         }
         Ok(hset)
@@ -80,7 +68,7 @@ impl Hset {
             return Ok(Hset::new_invalid());
         }
         let key = &argv[0];
-        let mut hset = Hset::new();
+        let mut hset = Hset::default();
         hset.set_key(key);
 
         for idx in (1..argv.len()).step_by(2) {
@@ -120,6 +108,16 @@ impl Hset {
                 .await
         } else {
             Ok(resp_err("not supported yet"))
+        }
+    }
+}
+
+impl Default for Hset {
+    fn default() -> Self {
+        Hset {
+            field_and_value: vec![],
+            key: String::new(),
+            valid: true,
         }
     }
 }

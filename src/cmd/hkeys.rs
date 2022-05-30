@@ -37,10 +37,7 @@ impl Hkeys {
 
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Hkeys> {
         let key = parse.next_string()?;
-        Ok(Hkeys {
-            key,
-            valid: true,
-        })
+        Ok(Hkeys { key, valid: true })
     }
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Hkeys> {

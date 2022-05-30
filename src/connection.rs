@@ -108,13 +108,11 @@ impl Connection {
     }
 
     async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let read_size;
-        if self.tls {
-            read_size = self.tls_r.as_mut().unwrap().read(buf).await?;
+        Ok(if self.tls {
+            self.tls_r.as_mut().unwrap().read(buf).await?
         } else {
-            read_size = self.r.as_mut().unwrap().read(buf).await?;
-        }
-        Ok(read_size)
+            self.r.as_mut().unwrap().read(buf).await?
+        })
     }
 
     /// Read a single `Frame` value from the underlying stream.
@@ -156,7 +154,7 @@ impl Connection {
                     return Err("connection reset by peer".into());
                 }
             }
-            self.buffer.extend_from_slice(&mut buf[..len]);
+            self.buffer.extend_from_slice(&buf[..len]);
         }
     }
 

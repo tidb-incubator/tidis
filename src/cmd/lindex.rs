@@ -56,11 +56,10 @@ impl Lindex {
             return Ok(Lindex::new_invalid());
         }
         let key = &argv[0];
-        let idx;
-        match argv[1].parse::<i64>() {
-            Ok(v) => idx = v,
+        let idx = match argv[1].parse::<i64>() {
+            Ok(v) => v,
             Err(_) => return Ok(Lindex::new_invalid()),
-        }
+        };
         Ok(Lindex::new(key, idx))
     }
 

@@ -21,15 +21,6 @@ pub struct Mset {
 }
 
 impl Mset {
-    /// Create a new `Mset` command which fetches `key` vector.
-    pub fn new() -> Mset {
-        Mset {
-            keys: vec![],
-            vals: vec![],
-            valid: true,
-        }
-    }
-
     pub fn new_invalid() -> Mset {
         Mset {
             keys: vec![],
@@ -56,18 +47,14 @@ impl Mset {
     }
 
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Mset> {
-        let mut mset = Mset::new();
+        let mut mset = Mset::default();
 
-        loop {
-            if let Ok(key) = parse.next_string() {
-                mset.add_key(key);
-                if let Ok(val) = parse.next_bytes() {
-                    mset.add_val(val);
-                } else {
-                    return Err("protocol error".into());
-                }
+        while let Ok(key) = parse.next_string() {
+            mset.add_key(key);
+            if let Ok(val) = parse.next_bytes() {
+                mset.add_val(val);
             } else {
-                break;
+                return Err("protocol error".into());
             }
         }
 
@@ -78,7 +65,7 @@ impl Mset {
         if argv.len() % 2 != 0 {
             return Ok(Mset::new_invalid());
         }
-        let mut mset = Mset::new();
+        let mut mset = Mset::default();
         for idx in (0..argv.len()).step_by(2) {
             mset.add_key(argv[idx].clone());
             mset.add_val(Bytes::from(argv[idx + 1].clone()));
@@ -132,6 +119,17 @@ impl Mset {
             StringCommandCtx::new(None)
                 .do_async_rawkv_batch_put(kvs)
                 .await
+        }
+    }
+}
+
+impl Default for Mset {
+    /// Create a new `Mset` command which fetches `key` vector.
+    fn default() -> Mset {
+        Mset {
+            keys: vec![],
+            vals: vec![],
+            valid: true,
         }
     }
 }

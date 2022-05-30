@@ -70,10 +70,7 @@ impl Get {
         // input is fully consumed, then an error is returned.
         let key = parse.next_string()?;
 
-        Ok(Get {
-            key,
-            valid: true,
-        })
+        Ok(Get { key, valid: true })
     }
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Get> {

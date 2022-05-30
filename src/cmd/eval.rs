@@ -58,12 +58,8 @@ impl Eval {
             }
         }
 
-        loop {
-            if let Ok(arg) = parse.next_string() {
-                eval.add_arg(arg);
-            } else {
-                break;
-            }
+        while let Ok(arg) = parse.next_string() {
+            eval.add_arg(arg);
         }
 
         Ok(eval)
@@ -106,16 +102,13 @@ impl Eval {
 
         let ctx = LuaCommandCtx::new(Some(txn_rc.clone()), lua);
 
-        let resp;
-        if is_sha {
-            resp = ctx
-                .do_async_evalsha(&self.script, db, &self.keys, &self.args)
-                .await;
+        let resp = if is_sha {
+            ctx.do_async_evalsha(&self.script, db, &self.keys, &self.args)
+                .await
         } else {
-            resp = ctx
-                .do_async_eval(&self.script, db, &self.keys, &self.args)
-                .await;
-        }
+            ctx.do_async_eval(&self.script, db, &self.keys, &self.args)
+                .await
+        };
         match resp {
             Ok(r) => {
                 let mut txn = txn_rc.lock().await;

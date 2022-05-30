@@ -124,11 +124,7 @@ impl Script {
         if self.is_exists {
             let mut resp = vec![];
             for sha1 in &self.sha1_vec {
-                if let Some(_) = db.get_script(sha1) {
-                    resp.push(resp_int(1));
-                } else {
-                    resp.push(resp_int(0));
-                }
+                resp.push(resp_int(if db.get_script(sha1).is_some() { 1 } else { 0 }));
             }
             return Ok(resp_array(resp));
         }

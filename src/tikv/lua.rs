@@ -26,11 +26,9 @@ impl<'a> LuaCommandCtx<'a> {
     pub async fn do_async_eval_inner(
         self,
         script: &str,
-        keys: &Vec<String>,
-        args: &Vec<String>,
+        keys: &[String],
+        args: &[String],
     ) -> LuaResult<Frame> {
-        let keys = keys.clone();
-        let args = args.clone();
         let lua = match self.lua {
             Some(lua) => lua,
             None => return Ok(resp_err("lua context is not initialized")),
@@ -41,14 +39,12 @@ impl<'a> LuaCommandCtx<'a> {
 
         // Add KEYS and ARGV to lua state
         let keys_table = lua.create_table()?;
-        for idx in 0..keys.len() {
-            let key = keys[idx].clone();
-            keys_table.set(idx + 1, key)?;
+        for (idx, key) in keys.iter().enumerate() {
+            keys_table.set(idx + 1, key.clone())?;
         }
         let args_table = lua.create_table()?;
-        for idx in 0..args.len() {
-            let arg = args[idx].clone();
-            args_table.set(idx + 1, arg)?;
+        for (idx, arg) in args.iter().enumerate() {
+            args_table.set(idx + 1, arg.clone())?;
         }
 
         globals.set("KEYS", keys_table)?;
@@ -169,8 +165,8 @@ impl<'a> LuaCommandCtx<'a> {
         self,
         script: &str,
         _: &Db,
-        keys: &Vec<String>,
-        args: &Vec<String>,
+        keys: &[String],
+        args: &[String],
     ) -> AsyncResult<Frame> {
         let lua_resp = self.clone().do_async_eval_inner(script, keys, args).await;
         match lua_resp {
@@ -186,8 +182,8 @@ impl<'a> LuaCommandCtx<'a> {
         self,
         sha1: &str,
         db: &Db,
-        keys: &Vec<String>,
-        args: &Vec<String>,
+        keys: &[String],
+        args: &[String],
     ) -> AsyncResult<Frame> {
         // get script from cache with sha1 key
         let script = db.get_script(sha1);

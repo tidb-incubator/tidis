@@ -80,16 +80,14 @@ impl Zrange {
         if argv.len() < 3 {
             return Ok(Zrange::new_invalid());
         }
-        let min;
-        let max;
-        match argv[1].parse::<i64>() {
-            Ok(v) => min = v,
+        let min = match argv[1].parse::<i64>() {
+            Ok(v) => v,
             Err(_) => return Ok(Zrange::new_invalid()),
-        }
-        match argv[2].parse::<i64>() {
-            Ok(v) => max = v,
+        };
+        let max = match argv[2].parse::<i64>() {
+            Ok(v) => v,
             Err(_) => return Ok(Zrange::new_invalid()),
-        }
+        };
         let mut withscores = false;
         let mut reverse = false;
 

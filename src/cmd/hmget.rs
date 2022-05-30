@@ -51,12 +51,8 @@ impl Hmget {
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Hmget> {
         let key = parse.next_string()?;
         let mut hmget = Hmget::new(&key);
-        loop {
-            if let Ok(field) = parse.next_string() {
-                hmget.add_field(&field);
-            } else {
-                break;
-            }
+        while let Ok(field) = parse.next_string() {
+            hmget.add_field(&field);
         }
         Ok(hmget)
     }

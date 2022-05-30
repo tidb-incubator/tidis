@@ -12,7 +12,7 @@ impl KeyDecoder {
         bytes.drain(15..).collect()
     }
 
-    pub fn decode_key_type(value: &Vec<u8>) -> DataType {
+    pub fn decode_key_type(value: &[u8]) -> DataType {
         match value[0] {
             0 => DataType::String,
             1 => DataType::Hash,
@@ -23,19 +23,19 @@ impl KeyDecoder {
         }
     }
 
-    pub fn decode_key_ttl(value: &Vec<u8>) -> u64 {
+    pub fn decode_key_ttl(value: &[u8]) -> u64 {
         u64::from_be_bytes(value[1..9].try_into().unwrap())
     }
 
-    pub fn decode_key_string_value(value: &Vec<u8>) -> Value {
+    pub fn decode_key_string_value(value: &[u8]) -> Value {
         value[9..].to_vec()
     }
 
-    pub fn decode_key_hash_size(value: &Vec<u8>) -> u64 {
+    pub fn decode_key_hash_size(value: &[u8]) -> u64 {
         u64::from_be_bytes(value[9..].try_into().unwrap())
     }
 
-    pub fn decode_key_hash_meta(value: &Vec<u8>) -> (u64, u64) {
+    pub fn decode_key_hash_meta(value: &[u8]) -> (u64, u64) {
         (
             Self::decode_key_ttl(value),
             Self::decode_key_hash_size(value),
@@ -49,7 +49,7 @@ impl KeyDecoder {
     }
 
     /// return (ttl, left, right)
-    pub fn decode_key_list_meta(value: &Vec<u8>) -> (u64, u64, u64) {
+    pub fn decode_key_list_meta(value: &[u8]) -> (u64, u64, u64) {
         (
             u64::from_be_bytes(value[1..9].try_into().unwrap()),
             u64::from_be_bytes(value[9..17].try_into().unwrap()),
@@ -57,11 +57,11 @@ impl KeyDecoder {
         )
     }
 
-    pub fn decode_key_set_size(value: &Vec<u8>) -> u64 {
+    pub fn decode_key_set_size(value: &[u8]) -> u64 {
         u64::from_be_bytes(value[9..].try_into().unwrap())
     }
 
-    pub fn decode_key_set_meta(value: &Vec<u8>) -> (u64, u64) {
+    pub fn decode_key_set_meta(value: &[u8]) -> (u64, u64) {
         (
             Self::decode_key_ttl(value),
             Self::decode_key_set_size(value),
@@ -74,11 +74,11 @@ impl KeyDecoder {
         key[idx..].to_vec()
     }
 
-    pub fn decode_key_zset_size(value: &Vec<u8>) -> u64 {
+    pub fn decode_key_zset_size(value: &[u8]) -> u64 {
         u64::from_be_bytes(value[9..].try_into().unwrap())
     }
 
-    pub fn decode_key_zset_meta(value: &Vec<u8>) -> (u64, u64) {
+    pub fn decode_key_zset_meta(value: &[u8]) -> (u64, u64) {
         (
             Self::decode_key_ttl(value),
             Self::decode_key_zset_size(value),
@@ -98,7 +98,7 @@ impl KeyDecoder {
         i64::from_be_bytes(key[idx..].try_into().unwrap())
     }
 
-    pub fn decode_key_zset_data_value(value: &Vec<u8>) -> i64 {
+    pub fn decode_key_zset_data_value(value: &[u8]) -> i64 {
         i64::from_be_bytes(value[..].try_into().unwrap())
     }
 }

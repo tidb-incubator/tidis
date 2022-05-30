@@ -19,6 +19,7 @@ pub struct Publish {
 }
 
 impl Publish {
+    #[allow(dead_code)]
     /// Create a new `Publish` command which sends `message` on `channel`.
     pub(crate) fn new(channel: impl ToString, message: Bytes) -> Publish {
         Publish {
@@ -86,6 +87,7 @@ impl Publish {
         Ok(())
     }
 
+    #[allow(dead_code)]
     /// Converts the command into an equivalent `Frame`.
     ///
     /// This is called by the client when encoding a `Publish` command to send

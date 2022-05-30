@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::cmd::Parse;
 use crate::config::is_use_txn_api;
-use crate::tikv::errors::AsyncResult;
+use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::zset::ZsetCommandCtx;
 use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
@@ -91,7 +91,7 @@ impl Zpop {
                 .do_async_txnkv_zpop(&self.key, from_min, self.count as u64)
                 .await
         } else {
-            Ok(resp_err("not supported yet"))
+            Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
         }
     }
 }

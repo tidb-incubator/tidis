@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::config::is_use_txn_api;
 use crate::config::LOGGER;
-use crate::tikv::errors::AsyncResult;
+use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::string::StringCommandCtx;
 use crate::utils::{resp_err, resp_invalid_arguments, timestamp_from_ttl};
 use crate::{Connection, Frame, Parse};
@@ -71,10 +71,10 @@ impl Expire {
         is_millis: bool,
         expire_at: bool,
     ) -> crate::Result<()> {
-        let response = match self.expire(is_millis, expire_at, None).await {
-            Ok(val) => val,
-            Err(e) => Frame::Error(e.to_string()),
-        };
+        let response = self
+            .expire(is_millis, expire_at, None)
+            .await
+            .unwrap_or_else(Into::into);
         debug!(
             LOGGER,
             "res, {} -> {}, {:?}",
@@ -109,7 +109,7 @@ impl Expire {
                 .do_async_txnkv_expire(&self.key, ttl)
                 .await
         } else {
-            Ok(resp_err("not supported yet"))
+            Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
         }
     }
 }

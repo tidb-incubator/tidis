@@ -9,6 +9,7 @@ use tokio::sync::Mutex;
 use tikv_client::{RawClient, Transaction, TransactionClient};
 
 use crate::config::LOGGER;
+use crate::tikv::errors::REDIS_BACKEND_NOT_CONNECTED_ERR;
 
 use self::client::RawClientWrapper;
 use self::client::TxnClientWrapper;
@@ -84,7 +85,7 @@ pub fn get_instance_id() -> u64 {
 
 pub fn get_client() -> Result<RawClientWrapper, RTError> {
     if unsafe { TIKV_RAW_CLIENT.is_none() } {
-        return Err(RTError::StringError(String::from("Not Connected")));
+        return Err(REDIS_BACKEND_NOT_CONNECTED_ERR);
     }
     let client = unsafe { TIKV_RAW_CLIENT.as_ref().unwrap() };
     let ret = RawClientWrapper::new(client);
@@ -93,7 +94,7 @@ pub fn get_client() -> Result<RawClientWrapper, RTError> {
 
 pub fn get_txn_client() -> Result<TxnClientWrapper<'static>, RTError> {
     if unsafe { TIKV_RAW_CLIENT.is_none() } {
-        return Err(RTError::StringError(String::from("Not Connected")));
+        return Err(REDIS_BACKEND_NOT_CONNECTED_ERR);
     }
     let client = unsafe { TIKV_TXN_CLIENT.as_ref().unwrap() };
     let ret = TxnClientWrapper::new(client);

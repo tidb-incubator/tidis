@@ -6,6 +6,7 @@ use std::{
 };
 use tokio::time::Duration;
 
+use crate::tikv::errors::{RTError, REDIS_LUA_PANIC};
 use async_std::io;
 use rustls::{
     internal::pemfile::{certs, rsa_private_keys},
@@ -20,12 +21,16 @@ pub fn resp_ok() -> Frame {
     Frame::Simple("OK".to_string())
 }
 
+pub fn resp_ok_ignore<T>(_: T) -> Frame {
+    resp_ok()
+}
+
 pub fn resp_invalid_arguments() -> Frame {
     Frame::Simple("Invalid arguments".to_string())
 }
 
-pub fn resp_err(e: &str) -> Frame {
-    Frame::Error(e.to_string())
+pub fn resp_err(e: RTError) -> Frame {
+    e.into()
 }
 
 pub fn resp_sstr(val: &'static str) -> Frame {
@@ -79,8 +84,8 @@ pub fn lua_resp_to_redis_resp(resp: LuaValue) -> Frame {
             resp_array(arr)
         }
         LuaValue::Nil => resp_nil(),
-        LuaValue::Error(r) => resp_err(&r.to_string()),
-        _ => resp_err("panic"),
+        LuaValue::Error(r) => resp_err(r.into()),
+        _ => resp_err(REDIS_LUA_PANIC),
     }
 }
 
@@ -91,7 +96,8 @@ pub fn redis_resp_to_lua_resp(resp: Frame, lua: &Lua) -> LuaValue {
             let str = String::from_utf8_lossy(&v).to_string();
             LuaValue::String(lua.create_string(&str).unwrap())
         }
-        Frame::Error(e) => LuaValue::String(lua.create_string(&e).unwrap()),
+        Frame::ErrorOwned(e) => LuaValue::String(lua.create_string(&e).unwrap()),
+        Frame::ErrorString(e) => LuaValue::String(lua.create_string(e).unwrap()),
         Frame::Integer(i) => LuaValue::Integer(i),
         Frame::Null => LuaValue::Nil,
         Frame::Array(arr) => {

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::cmd::Parse;
 use crate::config::is_use_txn_api;
-use crate::tikv::errors::AsyncResult;
+use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::set::SetCommandCtx;
 use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
@@ -92,7 +92,7 @@ impl Smismember {
                 .do_async_txnkv_sismember(&self.key, &self.members)
                 .await
         } else {
-            Ok(resp_err("not supported yet"))
+            Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
         }
     }
 }

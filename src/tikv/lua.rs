@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::{errors::AsyncResult, errors::RTError};
+use super::errors::AsyncResult;
 use crate::db::Db;
 use crate::utils::{lua_resp_to_redis_resp, redis_resp_to_lua_resp, resp_err};
 use crate::{utils::resp_invalid_arguments, Command, Frame};
@@ -10,6 +10,7 @@ use tokio::sync::Mutex;
 use crate::config::LOGGER;
 use slog::{debug, error};
 
+use crate::tikv::errors::{REDIS_LUA_CONTEXT_IS_NOT_INITIALIZED_ERR, REDIS_NO_MATCHING_SCRIPT_ERR};
 use mlua::{prelude::*, Lua, Value as LuaValue, Variadic};
 
 #[derive(Clone)]
@@ -31,7 +32,7 @@ impl<'a> LuaCommandCtx<'a> {
     ) -> LuaResult<Frame> {
         let lua = match self.lua {
             Some(lua) => lua,
-            None => return Ok(resp_err("lua context is not initialized")),
+            None => return Ok(resp_err(REDIS_LUA_CONTEXT_IS_NOT_INITIALIZED_ERR)),
         };
         //let lua = lua_rc.lock().await;
 
@@ -168,14 +169,7 @@ impl<'a> LuaCommandCtx<'a> {
         keys: &[String],
         args: &[String],
     ) -> AsyncResult<Frame> {
-        let lua_resp = self.clone().do_async_eval_inner(script, keys, args).await;
-        match lua_resp {
-            Ok(resp) => Ok(resp),
-            Err(err) => {
-                //return Ok(resp_err(&err.to_string()));
-                Err(RTError::StringError(err.to_string()))
-            }
-        }
+        Ok(self.clone().do_async_eval_inner(script, keys, args).await?)
     }
 
     pub async fn do_async_evalsha(
@@ -188,20 +182,11 @@ impl<'a> LuaCommandCtx<'a> {
         // get script from cache with sha1 key
         let script = db.get_script(sha1);
         match script {
-            Some(script) => {
-                let lua_resp = self
-                    .clone()
-                    .do_async_eval_inner(&String::from_utf8_lossy(&script.to_vec()), keys, args)
-                    .await;
-                match lua_resp {
-                    Ok(resp) => Ok(resp),
-                    Err(err) => {
-                        //return Ok(resp_err(&err.to_string()));
-                        Err(RTError::StringError(err.to_string()))
-                    }
-                }
-            }
-            None => Ok(resp_err("NOSCRIPT No matching script. Please use EVAL.")),
+            Some(script) => Ok(self
+                .clone()
+                .do_async_eval_inner(&String::from_utf8_lossy(&script.to_vec()), keys, args)
+                .await?),
+            None => Ok(resp_err(REDIS_NO_MATCHING_SCRIPT_ERR)),
         }
     }
 }

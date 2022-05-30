@@ -51,11 +51,22 @@ impl KeyEncoder {
         ret.into()
     }
 
-    pub fn encode_txnkv_string_value(&self, value: &mut Value, ttl: u64) -> Value {
+    fn encode_txnkv_string_internal(&self, vsize: usize, ttl: u64) -> Value {
         let dt = self.get_type_bytes(DataType::String);
-        let mut val = Vec::new();
+        let mut val = Vec::with_capacity(5 + vsize);
         val.append(&mut dt.to_be_bytes().to_vec());
         val.append(&mut ttl.to_be_bytes().to_vec());
+        val
+    }
+
+    pub fn encode_txnkv_string_slice(&self, value: &[u8], ttl: u64) -> Value {
+        let mut val = self.encode_txnkv_string_internal(value.len(), ttl);
+        val.extend_from_slice(value);
+        val
+    }
+
+    pub fn encode_txnkv_string_value(&self, value: &mut Value, ttl: u64) -> Value {
+        let mut val = self.encode_txnkv_string_internal(value.len(), ttl);
         val.append(value);
         val
     }

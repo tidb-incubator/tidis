@@ -203,14 +203,8 @@ impl Set {
     /// to execute a received command.
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         let response = match self.nx {
-            Some(_) => match self.put_not_exists(None).await {
-                Ok(val) => val,
-                Err(e) => Frame::Error(e.to_string()),
-            },
-            None => match self.put(None).await {
-                Ok(val) => val,
-                Err(e) => Frame::Error(e.to_string()),
-            },
+            Some(_) => self.put_not_exists(None).await.unwrap_or_else(Into::into),
+            None => self.put(None).await.unwrap_or_else(Into::into),
         };
         debug!(
             LOGGER,
@@ -228,17 +222,11 @@ impl Set {
         if !self.valid {
             return Ok(resp_invalid_arguments());
         }
-        let response = match self.nx {
-            Some(_) => match self.put_not_exists(txn).await {
-                Ok(val) => val,
-                Err(e) => Frame::Error(e.to_string()),
-            },
-            None => match self.put(txn).await {
-                Ok(val) => val,
-                Err(e) => Frame::Error(e.to_string()),
-            },
-        };
-        Ok(response)
+        Ok(match self.nx {
+            Some(_) => self.put_not_exists(txn).await,
+            None => self.put(txn).await,
+        }
+        .unwrap_or_else(Into::into))
     }
 
     async fn put_not_exists(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {

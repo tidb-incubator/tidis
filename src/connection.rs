@@ -266,7 +266,12 @@ impl Connection {
                 self.write_all(val.as_bytes()).await?;
                 self.write_all(b"\r\n").await?;
             }
-            Frame::Error(val) => {
+            Frame::ErrorString(val) => {
+                self.write_all(b"-").await?;
+                self.write_all(val.as_bytes()).await?;
+                self.write_all(b"\r\n").await?;
+            }
+            Frame::ErrorOwned(val) => {
                 self.write_all(b"-").await?;
                 self.write_all(val.as_bytes()).await?;
                 self.write_all(b"\r\n").await?;

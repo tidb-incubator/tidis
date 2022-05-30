@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::config::is_use_txn_api;
 use crate::config::LOGGER;
-use crate::tikv::errors::AsyncResult;
+use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::string::StringCommandCtx;
 use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame, Parse};
@@ -49,10 +49,7 @@ impl TTL {
     }
 
     pub(crate) async fn apply(self, dst: &mut Connection, is_millis: bool) -> crate::Result<()> {
-        let response = match self.ttl(is_millis, None).await {
-            Ok(val) => val,
-            Err(e) => Frame::Error(e.to_string()),
-        };
+        let response = self.ttl(is_millis, None).await.unwrap_or_else(Into::into);
 
         debug!(
             LOGGER,
@@ -80,7 +77,7 @@ impl TTL {
                 .do_async_txnkv_ttl(&self.key, is_millis)
                 .await
         } else {
-            Ok(resp_err("not supported yet"))
+            Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
         }
     }
 }

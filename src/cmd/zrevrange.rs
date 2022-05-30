@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::cmd::Parse;
 use crate::config::is_use_txn_api;
-use crate::tikv::errors::AsyncResult;
+use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::zset::ZsetCommandCtx;
 use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
@@ -110,7 +110,7 @@ impl Zrevrange {
                 .do_async_txnkv_zrange(&self.key, self.min, self.max, self.withscores, true)
                 .await
         } else {
-            Ok(resp_err("not supported yet"))
+            Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
         }
     }
 }

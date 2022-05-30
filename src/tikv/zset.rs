@@ -3,7 +3,6 @@ use super::get_txn_client;
 use super::{
     encoding::{DataType, KeyDecoder, KeyEncoder},
     errors::AsyncResult,
-    errors::RTError,
 };
 use crate::utils::{key_is_expired, resp_array, resp_bulk, resp_err, resp_int, resp_nil};
 use crate::Frame;
@@ -51,7 +50,7 @@ impl ZsetCommandCtx {
                         Some(meta_value) => {
                             // check key type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Zset) {
-                                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                                return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
                             let (ttl, mut size) = KeyDecoder::decode_key_zset_meta(&meta_value);
@@ -209,7 +208,7 @@ impl ZsetCommandCtx {
 
         match resp {
             Ok(v) => Ok(resp_int(v as i64)),
-            Err(e) => Ok(resp_err(&e.to_string())),
+            Err(e) => Ok(resp_err(e)),
         }
     }
 
@@ -511,7 +510,7 @@ impl ZsetCommandCtx {
                         Some(meta_value) => {
                             // check key type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Zset) {
-                                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                                return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
                             let (ttl, size) = KeyDecoder::decode_key_zset_meta(&meta_value);
@@ -570,7 +569,7 @@ impl ZsetCommandCtx {
 
         match resp {
             Ok(v) => Ok(resp_array(v)),
-            Err(e) => Ok(resp_err(&e.to_string())),
+            Err(e) => Ok(resp_err(e)),
         }
     }
 
@@ -647,7 +646,7 @@ impl ZsetCommandCtx {
                         Some(meta_value) => {
                             // check key type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Zset) {
-                                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                                return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
                             let (ttl, size) = KeyDecoder::decode_key_zset_meta(&meta_value);
@@ -695,7 +694,7 @@ impl ZsetCommandCtx {
 
         match resp {
             Ok(v) => Ok(resp_int(v as i64)),
-            Err(e) => Ok(resp_err(&e.to_string())),
+            Err(e) => Ok(resp_err(e)),
         }
     }
 
@@ -724,7 +723,7 @@ impl ZsetCommandCtx {
                         Some(meta_value) => {
                             // check key type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Zset) {
-                                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                                return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
                             let (ttl, size) = KeyDecoder::decode_key_zset_meta(&meta_value);
@@ -778,7 +777,7 @@ impl ZsetCommandCtx {
 
         match resp {
             Ok(v) => Ok(resp_int(v as i64)),
-            Err(e) => Ok(resp_err(&e.to_string())),
+            Err(e) => Ok(resp_err(e)),
         }
     }
 

@@ -96,10 +96,8 @@ impl SetNX {
     }
 
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        let response = match self.put_not_exists(None).await {
-            Ok(val) => val,
-            Err(e) => Frame::Error(e.to_string()),
-        };
+        let response = self.put_not_exists(None).await.unwrap_or_else(Into::into);
+
         debug!(
             LOGGER,
             "res, {} -> {}, {:?}",

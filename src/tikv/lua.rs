@@ -139,7 +139,7 @@ impl<'a> LuaCommandCtx<'a> {
                     Ok(resp) => {
                         debug!(LOGGER, "response call from lua {:?}", resp);
                         let lua_resp = redis_resp_to_lua_resp(resp, _lua);
-                        return Ok(lua_resp);
+                        Ok(lua_resp)
                     }
                     Err(e) => {
                         error!(LOGGER, "response call from lua failed {}", e);

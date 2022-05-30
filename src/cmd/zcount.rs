@@ -27,10 +27,10 @@ impl Zcount {
     pub fn new(key: &str, min: i64, min_inclusive: bool, max: i64, max_inclusive: bool) -> Zcount {
         Zcount {
             key: key.to_string(),
-            min: min,
-            min_inclusive: min_inclusive,
-            max: max,
-            max_inclusive: max_inclusive,
+            min,
+            min_inclusive,
+            max,
+            max_inclusive,
             valid: true,
         }
     }

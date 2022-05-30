@@ -23,7 +23,7 @@ impl Spop {
     pub fn new(key: &str, count: i64) -> Spop {
         Spop {
             key: key.to_string(),
-            count: count,
+            count,
             valid: true,
         }
     }
@@ -51,7 +51,7 @@ impl Spop {
     }
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Spop> {
-        if argv.len() == 0 || argv.len() > 2 {
+        if argv.is_empty() || argv.len() > 2 {
             return Ok(Spop::new_invalid());
         }
         let mut count = 1;

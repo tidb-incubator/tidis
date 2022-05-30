@@ -24,8 +24,8 @@ impl Lrange {
     pub fn new(key: &str, left: i64, right: i64) -> Lrange {
         Lrange {
             key: key.to_owned(),
-            left: left,
-            right: right,
+            left,
+            right,
             valid: true,
         }
     }

@@ -23,7 +23,7 @@ impl Lindex {
     pub fn new(key: &str, idx: i64) -> Lindex {
         Lindex {
             key: key.to_owned(),
-            idx: idx,
+            idx,
             valid: true,
         }
     }

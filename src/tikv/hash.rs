@@ -162,15 +162,15 @@ impl<'a> HashCommandCtx {
 
                 match ss.get(data_key).await? {
                     Some(data) => {
-                        return Ok(resp_bulk(data));
+                        Ok(resp_bulk(data))
                     }
                     None => {
-                        return Ok(resp_nil());
+                        Ok(resp_nil())
                     }
                 }
             }
             None => {
-                return Ok(resp_nil());
+                Ok(resp_nil())
             }
         }
     }
@@ -207,15 +207,15 @@ impl<'a> HashCommandCtx {
 
                 match ss.get(data_key).await? {
                     Some(data) => {
-                        return Ok(resp_int(data.len() as i64));
+                        Ok(resp_int(data.len() as i64))
                     }
                     None => {
-                        return Ok(resp_int(0));
+                        Ok(resp_int(0))
                     }
                 }
             }
             None => {
-                return Ok(resp_int(0));
+                Ok(resp_int(0))
             }
         }
     }
@@ -257,7 +257,7 @@ impl<'a> HashCommandCtx {
                 }
             }
             None => {
-                return Ok(resp_int(0));
+                Ok(resp_int(0))
             }
         }
     }
@@ -285,13 +285,13 @@ impl<'a> HashCommandCtx {
                 let ttl = KeyDecoder::new().decode_key_ttl(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
-                        .do_async_txnkv_hash_expire_if_needed(&key)
+                        .do_async_txnkv_hash_expire_if_needed(key)
                         .await?;
                     return Ok(resp_array(vec![]));
                 }
 
                 for field in fields {
-                    let data_key = KeyEncoder::new().encode_txnkv_hash_data_key(&key, &field);
+                    let data_key = KeyEncoder::new().encode_txnkv_hash_data_key(key, field);
                     match ss.get(data_key).await? {
                         Some(data) => {
                             resp.push(resp_bulk(data));
@@ -332,7 +332,7 @@ impl<'a> HashCommandCtx {
                 let ttl = KeyDecoder::new().decode_key_ttl(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
-                        .do_async_txnkv_hash_expire_if_needed(&key)
+                        .do_async_txnkv_hash_expire_if_needed(key)
                         .await?;
                     return Ok(resp_int(0));
                 }
@@ -369,7 +369,7 @@ impl<'a> HashCommandCtx {
             let ttl = KeyDecoder::new().decode_key_ttl(&meta_value);
             if key_is_expired(ttl) {
                 self.clone()
-                    .do_async_txnkv_hash_expire_if_needed(&key)
+                    .do_async_txnkv_hash_expire_if_needed(key)
                     .await?;
                 return Ok(resp_nil());
             }
@@ -491,7 +491,7 @@ impl<'a> HashCommandCtx {
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
                 async move {
-                    let new_int;
+                    
                     let prev_int;
                     let mut txn = txn_rc.lock().await;
                     match txn.get_for_update(meta_key.clone()).await? {
@@ -545,7 +545,7 @@ impl<'a> HashCommandCtx {
                             txn.put(meta_key, meta_value).await?;
                         }
                     }
-                    new_int = prev_int + step;
+                    let new_int = prev_int + step;
                     // update data key
                     txn.put(data_key, new_int.to_string().as_bytes().to_vec())
                         .await?;

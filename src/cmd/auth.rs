@@ -8,7 +8,7 @@ pub struct Auth {
 impl Auth {
     pub fn new(passwd: String) -> Auth {
         Auth {
-            passwd: passwd.to_string(),
+            passwd,
         }
     }
 

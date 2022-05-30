@@ -240,7 +240,7 @@ impl<'a> ListCommandCtx {
 
         match resp {
             Ok(values) => {
-                if values.len() == 0 {
+                if values.is_empty() {
                     Ok(resp_nil())
                 } else if values.len() == 1 {
                     Ok(values[0].clone())
@@ -377,7 +377,7 @@ impl<'a> ListCommandCtx {
                 let (ttl, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
-                        .do_async_txnkv_list_expire_if_needed(&key)
+                        .do_async_txnkv_list_expire_if_needed(key)
                         .await?;
                     return Ok(resp_array(vec![]));
                 }
@@ -435,7 +435,7 @@ impl<'a> ListCommandCtx {
                 let (ttl, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
-                        .do_async_txnkv_list_expire_if_needed(&key)
+                        .do_async_txnkv_list_expire_if_needed(key)
                         .await?;
                     return Ok(resp_int(0));
                 }
@@ -468,7 +468,7 @@ impl<'a> ListCommandCtx {
                 let (ttl, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
-                        .do_async_txnkv_list_expire_if_needed(&key)
+                        .do_async_txnkv_list_expire_if_needed(key)
                         .await?;
                     return Ok(resp_nil());
                 }
@@ -482,7 +482,7 @@ impl<'a> ListCommandCtx {
                 let real_idx = left as i64 + idx;
 
                 // get value from data key
-                let data_key = KeyEncoder::new().encode_txnkv_list_data_key(&key, real_idx as u64);
+                let data_key = KeyEncoder::new().encode_txnkv_list_data_key(key, real_idx as u64);
                 if let Some(value) = ss.get(data_key).await? {
                     Ok(resp_bulk(value))
                 } else {
@@ -532,7 +532,7 @@ impl<'a> ListCommandCtx {
 
                             // convert idx to positive is needed
                             if idx < 0 {
-                                idx = idx + (right - left) as i64;
+                                idx += (right - left) as i64;
                             }
 
                             let uidx = idx + left as i64;

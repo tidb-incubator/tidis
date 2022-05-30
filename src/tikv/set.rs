@@ -66,7 +66,7 @@ impl SetCommandCtx {
                             for m in &members {
                                 // check member already exists
                                 let data_key =
-                                    KeyEncoder::new().encode_txnkv_set_data_key(&key, &m);
+                                    KeyEncoder::new().encode_txnkv_set_data_key(&key, m);
                                 let member_exists = txn.key_exists(data_key.clone()).await?;
                                 if !member_exists {
                                     added += 1;
@@ -84,7 +84,7 @@ impl SetCommandCtx {
                             for m in &members {
                                 // check member already exists
                                 let data_key =
-                                    KeyEncoder::new().encode_txnkv_set_data_key(&key, &m);
+                                    KeyEncoder::new().encode_txnkv_set_data_key(&key, m);
                                 let member_exists = txn.key_exists(data_key.clone()).await?;
                                 if !member_exists {
                                     txn.put(data_key, vec![]).await?;
@@ -132,7 +132,7 @@ impl SetCommandCtx {
                 let (ttl, size) = KeyDecoder::new().decode_key_set_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
-                        .do_async_txnkv_set_expire_if_needed(&key)
+                        .do_async_txnkv_set_expire_if_needed(key)
                         .await?;
                     return Ok(resp_int(0));
                 }
@@ -172,13 +172,13 @@ impl SetCommandCtx {
                 let ttl = KeyDecoder::new().decode_key_ttl(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
-                        .do_async_txnkv_set_expire_if_needed(&key)
+                        .do_async_txnkv_set_expire_if_needed(key)
                         .await?;
                     return Ok(resp_int(0));
                 }
 
                 if member_len == 1 {
-                    let data_key = KeyEncoder::new().encode_txnkv_set_data_key(&key, &members[0]);
+                    let data_key = KeyEncoder::new().encode_txnkv_set_data_key(key, &members[0]);
                     if ss.key_exists(data_key).await? {
                         Ok(resp_int(1))
                     } else {
@@ -187,7 +187,7 @@ impl SetCommandCtx {
                 } else {
                     let mut resp = vec![];
                     for m in members {
-                        let data_key = KeyEncoder::new().encode_txnkv_set_data_key(&key, m);
+                        let data_key = KeyEncoder::new().encode_txnkv_set_data_key(key, m);
                         if ss.key_exists(data_key).await? {
                             resp.push(resp_int(1));
                         } else {
@@ -230,7 +230,7 @@ impl SetCommandCtx {
                 let (ttl, size) = KeyDecoder::new().decode_key_set_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
-                        .do_async_txnkv_set_expire_if_needed(&key)
+                        .do_async_txnkv_set_expire_if_needed(key)
                         .await?;
                     return Ok(resp_array(vec![]));
                 }
@@ -298,7 +298,7 @@ impl SetCommandCtx {
                             for member in &members {
                                 // check member exists
                                 let data_key =
-                                    KeyEncoder::new().encode_txnkv_set_data_key(&key, &member);
+                                    KeyEncoder::new().encode_txnkv_set_data_key(&key, member);
                                 if txn.key_exists(data_key.clone()).await? {
                                     removed += 1;
                                     txn.delete(data_key).await?;
@@ -401,7 +401,7 @@ impl SetCommandCtx {
         match resp {
             Ok(mut v) => {
                 if count == 1 {
-                    if v.len() == 0 {
+                    if v.is_empty() {
                         Ok(resp_nil())
                     } else {
                         Ok(v.pop().unwrap())

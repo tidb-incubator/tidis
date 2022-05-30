@@ -25,9 +25,9 @@ impl Zrevrange {
     pub fn new(key: &str, min: i64, max: i64, withscores: bool) -> Zrevrange {
         Zrevrange {
             key: key.to_string(),
-            min: min,
-            max: max,
-            withscores: withscores,
+            min,
+            max,
+            withscores,
             valid: true,
         }
     }

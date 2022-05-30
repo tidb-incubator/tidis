@@ -115,7 +115,7 @@ impl Mset {
             for (idx, key) in self.keys.iter().enumerate() {
                 let val =
                     KeyEncoder::new().encode_txnkv_string_value(&mut self.vals[idx].to_vec(), 0);
-                let ekey = KeyEncoder::new().encode_txnkv_string(&key);
+                let ekey = KeyEncoder::new().encode_txnkv_string(key);
                 let kvpair = KvPair::from((ekey, val.to_vec()));
                 kvs.push(kvpair);
             }
@@ -125,7 +125,7 @@ impl Mset {
         } else {
             for (idx, key) in self.keys.iter().enumerate() {
                 let val = &self.vals[idx];
-                let ekey = KeyEncoder::new().encode_rawkv_string(&key);
+                let ekey = KeyEncoder::new().encode_rawkv_string(key);
                 let kvpair = KvPair::from((ekey, val.to_vec()));
                 kvs.push(kvpair);
             }

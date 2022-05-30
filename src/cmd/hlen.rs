@@ -44,7 +44,7 @@ impl Hlen {
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Hlen> {
         let key = parse.next_string()?;
         Ok(Hlen {
-            key: key,
+            key,
             valid: true,
         })
     }

@@ -248,9 +248,9 @@ impl TxnClientWrapper<'static> {
                     sleep(std::cmp::min(2 + retry_count * 10, 200)).await;
                 }
                 error!(LOGGER, "transaction retry count reached limit");
-                return Err(RTError::TikvClientError(StringError(
+                Err(RTError::TikvClientError(StringError(
                     "retry count exceeded".to_string(),
-                )));
+                )))
             }
         }
     }

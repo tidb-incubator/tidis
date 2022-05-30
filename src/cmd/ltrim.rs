@@ -24,8 +24,8 @@ impl Ltrim {
     pub fn new(key: &str, start: i64, end: i64) -> Ltrim {
         Ltrim {
             key: key.to_owned(),
-            start: start,
-            end: end,
+            start,
+            end,
             valid: true,
         }
     }

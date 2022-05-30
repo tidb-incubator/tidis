@@ -24,8 +24,8 @@ impl Zremrangebyscore {
     pub fn new(key: &str, min: i64, max: i64) -> Zremrangebyscore {
         Zremrangebyscore {
             key: key.to_string(),
-            min: min,
-            max: max,
+            min,
+            max,
             valid: true,
         }
     }

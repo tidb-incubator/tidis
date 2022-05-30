@@ -38,7 +38,7 @@ impl Hvals {
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Hvals> {
         let key = parse.next_string()?;
         Ok(Hvals {
-            key: key,
+            key,
             valid: true,
         })
     }

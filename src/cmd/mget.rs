@@ -61,14 +61,14 @@ impl Mget {
     }
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Mget> {
-        if argv.len() == 0 {
+        if argv.is_empty() {
             return Ok(Mget::new_invalid());
         }
         let mut mget = Mget::new();
         for arg in argv {
             mget.add_key(arg.to_string());
         }
-        return Ok(mget);
+        Ok(mget)
     }
 
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {

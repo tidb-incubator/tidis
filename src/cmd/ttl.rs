@@ -42,10 +42,10 @@ impl TTL {
                 valid: false,
             });
         }
-        return Ok(TTL {
+        Ok(TTL {
             key: argv[0].to_owned(),
             valid: true,
-        });
+        })
     }
 
     pub(crate) async fn apply(self, dst: &mut Connection, is_millis: bool) -> crate::Result<()> {

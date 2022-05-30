@@ -11,7 +11,7 @@ impl KeyDecoder {
     }
 
     pub fn decode_string(&self, key: Key) -> Vec<u8> {
-        let mut bytes: Vec<u8> = key.clone().into();
+        let mut bytes: Vec<u8> = key.into();
         bytes.drain(15..).collect()
     }
 
@@ -31,7 +31,7 @@ impl KeyDecoder {
     }
 
     pub fn decode_key_string_value(&self, value: &Vec<u8>) -> Value {
-        value[9..].to_vec().into()
+        value[9..].to_vec()
     }
 
     pub fn decode_key_hash_size(&self, value: &Vec<u8>) -> u64 {

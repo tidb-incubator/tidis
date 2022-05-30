@@ -33,7 +33,7 @@ pub async fn main() -> tikv_service::Result<()> {
             config = match toml::from_str(&config_content) {
                 Ok(d) => Some(d),
                 Err(e) => {
-                    println!("Unable to load config file {}", e.to_string());
+                    println!("Unable to load config file {}", e);
                     exit(1);
                 }
             };
@@ -85,7 +85,7 @@ pub async fn main() -> tikv_service::Result<()> {
         Err(_) => set_instance_id(0),
     };
     let mut addrs: Vec<String> = Vec::new();
-    pd_addrs.split(",").for_each(|s| {
+    pd_addrs.split(',').for_each(|s| {
         addrs.push(s.to_string());
     });
 
@@ -113,7 +113,7 @@ pub async fn main() -> tikv_service::Result<()> {
         listener = Some(TcpListener::bind(&format!("{}:{}", &listen_addr, port)).await?);
     }
 
-    if tls_port != "0" && tls_cert_file != "" && tls_cert_file != "" {
+    if tls_port != "0" && !tls_cert_file.is_empty() && !tls_cert_file.is_empty() {
         info!(
             tikv_service::config::LOGGER,
             "TiKV Service Server SSL Listen on: {}:{}", &tls_listen_addr, tls_port
@@ -121,10 +121,10 @@ pub async fn main() -> tikv_service::Result<()> {
         tls_listener =
             Some(TcpListener::bind(&format!("{}:{}", &tls_listen_addr, tls_port)).await?);
         let tls_config = utils::load_config(
-            &tls_cert_file,
-            &tls_key_file,
+            tls_cert_file,
+            tls_key_file,
             tls_auth_client,
-            &tls_ca_cert_file,
+            tls_ca_cert_file,
         )?;
         tls_acceptor = Some(TlsAcceptor::from(Arc::new(tls_config)));
     }

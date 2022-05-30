@@ -3,29 +3,24 @@
 //! Provides an async `run` function that listens for inbound connections,
 //! spawning a task per connection.
 
-use crate::metrics::{CURRENT_CONNECTION_COUNTER, REQUEST_CMD_HANDLE_TIME, REQUEST_CMD_FINISH_COUNTER, REQUEST_CMD_COUNTER, REQUEST_COUNTER};
+use crate::metrics::{
+    CURRENT_CONNECTION_COUNTER, REQUEST_CMD_COUNTER, REQUEST_CMD_FINISH_COUNTER,
+    REQUEST_CMD_HANDLE_TIME, REQUEST_COUNTER,
+};
 use crate::utils::{resp_err, resp_ok};
-use crate::{Command, Connection, Db, DbDropGuard, Shutdown, is_auth_enabled, is_auth_matched};
+use crate::{is_auth_enabled, is_auth_matched, Command, Connection, Db, DbDropGuard, Shutdown};
 
-use std::future::Future;
 use async_std::net::{TcpListener, TcpStream};
+use std::future::Future;
 
 use async_std::prelude::StreamExt;
-use async_tls::TlsAcceptor;
 use async_tls::server::TlsStream;
-use slog::{
-    error,
-    info,
-    debug,
-};
+use async_tls::TlsAcceptor;
+use slog::{debug, error, info};
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::{self, Duration, Instant};
 
-use mlua::{
-    Lua,
-    StdLib,
-    LuaOptions,
-};
+use mlua::{Lua, LuaOptions, StdLib};
 
 use crate::config::LOGGER;
 
@@ -166,7 +161,12 @@ struct Handler {
 ///
 /// `tokio::signal::ctrl_c()` can be used as the `shutdown` argument. This will
 /// listen for a SIGINT signal.
-pub async fn run(listener: Option<TcpListener>, tls_listener: Option<TcpListener>, tls_acceptor: Option<TlsAcceptor>, shutdown: impl Future) {
+pub async fn run(
+    listener: Option<TcpListener>,
+    tls_listener: Option<TcpListener>,
+    tls_acceptor: Option<TlsAcceptor>,
+    shutdown: impl Future,
+) {
     let tcp_enabled = listener.is_some();
     let tls_enabled = tls_listener.is_some();
     // When the provided `shutdown` future completes, we must send a shutdown
@@ -178,7 +178,7 @@ pub async fn run(listener: Option<TcpListener>, tls_listener: Option<TcpListener
     if tcp_enabled && !tls_enabled {
         let (notify_shutdown, _) = broadcast::channel(1);
         let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
-    
+
         // Initialize the listener state
         let mut server = Listener {
             listener: listener.unwrap(),
@@ -249,7 +249,7 @@ pub async fn run(listener: Option<TcpListener>, tls_listener: Option<TcpListener
     } else if tcp_enabled && tls_enabled {
         let (notify_shutdown, _) = broadcast::channel(1);
         let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
-    
+
         // Initialize the listener state
         let mut server = Listener {
             listener: listener.unwrap(),
@@ -446,9 +446,15 @@ impl TlsListener {
             match handshake.await {
                 Ok(stream) => {
                     tls_stream = stream;
-                },
+                }
                 Err(e) => {
-                    error!(LOGGER, "{} -> {} handshake failed, {}", peer_addr, local_addr, e.to_string());
+                    error!(
+                        LOGGER,
+                        "{} -> {} handshake failed, {}",
+                        peer_addr,
+                        local_addr,
+                        e.to_string()
+                    );
                     continue;
                 }
             }
@@ -469,13 +475,10 @@ impl TlsListener {
                     error!(LOGGER, "tls connection error {:?}", err);
                 }
             });
-
         }
-        
+
         Ok(())
     }
-
-    
 }
 
 impl Handler {
@@ -523,39 +526,55 @@ impl Handler {
             REQUEST_COUNTER.inc();
             REQUEST_CMD_COUNTER.with_label_values(&[&cmd_name]).inc();
 
-            debug!(LOGGER, "req {} -> {}, {:?}", self.connection.peer_addr(), self.connection.local_addr(), cmd);
+            debug!(
+                LOGGER,
+                "req {} -> {}, {:?}",
+                self.connection.peer_addr(),
+                self.connection.local_addr(),
+                cmd
+            );
 
             match cmd {
                 Command::Auth(c) => {
                     // check password and update connection authorized flag
                     if !is_auth_enabled() {
-                        self.connection.write_frame(&resp_err("ERR Client sent AUTH, but no password is set")).await?;
+                        self.connection
+                            .write_frame(&resp_err("ERR Client sent AUTH, but no password is set"))
+                            .await?;
                     } else {
                         if is_auth_matched(c.passwd()) {
                             self.connection.write_frame(&resp_ok()).await?;
                             self.authorized = true;
                         } else {
-                            self.connection.write_frame(&resp_err("ERR invalid password")).await?;
+                            self.connection
+                                .write_frame(&resp_err("ERR invalid password"))
+                                .await?;
                         }
                     }
-                },
+                }
                 _ => {
                     if !self.authorized {
-                        self.connection.write_frame(&resp_err("NOAUTH Authentication required.")).await?;
+                        self.connection
+                            .write_frame(&resp_err("NOAUTH Authentication required."))
+                            .await?;
                     } else {
                         match cmd {
                             Command::Eval(_) | Command::Evalsha(_) => {
                                 if self.lua.is_none() {
                                     // initialize the mlua once in same connection
-                                    self.lua = Some(Lua::new_with(
-                                                StdLib::STRING
-                                                    |StdLib::TABLE
-                                                    |StdLib::IO
-                                                    |StdLib::MATH
-                                                    |StdLib::OS, 
-                                                    LuaOptions::new()).unwrap());
+                                    self.lua = Some(
+                                        Lua::new_with(
+                                            StdLib::STRING
+                                                | StdLib::TABLE
+                                                | StdLib::IO
+                                                | StdLib::MATH
+                                                | StdLib::OS,
+                                            LuaOptions::new(),
+                                        )
+                                        .unwrap(),
+                                    );
                                 }
-                            },
+                            }
                             _ => {}
                         }
                         // Perform the work needed to apply the command. This may mutate the
@@ -565,15 +584,24 @@ impl Handler {
                         // command to write response frames directly to the connection. In
                         // the case of pub/sub, multiple frames may be send back to the
                         // peer.
-                        cmd.apply(&self.db, &mut self.connection, &mut self.lua, &mut self.shutdown)
-                            .await?;
+                        cmd.apply(
+                            &self.db,
+                            &mut self.connection,
+                            &mut self.lua,
+                            &mut self.shutdown,
+                        )
+                        .await?;
                     }
                 }
             }
 
             let duration = Instant::now() - start_at;
-            REQUEST_CMD_HANDLE_TIME.with_label_values(&[&cmd_name]).observe(duration_to_sec(duration));
-            REQUEST_CMD_FINISH_COUNTER.with_label_values(&[&cmd_name]).inc();
+            REQUEST_CMD_HANDLE_TIME
+                .with_label_values(&[&cmd_name])
+                .observe(duration_to_sec(duration));
+            REQUEST_CMD_FINISH_COUNTER
+                .with_label_values(&[&cmd_name])
+                .inc();
         }
 
         Ok(())

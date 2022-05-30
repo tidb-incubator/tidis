@@ -1,18 +1,16 @@
 use std::sync::Arc;
 
+use crate::config::is_use_txn_api;
+use crate::tikv::encoding::KeyEncoder;
 use crate::tikv::errors::AsyncResult;
+use crate::tikv::string::StringCommandCtx;
 use crate::utils::resp_invalid_arguments;
 use crate::{Connection, Frame, Parse};
-use crate::tikv::string::StringCommandCtx;
 use tikv_client::{KvPair, Transaction};
 use tokio::sync::Mutex;
-use crate::tikv::{
-    encoding::{KeyEncoder}
-};
-use crate::config::is_use_txn_api;
 
-use bytes::Bytes;
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 
 #[derive(Debug)]
@@ -60,7 +58,7 @@ impl Mset {
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Mset> {
         let mut mset = Mset::new();
 
-        loop{
+        loop {
             if let Ok(key) = parse.next_string() {
                 mset.add_key(key);
                 if let Ok(val) = parse.next_bytes() {
@@ -83,7 +81,7 @@ impl Mset {
         let mut mset = Mset::new();
         for idx in (0..argv.len()).step_by(2) {
             mset.add_key(argv[idx].clone());
-            mset.add_val(Bytes::from(argv[idx+1].clone()));
+            mset.add_val(Bytes::from(argv[idx + 1].clone()));
         }
         Ok(mset)
     }
@@ -94,7 +92,13 @@ impl Mset {
             Err(e) => Frame::Error(e.to_string()),
         };
 
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
 
         // Write the response back to the client
         dst.write_frame(&response).await?;
@@ -109,12 +113,15 @@ impl Mset {
         let mut kvs = Vec::new();
         if is_use_txn_api() {
             for (idx, key) in self.keys.iter().enumerate() {
-                let val = KeyEncoder::new().encode_txnkv_string_value(&mut self.vals[idx].to_vec(), 0);
+                let val =
+                    KeyEncoder::new().encode_txnkv_string_value(&mut self.vals[idx].to_vec(), 0);
                 let ekey = KeyEncoder::new().encode_txnkv_string(&key);
                 let kvpair = KvPair::from((ekey, val.to_vec()));
                 kvs.push(kvpair);
             }
-            StringCommandCtx::new(txn).do_async_txnkv_batch_put(kvs).await
+            StringCommandCtx::new(txn)
+                .do_async_txnkv_batch_put(kvs)
+                .await
         } else {
             for (idx, key) in self.keys.iter().enumerate() {
                 let val = &self.vals[idx];
@@ -122,7 +129,9 @@ impl Mset {
                 let kvpair = KvPair::from((ekey, val.to_vec()));
                 kvs.push(kvpair);
             }
-            StringCommandCtx::new(None).do_async_rawkv_batch_put(kvs).await
+            StringCommandCtx::new(None)
+                .do_async_rawkv_batch_put(kvs)
+                .await
         }
     }
 }

@@ -1,17 +1,17 @@
 use std::sync::Arc;
 
-use crate::cmd::{Parse};
+use crate::cmd::Parse;
+use crate::config::is_use_txn_api;
+use crate::tikv::errors::AsyncResult;
 use crate::tikv::string::StringCommandCtx;
 use crate::utils::resp_invalid_arguments;
 use crate::{Connection, Frame};
-use crate::config::{is_use_txn_api};
-use crate::tikv::errors::AsyncResult;
 
+use crate::config::LOGGER;
 use bytes::Bytes;
+use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
-use crate::config::LOGGER;
-use slog::debug;
 
 /// Set `key` to hold the string `value`.
 ///
@@ -74,7 +74,11 @@ impl SetNX {
         // Read the value to set. This is a required field.
         let value = parse.next_bytes()?;
 
-        Ok(SetNX { key, value, valid: true})
+        Ok(SetNX {
+            key,
+            value,
+            valid: true,
+        })
     }
 
     pub fn parse_argv(argv: &Vec<String>) -> crate::Result<SetNX> {
@@ -84,16 +88,25 @@ impl SetNX {
         let key = argv[0].clone();
         let value = Bytes::from(argv[1].clone());
 
-        Ok(SetNX {key, value, valid: true})
+        Ok(SetNX {
+            key,
+            value,
+            valid: true,
+        })
     }
 
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        
         let response = match self.put_not_exists(None).await {
-                    Ok(val) => val,
-                    Err(e) => Frame::Error(e.to_string()),
+            Ok(val) => val,
+            Err(e) => Frame::Error(e.to_string()),
         };
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
         dst.write_frame(&response).await?;
 
         Ok(())
@@ -104,9 +117,13 @@ impl SetNX {
             return Ok(resp_invalid_arguments());
         }
         if is_use_txn_api() {
-            StringCommandCtx::new(txn).do_async_txnkv_put_not_exists(&self.key, &self.value).await
+            StringCommandCtx::new(txn)
+                .do_async_txnkv_put_not_exists(&self.key, &self.value)
+                .await
         } else {
-            StringCommandCtx::new(txn).do_async_rawkv_put_not_exists(&self.key, &self.value).await
+            StringCommandCtx::new(txn)
+                .do_async_rawkv_put_not_exists(&self.key, &self.value)
+                .await
         }
     }
 }

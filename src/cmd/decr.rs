@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use crate::utils::resp_invalid_arguments;
-use crate::{Connection, Frame, Parse};
-use crate::tikv::string::StringCommandCtx;
 use crate::config::{is_use_txn_api, LOGGER};
 use crate::tikv::errors::AsyncResult;
+use crate::tikv::string::StringCommandCtx;
+use crate::utils::resp_invalid_arguments;
+use crate::{Connection, Frame, Parse};
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -55,7 +55,13 @@ impl Decr {
             Err(e) => Frame::Error(e.to_string()),
         };
 
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
 
         dst.write_frame(&response).await?;
 
@@ -65,13 +71,17 @@ impl Decr {
     pub async fn decr(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
         // check argument parse validation
         if !self.valid {
-            return Ok(resp_invalid_arguments())
+            return Ok(resp_invalid_arguments());
         }
 
         if is_use_txn_api() {
-            StringCommandCtx::new(txn).do_async_txnkv_incr(&self.key, true, -1).await
+            StringCommandCtx::new(txn)
+                .do_async_txnkv_incr(&self.key, true, -1)
+                .await
         } else {
-            StringCommandCtx::new(None).do_async_rawkv_incr(&self.key, false, -1).await
+            StringCommandCtx::new(None)
+                .do_async_rawkv_incr(&self.key, false, -1)
+                .await
         }
     }
 }

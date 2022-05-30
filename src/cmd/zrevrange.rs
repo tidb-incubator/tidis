@@ -1,16 +1,16 @@
 use std::sync::Arc;
 
-use crate::cmd::{Parse};
+use crate::cmd::Parse;
+use crate::config::is_use_txn_api;
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::zset::ZsetCommandCtx;
-use crate::{Connection, Frame};
-use crate::config::{is_use_txn_api};
 use crate::utils::{resp_err, resp_invalid_arguments};
+use crate::{Connection, Frame};
 
-use tikv_client::Transaction;
-use tokio::sync::Mutex;
 use crate::config::LOGGER;
 use slog::debug;
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 
 #[derive(Debug)]
 pub struct Zrevrange {
@@ -55,7 +55,7 @@ impl Zrevrange {
             match v.to_uppercase().as_str() {
                 "WITHSCORES" => {
                     withscores = true;
-                },
+                }
                 _ => {}
             }
         }
@@ -73,11 +73,11 @@ impl Zrevrange {
         let max;
         match argv[1].parse::<i64>() {
             Ok(v) => min = v,
-            Err(_) => return Ok(Zrevrange::new_invalid())
+            Err(_) => return Ok(Zrevrange::new_invalid()),
         }
         match argv[2].parse::<i64>() {
             Ok(v) => max = v,
-            Err(_) => return Ok(Zrevrange::new_invalid())
+            Err(_) => return Ok(Zrevrange::new_invalid()),
         }
         let mut withscores = false;
 
@@ -86,7 +86,7 @@ impl Zrevrange {
                 // flags implement in signle command, such as ZRANGEBYSCORE
                 "WITHSCORES" => {
                     withscores = true;
-                },
+                }
                 _ => {}
             }
         }
@@ -97,7 +97,13 @@ impl Zrevrange {
 
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         let response = self.zrevrange(None).await?;
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
         dst.write_frame(&response).await?;
 
         Ok(())
@@ -108,7 +114,9 @@ impl Zrevrange {
             return Ok(resp_invalid_arguments());
         }
         if is_use_txn_api() {
-            ZsetCommandCtx::new(txn).do_async_txnkv_zrange(&self.key, self.min, self.max, self.withscores, true).await
+            ZsetCommandCtx::new(txn)
+                .do_async_txnkv_zrange(&self.key, self.min, self.max, self.withscores, true)
+                .await
         } else {
             Ok(resp_err("not supported yet"))
         }

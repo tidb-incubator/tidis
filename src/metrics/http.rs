@@ -1,17 +1,16 @@
+use crate::config::LOGGER;
+use crate::Result;
 use hyper::{
     header::CONTENT_TYPE,
     service::{make_service_fn, service_fn},
     Body, Request, Response, Server,
 };
-use prometheus::{TextEncoder, Encoder};
-use crate::Result;
-use crate::config::LOGGER;
-use slog::{
-    info,
-    error,
-};
+use prometheus::{Encoder, TextEncoder};
+use slog::{error, info};
 
-use crate::metrics::{INSTANCE_ID_GAUGER, TIKV_CLIENT_RETRIES, REQUEST_COUNTER, CURRENT_CONNECTION_COUNTER};
+use crate::metrics::{
+    CURRENT_CONNECTION_COUNTER, INSTANCE_ID_GAUGER, REQUEST_COUNTER, TIKV_CLIENT_RETRIES,
+};
 
 pub struct PrometheusServer {
     listen_addr: String,
@@ -24,7 +23,7 @@ impl PrometheusServer {
         REQUEST_COUNTER.get();
         CURRENT_CONNECTION_COUNTER.get();
 
-        PrometheusServer{
+        PrometheusServer {
             listen_addr: listen_addr,
         }
     }
@@ -41,10 +40,9 @@ impl PrometheusServer {
 
     async fn serve(&self) -> Result<()> {
         let addr = self.listen_addr.parse()?;
-        let serve_future = Server::bind(&addr)
-            .serve(make_service_fn(|_| async {
-                Ok::<_, hyper::Error>(service_fn(Self::serve_req))
-            }));
+        let serve_future = Server::bind(&addr).serve(make_service_fn(|_| async {
+            Ok::<_, hyper::Error>(service_fn(Self::serve_req))
+        }));
         serve_future.await?;
         Ok(())
     }
@@ -54,13 +52,13 @@ impl PrometheusServer {
         let metric_families = prometheus::gather();
         let mut buffer = vec![];
         encoder.encode(&metric_families, &mut buffer).unwrap();
-    
+
         let response = Response::builder()
             .status(200)
             .header(CONTENT_TYPE, encoder.format_type())
             .body(Body::from(buffer))
             .unwrap();
-    
+
         Ok(response)
     }
 }

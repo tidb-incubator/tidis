@@ -1,5 +1,5 @@
-use tikv_client::Error as TiKVError;
 use thiserror::Error;
+use tikv_client::Error as TiKVError;
 
 #[derive(Error, Debug)]
 pub enum RTError {
@@ -29,8 +29,8 @@ impl From<&str> for RTError {
 
 pub type AsyncResult<T> = std::result::Result<T, RTError>;
 
-
-pub const REDIS_WRONG_TYPE_ERR: &str = "WRONGTYPE Operation against a key holding the wrong kind of value";
+pub const REDIS_WRONG_TYPE_ERR: &str =
+    "WRONGTYPE Operation against a key holding the wrong kind of value";
 pub const REDIS_NO_SUCH_KEY_ERR: &str = "ERR no such key";
 pub const REDIS_INDEX_OUT_OF_RANGE: &str = "ERR index out of range";
 pub const REDIS_VALUE_IS_NOT_INTEGER: &str = "ERR value is not an integer or out of range";

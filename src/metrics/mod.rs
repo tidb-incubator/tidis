@@ -1,4 +1,4 @@
-use prometheus::{IntCounter, IntCounterVec, IntGauge, HistogramVec, exponential_buckets};
+use prometheus::{exponential_buckets, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 
 mod http;
 
@@ -11,8 +11,11 @@ lazy_static! {
         register_int_gauge!("redistikv_tikv_client_retries", "Client retries").unwrap();
     pub static ref REQUEST_COUNTER: IntCounter =
         register_int_counter!("redistikv_requests", "Request counter").unwrap();
-    pub static ref CURRENT_CONNECTION_COUNTER: IntGauge =
-        register_int_gauge!("redistikv_current_connections", "Current connection counter").unwrap();
+    pub static ref CURRENT_CONNECTION_COUNTER: IntGauge = register_int_gauge!(
+        "redistikv_current_connections",
+        "Current connection counter"
+    )
+    .unwrap();
     pub static ref REQUEST_CMD_COUNTER: IntCounterVec = register_int_counter_vec!(
         "redistikv_command_requests",
         "Request command counter",

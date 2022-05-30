@@ -1,13 +1,13 @@
 use std::convert::TryInto;
 
-use tikv_client::{Key, Value};
 use super::DataType;
+use tikv_client::{Key, Value};
 
 pub struct KeyDecoder {}
 
 impl KeyDecoder {
     pub fn new() -> Self {
-        KeyDecoder{}
+        KeyDecoder {}
     }
 
     pub fn decode_string(&self, key: Key) -> Vec<u8> {

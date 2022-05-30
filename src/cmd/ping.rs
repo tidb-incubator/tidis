@@ -1,6 +1,6 @@
+use crate::config::LOGGER;
 use crate::{Connection, Frame, Parse, ParseError};
 use bytes::Bytes;
-use crate::config::LOGGER;
 use slog::debug;
 
 /// Returns PONG if no argument is provided, otherwise
@@ -58,7 +58,13 @@ impl Ping {
             Some(msg) => Frame::Bulk(Bytes::from(msg)),
         };
 
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
 
         // Write the response back to the client
         dst.write_frame(&response).await?;

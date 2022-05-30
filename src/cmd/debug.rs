@@ -1,13 +1,7 @@
-use crate::utils::{
-    resp_ok,
-    resp_err,
-};
-use crate::{Connection, Parse};
 use crate::config::LOGGER;
-use crate::tikv::{
-    start_profiler,
-    stop_profiler,
-};
+use crate::tikv::{start_profiler, stop_profiler};
+use crate::utils::{resp_err, resp_ok};
+use crate::{Connection, Parse};
 use slog::debug;
 
 #[derive(Debug)]
@@ -33,21 +27,24 @@ impl Debug {
             "profiler_start" => {
                 start_profiler();
                 resp_ok()
-            },
+            }
             "profiler_stop" => {
                 stop_profiler();
                 resp_ok()
-            },
-            _ => {
-                resp_err("not supported debug subcommand")
             }
+            _ => resp_err("not supported debug subcommand"),
         };
 
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
 
         dst.write_frame(&response).await?;
 
         Ok(())
     }
-
 }

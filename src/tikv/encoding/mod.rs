@@ -10,7 +10,4 @@ pub enum DataType {
     Null,
 }
 
-pub use {
-    encode::KeyEncoder,
-    decode::KeyDecoder,
-};
+pub use {decode::KeyDecoder, encode::KeyEncoder};

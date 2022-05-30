@@ -1,11 +1,11 @@
 use crate::frame::{self, Frame};
 
+use async_std::io::{BufReader, BufWriter, WriteExt};
+use async_std::net::TcpStream;
 use async_tls::server::TlsStream;
 use bytes::{Buf, BytesMut};
 use futures::AsyncReadExt;
 use std::io::{self, Cursor};
-use async_std::io::{WriteExt, BufWriter, BufReader};
-use async_std::net::TcpStream;
 
 /// Send and receive `Frame` values from a remote peer.
 ///
@@ -61,7 +61,11 @@ impl Connection {
         }
     }
 
-    pub fn new_tls(local_addr: &str, peer_addr: &str, tls_stream: TlsStream<TcpStream>) -> Connection {
+    pub fn new_tls(
+        local_addr: &str,
+        peer_addr: &str,
+        tls_stream: TlsStream<TcpStream>,
+    ) -> Connection {
         let (tls_r, tls_w) = tls_stream.split();
         Connection {
             tls: true,

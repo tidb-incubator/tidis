@@ -3,44 +3,23 @@ use tokio::sync::Mutex;
 
 use tikv_client::Error::StringError;
 use tikv_client::{
-    Backoff,
-    RetryOptions,
-    TransactionClient,
-    Timestamp,
-    Result as TiKVResult,
-    Snapshot,
-    TransactionOptions,
-    Transaction,
-    RawClient,
-    Value,
-    Key,
-    Error,
-    BoundRange,
-    KvPair,
-    ColumnFamily,
-    TimestampExt
+    Backoff, BoundRange, ColumnFamily, Error, Key, KvPair, RawClient, Result as TiKVResult,
+    RetryOptions, Snapshot, Timestamp, TimestampExt, Transaction, TransactionClient,
+    TransactionOptions, Value,
 };
 
 use crate::config::LOGGER;
 use crate::{
-    is_use_pessimistic_txn,
-    is_try_one_pc_commit,
-    is_use_async_commit,
-    txn_retry_count,
-    txn_region_backoff_delay_ms,
-    txn_region_backoff_delay_attemps,
-    txn_lock_backoff_delay_ms,
-    txn_lock_backoff_delay_attemps,
+    is_try_one_pc_commit, is_use_async_commit, is_use_pessimistic_txn,
+    txn_lock_backoff_delay_attemps, txn_lock_backoff_delay_ms, txn_region_backoff_delay_attemps,
+    txn_region_backoff_delay_ms, txn_retry_count,
 };
 
-use super::errors::{
-    RTError,
-    AsyncResult
-};
+use super::errors::{AsyncResult, RTError};
 
 use futures::future::BoxFuture;
 
-use slog::{error, debug};
+use slog::{debug, error};
 
 use crate::metrics::TIKV_CLIENT_RETRIES;
 
@@ -74,11 +53,13 @@ impl TxnClientWrapper<'static> {
         let region_backoff = Backoff::no_jitter_backoff(
             txn_region_backoff_delay_ms(),
             MAX_DELAY_MS,
-            txn_region_backoff_delay_attemps());
+            txn_region_backoff_delay_attemps(),
+        );
         let lock_backoff = Backoff::no_jitter_backoff(
             txn_lock_backoff_delay_ms(),
             MAX_DELAY_MS,
-            txn_lock_backoff_delay_attemps());
+            txn_lock_backoff_delay_attemps(),
+        );
         let retry_options = RetryOptions::new(region_backoff, lock_backoff);
 
         let options = if is_use_pessimistic_txn() {
@@ -96,11 +77,13 @@ impl TxnClientWrapper<'static> {
         let region_backoff = Backoff::no_jitter_backoff(
             txn_region_backoff_delay_ms(),
             MAX_DELAY_MS,
-            txn_region_backoff_delay_attemps());
+            txn_region_backoff_delay_attemps(),
+        );
         let lock_backoff = Backoff::no_jitter_backoff(
             txn_lock_backoff_delay_ms(),
             MAX_DELAY_MS,
-            txn_lock_backoff_delay_attemps());
+            txn_lock_backoff_delay_attemps(),
+        );
         let retry_options = RetryOptions::new(region_backoff, lock_backoff);
 
         let options = if is_use_pessimistic_txn() {
@@ -109,11 +92,13 @@ impl TxnClientWrapper<'static> {
             TransactionOptions::new_optimistic().retry_options(retry_options)
         };
 
-        let current_timestamp = 
-        match self.current_timestamp().await {
+        let current_timestamp = match self.current_timestamp().await {
             Ok(ts) => ts,
             Err(e) => {
-                error!(LOGGER, "get current timestamp failed: {:?}, use max for this query", e);
+                error!(
+                    LOGGER,
+                    "get current timestamp failed: {:?}, use max for this query", e
+                );
                 Timestamp::from_version(i64::MAX as u64)
             }
         };
@@ -125,17 +110,18 @@ impl TxnClientWrapper<'static> {
         let region_backoff = Backoff::no_jitter_backoff(
             txn_region_backoff_delay_ms(),
             MAX_DELAY_MS,
-            txn_region_backoff_delay_attemps());
+            txn_region_backoff_delay_attemps(),
+        );
         let lock_backoff = Backoff::no_jitter_backoff(
             txn_lock_backoff_delay_ms(),
             MAX_DELAY_MS,
-            txn_lock_backoff_delay_attemps());
+            txn_lock_backoff_delay_attemps(),
+        );
         let retry_options = RetryOptions::new(region_backoff, lock_backoff);
 
         let mut txn_options = if is_use_pessimistic_txn() {
             TransactionOptions::new_pessimistic().retry_options(retry_options)
         } else {
-            
             TransactionOptions::new_optimistic().retry_options(retry_options)
         };
         txn_options = if is_use_async_commit() {
@@ -158,7 +144,10 @@ impl TxnClientWrapper<'static> {
             Error::EntryNotFoundInRegionCache => true,
             Error::KvError { message: _ } => true,
             Error::MultipleKeyErrors(_) => true,
-            Error::PessimisticLockError{inner: _, success_keys: _ } => true,
+            Error::PessimisticLockError {
+                inner: _,
+                success_keys: _,
+            } => true,
             _ => false,
         };
         if ret {
@@ -167,24 +156,24 @@ impl TxnClientWrapper<'static> {
         ret
     }
 
-    
     /// Auto begin new txn, call f with the txn, commit or callback due to the result
-    pub async fn exec_in_txn<T, F>(&mut self, txn: Option<Arc<Mutex<Transaction>>>, f: F) -> AsyncResult<T> where 
-    F: FnOnce(Arc<Mutex<Transaction>>) -> BoxFuture<'static, AsyncResult<T>> + Clone,
+    pub async fn exec_in_txn<T, F>(
+        &mut self,
+        txn: Option<Arc<Mutex<Transaction>>>,
+        f: F,
+    ) -> AsyncResult<T>
+    where
+        F: FnOnce(Arc<Mutex<Transaction>>) -> BoxFuture<'static, AsyncResult<T>> + Clone,
     {
         match txn {
             Some(txn) => {
                 // call f
                 let result = f(txn).await;
                 match result {
-                    Ok(res) => { 
-                        Ok(res)
-                    },
-                    Err(err) => {
-                        Err(err)
-                    }
+                    Ok(res) => Ok(res),
+                    Err(err) => Err(err),
                 }
-            },
+            }
             None => {
                 let mut retry_count = 0;
                 while self.retries > 0 {
@@ -198,7 +187,7 @@ impl TxnClientWrapper<'static> {
                     match self.begin().await {
                         Ok(t) => {
                             txn = t;
-                        },
+                        }
                         Err(e) => {
                             error!(LOGGER, "error to begin new transaction: {}", e);
                             if self.retries == 0 {
@@ -214,20 +203,21 @@ impl TxnClientWrapper<'static> {
                     let result = f(txn_arc.clone()).await;
                     let mut txn = txn_arc.lock().await;
                     match result {
-                        Ok(res) => {
-                            match txn.commit().await {
-                                Ok(_) => {
-                                    return Ok(res);
-                                },
-                                Err(e) => {
-                                    error!(LOGGER, "error to commit transaction: {}", e);
-                                    if self.error_retryable(&e) {
-                                        if self.retries == 0 {
-                                            return Err(RTError::TikvClientError(e));
-                                        }
-                                        debug!(LOGGER, "retry transaction in the caller caused by error {}", e);
-                                        continue;
+                        Ok(res) => match txn.commit().await {
+                            Ok(_) => {
+                                return Ok(res);
+                            }
+                            Err(e) => {
+                                error!(LOGGER, "error to commit transaction: {}", e);
+                                if self.error_retryable(&e) {
+                                    if self.retries == 0 {
+                                        return Err(RTError::TikvClientError(e));
                                     }
+                                    debug!(
+                                        LOGGER,
+                                        "retry transaction in the caller caused by error {}", e
+                                    );
+                                    continue;
                                 }
                             }
                         },
@@ -239,7 +229,11 @@ impl TxnClientWrapper<'static> {
                                     if self.retries == 0 {
                                         return Err(RTError::TikvClientError(client_err));
                                     }
-                                    debug!(LOGGER, "retry transaction in the caller caused by error {}", client_err);
+                                    debug!(
+                                        LOGGER,
+                                        "retry transaction in the caller caused by error {}",
+                                        client_err
+                                    );
                                     continue;
                                 } else {
                                     return Err(RTError::TikvClientError(client_err));
@@ -254,7 +248,9 @@ impl TxnClientWrapper<'static> {
                     sleep(std::cmp::min(2 + retry_count * 10, 200)).await;
                 }
                 error!(LOGGER, "transaction retry count reached limit");
-                return Err(RTError::TikvClientError(StringError("retry count exceeded".to_string())));
+                return Err(RTError::TikvClientError(StringError(
+                    "retry count exceeded".to_string(),
+                )));
             }
         }
     }
@@ -267,7 +263,7 @@ pub struct RawClientWrapper {
 
 impl RawClientWrapper {
     pub fn new(c: &RawClient) -> Self {
-        RawClientWrapper { 
+        RawClientWrapper {
             client: Box::new(c.with_cf(ColumnFamily::Default)),
             retries: 2000,
         }
@@ -338,14 +334,15 @@ impl RawClientWrapper {
     }
 
     pub async fn compare_and_swap(
-        &self, 
-        key: Key, 
-        prev_val: Option<Value>, 
+        &self,
+        key: Key,
+        prev_val: Option<Value>,
         val: Value,
     ) -> Result<(Option<Value>, bool), Error> {
         let mut last_err: Option<Error> = None;
         for i in 0..self.retries {
-            match self.client
+            match self
+                .client
                 .with_atomic_for_cas()
                 .compare_and_swap(key.clone(), prev_val.clone(), val.to_owned())
                 .await
@@ -372,10 +369,7 @@ impl RawClientWrapper {
     pub async fn batch_delete(&self, keys: Vec<Key>) -> Result<(), Error> {
         let mut last_err: Option<Error> = None;
         for i in 0..self.retries {
-            match self.client
-                .batch_delete(keys.clone())
-                .await
-            {
+            match self.client.batch_delete(keys.clone()).await {
                 Ok(val) => {
                     return Ok(val);
                 }
@@ -398,10 +392,7 @@ impl RawClientWrapper {
     pub async fn scan(&self, range: BoundRange, limit: u32) -> Result<Vec<KvPair>, Error> {
         let mut last_err: Option<Error> = None;
         for i in 0..self.retries {
-            match self.client
-                .scan(range.clone(), limit)
-                .await
-            {
+            match self.client.scan(range.clone(), limit).await {
                 Ok(val) => {
                     return Ok(val);
                 }
@@ -424,10 +415,7 @@ impl RawClientWrapper {
     pub async fn batch_get(&self, keys: Vec<Key>) -> Result<Vec<KvPair>, Error> {
         let mut last_err: Option<Error> = None;
         for i in 0..self.retries {
-            match self.client
-                .batch_get(keys.clone())
-                .await
-            {
+            match self.client.batch_get(keys.clone()).await {
                 Ok(val) => {
                     return Ok(val);
                 }
@@ -450,10 +438,7 @@ impl RawClientWrapper {
     pub async fn batch_put(&self, kvs: Vec<KvPair>) -> Result<(), Error> {
         let mut last_err: Option<Error> = None;
         for i in 0..self.retries {
-            match self.client
-                .batch_put(kvs.clone())
-                .await
-            {
+            match self.client.batch_put(kvs.clone()).await {
                 Ok(val) => {
                     return Ok(val);
                 }
@@ -476,10 +461,7 @@ impl RawClientWrapper {
     pub async fn delete_range(&self, range: BoundRange) -> Result<(), Error> {
         let mut last_err: Option<Error> = None;
         for i in 0..self.retries {
-            match self.client
-                .delete_range(range.clone())
-                .await
-            {
+            match self.client.delete_range(range.clone()).await {
                 Ok(val) => {
                     return Ok(val);
                 }

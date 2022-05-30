@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
+use crate::config::is_use_txn_api;
 use crate::db::Db;
-use crate::tikv::get_txn_client;
-use crate::utils::{resp_err};
-use crate::{Connection, Frame, Parse};
-use crate::tikv::lua::LuaCommandCtx;
-use crate::config::{is_use_txn_api};
 use crate::tikv::errors::AsyncResult;
-
+use crate::tikv::get_txn_client;
+use crate::tikv::lua::LuaCommandCtx;
+use crate::utils::resp_err;
+use crate::{Connection, Frame, Parse};
 
 use mlua::Lua;
 use tokio::sync::Mutex;
@@ -44,7 +43,7 @@ impl Eval {
 
     pub fn add_arg(&mut self, arg: String) {
         self.args.push(arg);
-    } 
+    }
 
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Eval> {
         let script = parse.next_string()?;
@@ -70,13 +69,25 @@ impl Eval {
         Ok(eval)
     }
 
-    pub(crate) async fn apply(self, dst: &mut Connection, is_sha: bool, db: &Db, lua: &Option<Lua>) -> crate::Result<()> {
+    pub(crate) async fn apply(
+        self,
+        dst: &mut Connection,
+        is_sha: bool,
+        db: &Db,
+        lua: &Option<Lua>,
+    ) -> crate::Result<()> {
         let response = match self.eval(is_sha, db, lua).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
 
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
 
         dst.write_frame(&response).await?;
 
@@ -97,16 +108,20 @@ impl Eval {
 
         let resp;
         if is_sha {
-            resp = ctx.do_async_evalsha(&self.script, db, &self.keys, &self.args).await;
+            resp = ctx
+                .do_async_evalsha(&self.script, db, &self.keys, &self.args)
+                .await;
         } else {
-            resp = ctx.do_async_eval(&self.script, db, &self.keys, &self.args).await;
+            resp = ctx
+                .do_async_eval(&self.script, db, &self.keys, &self.args)
+                .await;
         }
         match resp {
             Ok(r) => {
                 let mut txn = txn_rc.lock().await;
                 txn.commit().await?;
                 Ok(r)
-            },
+            }
             Err(e) => {
                 let mut txn = txn_rc.lock().await;
                 txn.rollback().await?;

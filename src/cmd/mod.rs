@@ -195,7 +195,7 @@ pub enum Command {
     Exists(Exists),
     Incr(Incr),
     Decr(Decr),
-    
+
     // hash
     Hset(Hset),
     Hmset(Hset),
@@ -330,11 +330,15 @@ impl Command {
             "zcard" => Command::Zcard(Zcard::parse_frames(&mut parse)?),
             "zscore" => Command::Zscore(Zscore::parse_frames(&mut parse)?),
             "zrem" => Command::Zrem(Zrem::parse_frames(&mut parse)?),
-            "zremrangebyscore" => Command::Zremrangebyscore(Zremrangebyscore::parse_frames(&mut parse)?),
+            "zremrangebyscore" => {
+                Command::Zremrangebyscore(Zremrangebyscore::parse_frames(&mut parse)?)
+            }
             "zrange" => Command::Zrange(Zrange::parse_frames(&mut parse)?),
             "zrevrange" => Command::Zrevrange(Zrevrange::parse_frames(&mut parse)?),
             "zrangebyscore" => Command::Zrangebyscore(Zrangebyscore::parse_frames(&mut parse)?),
-            "zrevrangebyscore" => Command::Zrevrangebyscore(Zrangebyscore::parse_frames(&mut parse)?),
+            "zrevrangebyscore" => {
+                Command::Zrevrangebyscore(Zrangebyscore::parse_frames(&mut parse)?)
+            }
             "zcount" => Command::Zcount(Zcount::parse_frames(&mut parse)?),
             "zpopmin" => Command::Zpopmin(Zpop::parse_frames(&mut parse)?),
             "zrank" => Command::Zrank(Zrank::parse_frames(&mut parse)?),
@@ -516,7 +520,7 @@ impl Command {
             // context of a `Subscribe` command.
             Unsubscribe(_) => Err("`Unsubscribe` is unsupported in this context".into()),
 
-            _ => Ok(())
+            _ => Ok(()),
         }
     }
 

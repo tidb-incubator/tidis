@@ -1,15 +1,15 @@
 use std::sync::Arc;
 
+use crate::config::LOGGER;
 use crate::tikv::errors::AsyncResult;
+use crate::tikv::string::StringCommandCtx;
 use crate::utils::resp_invalid_arguments;
 use crate::{Connection, Frame, Parse};
-use crate::tikv::string::StringCommandCtx;
+use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
-use crate::config::LOGGER;
-use slog::debug;
 
-use crate::config::{is_use_txn_api};
+use crate::config::is_use_txn_api;
 
 /// Get the value of key.
 ///
@@ -70,7 +70,10 @@ impl Get {
         // input is fully consumed, then an error is returned.
         let key = parse.next_string()?;
 
-        Ok(Get { key: key, valid: true })
+        Ok(Get {
+            key: key,
+            valid: true,
+        })
     }
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Get> {
@@ -92,7 +95,13 @@ impl Get {
             Err(e) => Frame::Error(e.to_string()),
         };
 
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
 
         // Write the response back to the client
         dst.write_frame(&response).await?;
@@ -100,14 +109,18 @@ impl Get {
         Ok(())
     }
 
-    pub async fn get(&self, txn: Option<Arc<Mutex<Transaction>>>) ->AsyncResult<Frame> {
+    pub async fn get(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
         if !self.valid {
             return Ok(resp_invalid_arguments());
         }
         if is_use_txn_api() {
-            StringCommandCtx::new(txn).do_async_txnkv_get(&self.key).await
+            StringCommandCtx::new(txn)
+                .do_async_txnkv_get(&self.key)
+                .await
         } else {
-            StringCommandCtx::new(txn).do_async_rawkv_get(&self.key).await
+            StringCommandCtx::new(txn)
+                .do_async_rawkv_get(&self.key)
+                .await
         }
     }
 }

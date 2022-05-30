@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
+use crate::config::is_use_txn_api;
+use crate::config::LOGGER;
 use crate::tikv::errors::AsyncResult;
+use crate::tikv::string::StringCommandCtx;
 use crate::utils::resp_invalid_arguments;
 use crate::{Connection, Frame, Parse};
-use crate::tikv::string::StringCommandCtx;
-use crate::config::is_use_txn_api;
+use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
-use crate::config::LOGGER;
-use slog::debug;
 
 /// Get the value of key.
 ///
@@ -77,8 +77,14 @@ impl Mget {
             Err(e) => Frame::Error(e.to_string()),
         };
 
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
-        
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
+
         // Write the response back to the client
         dst.write_frame(&response).await?;
 
@@ -90,9 +96,13 @@ impl Mget {
             return Ok(resp_invalid_arguments());
         }
         if is_use_txn_api() {
-            StringCommandCtx::new(txn).do_async_txnkv_batch_get(&self.keys).await
+            StringCommandCtx::new(txn)
+                .do_async_txnkv_batch_get(&self.keys)
+                .await
         } else {
-            StringCommandCtx::new(txn).do_async_rawkv_batch_get(&self.keys).await
+            StringCommandCtx::new(txn)
+                .do_async_rawkv_batch_get(&self.keys)
+                .await
         }
     }
 }

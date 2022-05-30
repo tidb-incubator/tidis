@@ -1,16 +1,16 @@
 use std::sync::Arc;
 
-use crate::cmd::{Parse};
+use crate::cmd::Parse;
+use crate::config::is_use_txn_api;
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::list::ListCommandCtx;
-use crate::{Connection, Frame};
-use crate::config::{is_use_txn_api};
 use crate::utils::{resp_err, resp_invalid_arguments};
+use crate::{Connection, Frame};
 
-use tikv_client::Transaction;
-use tokio::sync::Mutex;
 use crate::config::LOGGER;
 use slog::debug;
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 
 #[derive(Debug)]
 pub struct Lindex {
@@ -44,7 +44,11 @@ impl Lindex {
         let key = parse.next_string()?;
         let idx = parse.next_int()?;
 
-        Ok(Lindex { key, idx, valid: true})
+        Ok(Lindex {
+            key,
+            idx,
+            valid: true,
+        })
     }
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Lindex> {
@@ -62,7 +66,13 @@ impl Lindex {
 
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         let response = self.lindex(None).await?;
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
         dst.write_frame(&response).await?;
 
         Ok(())
@@ -73,7 +83,9 @@ impl Lindex {
             return Ok(resp_invalid_arguments());
         }
         if is_use_txn_api() {
-            ListCommandCtx::new(txn).do_async_txnkv_lindex(&self.key, self.idx).await
+            ListCommandCtx::new(txn)
+                .do_async_txnkv_lindex(&self.key, self.idx)
+                .await
         } else {
             Ok(resp_err("not supported yet"))
         }

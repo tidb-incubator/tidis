@@ -1,17 +1,17 @@
 use std::sync::Arc;
 
-use crate::cmd::{Parse};
+use crate::cmd::Parse;
+use crate::config::is_use_txn_api;
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::zset::ZsetCommandCtx;
-use crate::{Connection, Frame};
-use crate::config::{is_use_txn_api};
 use crate::utils::{resp_err, resp_invalid_arguments};
+use crate::{Connection, Frame};
 
+use crate::config::LOGGER;
 use bytes::{Buf, Bytes};
+use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
-use crate::config::LOGGER;
-use slog::debug;
 
 #[derive(Debug)]
 pub struct Zrangebyscore {
@@ -25,7 +25,14 @@ pub struct Zrangebyscore {
 }
 
 impl Zrangebyscore {
-    pub fn new(key: &str, min: i64, min_inclusive: bool, max: i64, max_inclusive: bool, withscores: bool) -> Zrangebyscore {
+    pub fn new(
+        key: &str,
+        min: i64,
+        min_inclusive: bool,
+        max: i64,
+        max_inclusive: bool,
+        withscores: bool,
+    ) -> Zrangebyscore {
         Zrangebyscore {
             key: key.to_string(),
             min: min,
@@ -62,14 +69,18 @@ impl Zrangebyscore {
             bmin.advance(1);
             min_inclusive = false;
         }
-        let min = String::from_utf8_lossy(&bmin.to_vec()).parse::<i64>().unwrap();
-        
+        let min = String::from_utf8_lossy(&bmin.to_vec())
+            .parse::<i64>()
+            .unwrap();
+
         let mut bmax = parse.next_bytes()?;
         if bmax[0] == b'(' {
             bmax.advance(1);
             max_inclusive = false;
         }
-        let max = String::from_utf8_lossy(&bmax.to_vec()).parse::<i64>().unwrap();
+        let max = String::from_utf8_lossy(&bmax.to_vec())
+            .parse::<i64>()
+            .unwrap();
 
         let mut withscores = false;
 
@@ -77,10 +88,10 @@ impl Zrangebyscore {
         while let Ok(v) = parse.next_string() {
             match v.to_uppercase().as_str() {
                 // flags implement in signle command, such as ZRANGEBYSCORE
-                "LIMIT" => {},
+                "LIMIT" => {}
                 "WITHSCORES" => {
                     withscores = true;
-                },
+                }
                 _ => {}
             }
         }
@@ -105,14 +116,18 @@ impl Zrangebyscore {
             bmin.advance(1);
             min_inclusive = false;
         }
-        let min = String::from_utf8_lossy(&bmin.to_vec()).parse::<i64>().unwrap();
-        
+        let min = String::from_utf8_lossy(&bmin.to_vec())
+            .parse::<i64>()
+            .unwrap();
+
         let mut bmax = Bytes::from(argv[2].clone());
         if bmax[0] == b'(' {
             bmax.advance(1);
             max_inclusive = false;
         }
-        let max = String::from_utf8_lossy(&bmax.to_vec()).parse::<i64>().unwrap();
+        let max = String::from_utf8_lossy(&bmax.to_vec())
+            .parse::<i64>()
+            .unwrap();
 
         let mut withscores = false;
 
@@ -120,10 +135,10 @@ impl Zrangebyscore {
         for v in &argv[2..] {
             match v.to_uppercase().as_str() {
                 // flags implement in signle command, such as ZRANGEBYSCORE
-                "LIMIT" => {},
+                "LIMIT" => {}
                 "WITHSCORES" => {
                     withscores = true;
-                },
+                }
                 _ => {}
             }
         }
@@ -135,18 +150,38 @@ impl Zrangebyscore {
 
     pub(crate) async fn apply(self, dst: &mut Connection, reverse: bool) -> crate::Result<()> {
         let response = self.zrangebyscore(None, reverse).await?;
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
         dst.write_frame(&response).await?;
 
         Ok(())
     }
 
-    pub async fn zrangebyscore(&self, txn: Option<Arc<Mutex<Transaction>>>,reverse: bool) -> AsyncResult<Frame> {
+    pub async fn zrangebyscore(
+        &self,
+        txn: Option<Arc<Mutex<Transaction>>>,
+        reverse: bool,
+    ) -> AsyncResult<Frame> {
         if !self.valid {
             return Ok(resp_invalid_arguments());
         }
         if is_use_txn_api() {
-            ZsetCommandCtx::new(txn).do_async_txnkv_zrange_by_score(&self.key, self.min, self.min_inclusive, self.max, self.max_inclusive, self.withscores, reverse).await
+            ZsetCommandCtx::new(txn)
+                .do_async_txnkv_zrange_by_score(
+                    &self.key,
+                    self.min,
+                    self.min_inclusive,
+                    self.max,
+                    self.max_inclusive,
+                    self.withscores,
+                    reverse,
+                )
+                .await
         } else {
             Ok(resp_err("not supported yet"))
         }

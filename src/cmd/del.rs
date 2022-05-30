@@ -17,13 +17,6 @@ pub struct Del {
 }
 
 impl Del {
-    pub fn new() -> Del {
-        Del {
-            keys: vec![],
-            valid: true,
-        }
-    }
-
     /// Get the keys
     pub fn keys(&self) -> &Vec<String> {
         &self.keys
@@ -34,7 +27,7 @@ impl Del {
     }
 
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Del> {
-        let mut del = Del::new();
+        let mut del = Del::default();
         while let Ok(key) = parse.next_string() {
             del.add_key(key);
         }
@@ -84,6 +77,16 @@ impl Del {
                 .await
         } else {
             Ok(resp_err("not supported yet"))
+        }
+    }
+}
+
+impl Default for Del {
+    /// Create a new `Del` command which fetches `key` vector.
+    fn default() -> Self {
+        Del {
+            keys: vec![],
+            valid: true,
         }
     }
 }

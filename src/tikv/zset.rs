@@ -75,9 +75,9 @@ impl ZsetCommandCtx {
                                 let mut member_exists = false;
                                 let old_data_value = txn.get(data_key.clone()).await?;
                                 let mut old_data_value_data: Vec<u8> = vec![];
-                                if old_data_value.is_some() {
+                                if let Some(v) = old_data_value {
                                     member_exists = true;
-                                    old_data_value_data = old_data_value.unwrap();
+                                    old_data_value_data = v;
                                 }
 
                                 if let Some(v) = exists {
@@ -415,6 +415,7 @@ impl ZsetCommandCtx {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn do_async_txnkv_zrange_by_score(
         self,
         key: &str,

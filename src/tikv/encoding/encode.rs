@@ -60,14 +60,14 @@ impl KeyEncoder {
         val
     }
 
-    pub fn encode_rawkv_strings(&self, keys: &Vec<String>) -> Vec<Key> {
+    pub fn encode_rawkv_strings(&self, keys: &[String]) -> Vec<Key> {
         let prefix = self.get_prefix(DataType::String);
         keys.iter()
             .map(|val| format!("{}_{}", prefix, val).into())
             .collect()
     }
 
-    pub fn encode_txnkv_strings(&self, keys: &Vec<String>) -> Vec<Key> {
+    pub fn encode_txnkv_strings(&self, keys: &[String]) -> Vec<Key> {
         keys.iter()
             .map(|val| format!("x_{}_M_{}", self.instance_id, val).into())
             .collect()

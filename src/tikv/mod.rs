@@ -61,8 +61,7 @@ pub fn stop_profiler() {
                 profile.write_to_vec(&mut content).unwrap();
                 profile_file.write_all(&content).unwrap();
             };
-            drop(guard);
-            PROFILER_GUARD = None;
+            PROFILER_GUARD.take();
         }
     }
 }

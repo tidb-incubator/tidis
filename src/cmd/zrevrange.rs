@@ -52,11 +52,8 @@ impl Zrevrange {
 
         // try to parse other flags
         while let Ok(v) = parse.next_string() {
-            match v.to_uppercase().as_str() {
-                "WITHSCORES" => {
-                    withscores = true;
-                }
-                _ => {}
+            if v.to_uppercase().as_str() == "WITHSCORES" {
+                withscores = true;
             }
         }
 
@@ -69,25 +66,20 @@ impl Zrevrange {
         if argv.len() < 3 {
             return Ok(Zrevrange::new_invalid());
         }
-        let min;
-        let max;
-        match argv[1].parse::<i64>() {
-            Ok(v) => min = v,
+        let min = match argv[1].parse::<i64>() {
+            Ok(v) => v,
             Err(_) => return Ok(Zrevrange::new_invalid()),
-        }
-        match argv[2].parse::<i64>() {
-            Ok(v) => max = v,
+        };
+        let max = match argv[2].parse::<i64>() {
+            Ok(v) => v,
             Err(_) => return Ok(Zrevrange::new_invalid()),
-        }
+        };
         let mut withscores = false;
 
         for arg in &argv[2..] {
-            match arg.to_uppercase().as_str() {
-                // flags implement in signle command, such as ZRANGEBYSCORE
-                "WITHSCORES" => {
-                    withscores = true;
-                }
-                _ => {}
+            // flags implement in single command, such as ZRANGEBYSCORE
+            if arg.to_uppercase().as_str() == "WITHSCORES" {
+                withscores = true;
             }
         }
         let z = Zrevrange::new(&argv[0], min, max, withscores);

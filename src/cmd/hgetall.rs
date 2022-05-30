@@ -44,10 +44,7 @@ impl Hgetall {
 
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Hgetall> {
         let key = parse.next_string()?;
-        Ok(Hgetall {
-            key,
-            valid: true,
-        })
+        Ok(Hgetall { key, valid: true })
     }
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Hgetall> {

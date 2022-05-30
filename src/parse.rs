@@ -108,12 +108,10 @@ impl Parse {
             // Simple and bulk frames must be parsed as integers. If the parsing
             // fails, an error is returned.
             //Frame::Simple(data) => atoi::<i64>(data.as_bytes()).ok_or_else(|| MSG.into()),
-            Frame::Simple(data) => {
-                match String::from_utf8_lossy(data.as_bytes()).parse::<i64>() {
-                    Ok(value) => Ok(value),
-                    Err(_) => Err(MSG.into()),
-                }
-            }
+            Frame::Simple(data) => match String::from_utf8_lossy(data.as_bytes()).parse::<i64>() {
+                Ok(value) => Ok(value),
+                Err(_) => Err(MSG.into()),
+            },
             //Frame::Bulk(data) => atoi::<i64>(&data).ok_or_else(|| MSG.into()),
             Frame::Bulk(data) => match String::from_utf8_lossy(&data.to_vec()).parse::<i64>() {
                 Ok(value) => Ok(value),

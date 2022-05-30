@@ -62,11 +62,10 @@ impl Lset {
             return Ok(Lset::new_invalid());
         }
         let key = &argv[0];
-        let idx;
-        match argv[1].parse::<i64>() {
-            Ok(v) => idx = v,
+        let idx = match argv[1].parse::<i64>() {
+            Ok(v) => v,
             Err(_) => return Ok(Lset::new_invalid()),
-        }
+        };
         let ele = Bytes::from(argv[2].clone());
         Ok(Lset::new(key, idx, ele))
     }

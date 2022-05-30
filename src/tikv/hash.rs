@@ -30,13 +30,13 @@ impl<'a> HashCommandCtx {
     pub async fn do_async_txnkv_hset(
         mut self,
         key: &str,
-        fvs: &Vec<KvPair>,
+        fvs: &[KvPair],
         is_hmset: bool,
     ) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
-        let fvs_copy = fvs.clone();
+        let fvs_copy = fvs.to_vec();
         let fvs_len = fvs_copy.len();
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -235,7 +235,7 @@ impl<'a> HashCommandCtx {
         }
     }
 
-    pub async fn do_async_txnkv_hmget(self, key: &str, fields: &Vec<String>) -> AsyncResult<Frame> {
+    pub async fn do_async_txnkv_hmget(self, key: &str, fields: &[String]) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(key);
         let mut ss = match self.txn.clone() {
@@ -373,14 +373,10 @@ impl<'a> HashCommandCtx {
         }
     }
 
-    pub async fn do_async_txnkv_hdel(
-        mut self,
-        key: &str,
-        fields: &Vec<String>,
-    ) -> AsyncResult<Frame> {
+    pub async fn do_async_txnkv_hdel(mut self, key: &str, fields: &[String]) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
-        let fields = fields.clone();
+        let fields = fields.to_vec();
         let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
 
         let resp = client

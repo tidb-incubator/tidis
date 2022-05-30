@@ -61,17 +61,15 @@ impl Ltrim {
             return Ok(Ltrim::new_invalid());
         }
         let key = &argv[0];
-        let start;
-        let end;
-        match argv[1].parse::<i64>() {
-            Ok(v) => start = v,
+        let start = match argv[1].parse::<i64>() {
+            Ok(v) => v,
             Err(_) => return Ok(Ltrim::new_invalid()),
-        }
+        };
 
-        match argv[2].parse::<i64>() {
-            Ok(v) => end = v,
+        let end = match argv[2].parse::<i64>() {
+            Ok(v) => v,
             Err(_) => return Ok(Ltrim::new_invalid()),
-        }
+        };
         Ok(Ltrim::new(key, start, end))
     }
 

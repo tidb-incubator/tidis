@@ -61,17 +61,15 @@ impl Lrange {
             return Ok(Lrange::new_invalid());
         }
         let key = &argv[0];
-        let left;
-        let right;
-        match argv[1].parse::<i64>() {
-            Ok(v) => left = v,
+        let left = match argv[1].parse::<i64>() {
+            Ok(v) => v,
             Err(_) => return Ok(Lrange::new_invalid()),
-        }
+        };
 
-        match argv[2].parse::<i64>() {
-            Ok(v) => right = v,
+        let right = match argv[2].parse::<i64>() {
+            Ok(v) => v,
             Err(_) => return Ok(Lrange::new_invalid()),
-        }
+        };
         Ok(Lrange::new(key, left, right))
     }
 

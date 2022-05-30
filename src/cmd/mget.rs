@@ -23,14 +23,6 @@ pub struct Mget {
 }
 
 impl Mget {
-    /// Create a new `Mget` command which fetches `key` vector.
-    pub fn new() -> Mget {
-        Mget {
-            keys: vec![],
-            valid: true,
-        }
-    }
-
     pub fn new_invalid() -> Mget {
         Mget {
             keys: vec![],
@@ -51,7 +43,7 @@ impl Mget {
         // The `MGET` string has already been consumed. The next value is the
         // name of the key to get. If the next value is not a string or the
         // input is fully consumed, then an error is returned.
-        let mut mget = Mget::new();
+        let mut mget = Mget::default();
 
         while let Ok(key) = parse.next_string() {
             mget.add_key(key);
@@ -64,7 +56,7 @@ impl Mget {
         if argv.is_empty() {
             return Ok(Mget::new_invalid());
         }
-        let mut mget = Mget::new();
+        let mut mget = Mget::default();
         for arg in argv {
             mget.add_key(arg.to_string());
         }
@@ -103,6 +95,16 @@ impl Mget {
             StringCommandCtx::new(txn)
                 .do_async_rawkv_batch_get(&self.keys)
                 .await
+        }
+    }
+}
+
+impl Default for Mget {
+    /// Create a new `Mget` command which fetches `key` vector.
+    fn default() -> Self {
+        Mget {
+            keys: vec![],
+            valid: true,
         }
     }
 }

@@ -18,13 +18,6 @@ pub struct Exists {
 }
 
 impl Exists {
-    pub fn new() -> Exists {
-        Exists {
-            keys: vec![],
-            valid: true,
-        }
-    }
-
     /// Get the keys
     pub fn keys(&self) -> &Vec<String> {
         &self.keys
@@ -35,7 +28,7 @@ impl Exists {
     }
 
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Exists> {
-        let mut exists = Exists::new();
+        let mut exists = Exists::default();
 
         while let Ok(key) = parse.next_string() {
             exists.add_key(key);
@@ -88,6 +81,15 @@ impl Exists {
             StringCommandCtx::new(txn)
                 .do_async_rawkv_exists(&self.keys)
                 .await
+        }
+    }
+}
+
+impl Default for Exists {
+    fn default() -> Self {
+        Exists {
+            keys: vec![],
+            valid: true,
         }
     }
 }

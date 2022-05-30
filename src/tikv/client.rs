@@ -139,17 +139,18 @@ impl TxnClientWrapper<'static> {
     }
 
     fn error_retryable(&self, err: &Error) -> bool {
-        let ret = match err {
-            Error::RegionError(_) => true,
-            Error::EntryNotFoundInRegionCache => true,
-            Error::KvError { message: _ } => true,
-            Error::MultipleKeyErrors(_) => true,
-            Error::PessimisticLockError {
-                inner: _,
-                success_keys: _,
-            } => true,
-            _ => false,
-        };
+        let ret = matches!(
+            err,
+            Error::RegionError(_)
+                | Error::EntryNotFoundInRegionCache
+                | Error::KvError { message: _ }
+                | Error::MultipleKeyErrors(_)
+                | Error::PessimisticLockError {
+                    inner: _,
+                    success_keys: _,
+                }
+        );
+
         if ret {
             TIKV_CLIENT_RETRIES.inc();
         }
@@ -183,19 +184,16 @@ impl TxnClientWrapper<'static> {
                     let f = f.clone();
 
                     // begin new transaction
-                    let txn;
-                    match self.begin().await {
-                        Ok(t) => {
-                            txn = t;
-                        }
+                    let txn = match self.begin().await {
+                        Ok(t) => t,
                         Err(e) => {
                             error!(LOGGER, "error to begin new transaction: {}", e);
                             if self.retries == 0 {
-                                return Err(RTError::TikvClientError(e));
+                                return Err(RTError::TikvClientError(Box::new(e)));
                             }
                             continue;
                         }
-                    }
+                    };
 
                     let txn_arc = Arc::new(Mutex::new(txn));
 
@@ -211,7 +209,7 @@ impl TxnClientWrapper<'static> {
                                 error!(LOGGER, "error to commit transaction: {}", e);
                                 if self.error_retryable(&e) {
                                     if self.retries == 0 {
-                                        return Err(RTError::TikvClientError(e));
+                                        return Err(RTError::TikvClientError(Box::new(e)));
                                     }
                                     debug!(
                                         LOGGER,
@@ -248,9 +246,9 @@ impl TxnClientWrapper<'static> {
                     sleep(std::cmp::min(2 + retry_count * 10, 200)).await;
                 }
                 error!(LOGGER, "transaction retry count reached limit");
-                Err(RTError::TikvClientError(StringError(
+                Err(RTError::TikvClientError(Box::new(StringError(
                     "retry count exceeded".to_string(),
-                )))
+                ))))
             }
         }
     }
@@ -275,13 +273,14 @@ impl RawClientWrapper {
     }
 
     fn error_retryable(&self, err: &Error) -> bool {
-        let ret = match err {
-            Error::RegionError(_) => true,
-            Error::EntryNotFoundInRegionCache => true,
-            Error::KvError { message: _ } => true,
-            Error::MultipleKeyErrors(_) => true,
-            _ => false,
-        };
+        let ret = matches!(
+            err,
+            Error::RegionError(_)
+                | Error::EntryNotFoundInRegionCache
+                | Error::KvError { message: _ }
+                | Error::MultipleKeyErrors(_)
+        );
+
         if ret {
             TIKV_CLIENT_RETRIES.inc();
         }

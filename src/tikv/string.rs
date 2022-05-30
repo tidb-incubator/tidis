@@ -103,7 +103,7 @@ impl StringCommandCtx {
         }
     }
 
-    pub async fn do_async_rawkv_batch_get(self, keys: &Vec<String>) -> AsyncResult<Frame> {
+    pub async fn do_async_rawkv_batch_get(self, keys: &[String]) -> AsyncResult<Frame> {
         let client = get_client()?;
         let ekeys = KeyEncoder::new().encode_rawkv_strings(keys);
         let result = client.batch_get(ekeys.clone()).await?;
@@ -122,7 +122,7 @@ impl StringCommandCtx {
         Ok(Frame::Array(values))
     }
 
-    pub async fn do_async_txnkv_batch_get(self, keys: &Vec<String>) -> AsyncResult<Frame> {
+    pub async fn do_async_txnkv_batch_get(self, keys: &[String]) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
         let ekeys = KeyEncoder::new().encode_txnkv_strings(keys);
 
@@ -215,8 +215,8 @@ impl StringCommandCtx {
                     }
                     let mut txn = txn_rc.lock().await;
                     let old_value = txn.get(ekey.clone()).await?;
-                    if old_value.is_some() {
-                        let ttl = KeyDecoder::decode_key_ttl(&old_value.unwrap());
+                    if let Some(ref v) = old_value {
+                        let ttl = KeyDecoder::decode_key_ttl(v);
                         if key_is_expired(ttl) {
                             // no need to delete, just overwrite
                             txn.put(ekey, eval).await?;
@@ -244,7 +244,7 @@ impl StringCommandCtx {
         }
     }
 
-    pub async fn do_async_rawkv_exists(self, keys: &Vec<String>) -> AsyncResult<Frame> {
+    pub async fn do_async_rawkv_exists(self, keys: &[String]) -> AsyncResult<Frame> {
         let client = get_client()?;
         let ekeys = KeyEncoder::new().encode_rawkv_strings(keys);
         let result = client.batch_get(ekeys).await?;
@@ -278,14 +278,9 @@ impl StringCommandCtx {
         Ok(resp_int(cnt as i64))
     }
 
-    pub async fn do_async_rawkv_incr(
-        self,
-        key: &String,
-        inc: bool,
-        step: i64,
-    ) -> AsyncResult<Frame> {
+    pub async fn do_async_rawkv_incr(self, key: &str, inc: bool, step: i64) -> AsyncResult<Frame> {
         let client = get_client()?;
-        let ekey = KeyEncoder::new().encode_rawkv_string(&key.clone());
+        let ekey = KeyEncoder::new().encode_rawkv_string(key);
         let mut new_int: i64 = 0;
         let mut swapped = false;
         for i in 0..2000 {
@@ -344,7 +339,6 @@ impl StringCommandCtx {
                     if self.txn.is_none() {
                         self.txn = Some(txn_rc.clone())
                     }
-                    let new_int;
                     let prev_int;
                     let mut txn = txn_rc.lock().await;
                     match txn.get(ekey.clone()).await? {
@@ -373,11 +367,12 @@ impl StringCommandCtx {
                             prev_int = 0;
                         }
                     }
-                    if inc {
-                        new_int = prev_int + step;
+
+                    let new_int = if inc {
+                        prev_int + step
                     } else {
-                        new_int = prev_int - step;
-                    }
+                        prev_int - step
+                    };
                     let new_val = new_int.to_string();
                     let eval = KeyEncoder::new()
                         .encode_txnkv_string_value(&mut new_val.as_bytes().to_vec(), 0);

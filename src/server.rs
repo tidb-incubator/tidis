@@ -14,7 +14,6 @@ use async_std::net::{TcpListener, TcpStream};
 use std::future::Future;
 
 use async_std::prelude::StreamExt;
-use async_tls::server::TlsStream;
 use async_tls::TlsAcceptor;
 use slog::{debug, error, info};
 use tokio::sync::{broadcast, mpsc};
@@ -442,11 +441,8 @@ impl TlsListener {
             // start tls handshake
             let handshake = acceptor.accept(stream);
             // handshake is a future, await to get an encrypted stream back
-            let tls_stream: TlsStream<TcpStream>;
-            match handshake.await {
-                Ok(stream) => {
-                    tls_stream = stream;
-                }
+            let tls_stream = match handshake.await {
+                Ok(stream) => stream,
                 Err(e) => {
                     error!(
                         LOGGER,
@@ -457,7 +453,7 @@ impl TlsListener {
                     );
                     continue;
                 }
-            }
+            };
 
             let mut handler = Handler {
                 db: self.db_holder.db(),

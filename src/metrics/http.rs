@@ -24,7 +24,7 @@ impl PrometheusServer {
         CURRENT_CONNECTION_COUNTER.get();
 
         PrometheusServer {
-            listen_addr: listen_addr,
+            listen_addr,
         }
     }
 

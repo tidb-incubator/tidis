@@ -21,7 +21,7 @@ impl Expire {
     pub fn new(key: impl ToString, seconds: i64) -> Expire {
         Expire {
             key: key.to_string(),
-            seconds: seconds,
+            seconds,
             valid: true,
         }
     }
@@ -48,8 +48,8 @@ impl Expire {
         let seconds = parse.next_int()?;
 
         Ok(Expire {
-            key: key,
-            seconds: seconds,
+            key,
+            seconds,
             valid: true,
         })
     }
@@ -100,7 +100,7 @@ impl Expire {
         let mut ttl = self.seconds as u64;
         if is_use_txn_api() {
             if !is_millis {
-                ttl = ttl * 1000;
+                ttl *= 1000;
             }
             if !expire_at {
                 ttl = timestamp_from_ttl(ttl);

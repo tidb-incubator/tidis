@@ -45,7 +45,7 @@ impl Exists {
     }
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Exists> {
-        if argv.len() == 0 {
+        if argv.is_empty() {
             return Ok(Exists {
                 keys: vec![],
                 valid: false,

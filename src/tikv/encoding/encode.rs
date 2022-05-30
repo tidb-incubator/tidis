@@ -57,18 +57,18 @@ impl KeyEncoder {
         val.append(&mut dt.to_be_bytes().to_vec());
         val.append(&mut ttl.to_be_bytes().to_vec());
         val.append(value);
-        val.into()
+        val
     }
 
     pub fn encode_rawkv_strings(&self, keys: &Vec<String>) -> Vec<Key> {
         let prefix = self.get_prefix(DataType::String);
-        keys.into_iter()
+        keys.iter()
             .map(|val| format!("{}_{}", prefix, val).into())
             .collect()
     }
 
     pub fn encode_txnkv_strings(&self, keys: &Vec<String>) -> Vec<Key> {
-        keys.into_iter()
+        keys.iter()
             .map(|val| format!("x_{}_M_{}", self.instance_id, val).into())
             .collect()
     }
@@ -96,7 +96,7 @@ impl KeyEncoder {
         val.append(&mut dt.to_be_bytes().to_vec());
         val.append(&mut ttl.to_be_bytes().to_vec());
         val.append(&mut size.to_be_bytes().to_vec());
-        val.into()
+        val
     }
 
     pub fn encode_txnkv_list_meta_key(&self, key: &str) -> Key {
@@ -123,7 +123,7 @@ impl KeyEncoder {
         val.append(&mut ttl.to_be_bytes().to_vec());
         val.append(&mut left.to_be_bytes().to_vec());
         val.append(&mut right.to_be_bytes().to_vec());
-        val.into()
+        val
     }
 
     pub fn encode_txnkv_set_meta_key(&self, key: &str) -> Key {
@@ -138,7 +138,7 @@ impl KeyEncoder {
         val.append(&mut dt.to_be_bytes().to_vec());
         val.append(&mut ttl.to_be_bytes().to_vec());
         val.append(&mut size.to_be_bytes().to_vec());
-        val.into()
+        val
     }
 
     pub fn encode_txnkv_set_data_key(&self, key: &str, members: &str) -> Key {
@@ -163,7 +163,7 @@ impl KeyEncoder {
         val.append(&mut dt.to_be_bytes().to_vec());
         val.append(&mut ttl.to_be_bytes().to_vec());
         val.append(&mut size.to_be_bytes().to_vec());
-        val.into()
+        val
     }
 
     pub fn encode_txnkv_zset_data_key(&self, key: &str, member: &str) -> Key {
@@ -177,7 +177,7 @@ impl KeyEncoder {
     }
 
     pub fn encode_txnkv_zset_data_value(&self, score: i64) -> Value {
-        score.to_be_bytes().to_vec().into()
+        score.to_be_bytes().to_vec()
     }
 
     pub fn encode_txnkv_zset_score_key(&self, key: &str, score: i64) -> Key {

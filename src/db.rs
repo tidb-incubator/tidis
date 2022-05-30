@@ -149,7 +149,7 @@ impl Db {
 
     pub(crate) fn get_script(&self, key: &str) -> Option<Bytes> {
         let state = self.shared.state.lock().unwrap();
-        state.scripts.get(key).map(|s| s.clone())
+        state.scripts.get(key).cloned()
     }
 
     pub(crate) fn set_script(&self, key: String, value: Bytes) {

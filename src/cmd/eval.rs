@@ -26,7 +26,7 @@ impl Eval {
     pub fn new(script: &str, numkeys: i64) -> Eval {
         Eval {
             script: script.to_owned(),
-            numkeys: numkeys,
+            numkeys,
             keys: vec![],
             args: vec![],
         }

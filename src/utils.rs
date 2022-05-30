@@ -49,7 +49,7 @@ pub fn resp_nil() -> Frame {
 }
 
 pub fn resp_array(val: Vec<Frame>) -> Frame {
-    Frame::Array(val.into())
+    Frame::Array(val)
 }
 
 pub async fn sleep(ms: u32) {
@@ -61,7 +61,7 @@ pub fn lua_resp_to_redis_resp(resp: LuaValue) -> Frame {
         LuaValue::String(r) => resp_bulk(r.to_str().unwrap().as_bytes().to_vec()),
         LuaValue::Integer(r) => resp_int(r),
         LuaValue::Boolean(r) => {
-            let r_int: i64 = if r == false { 0 } else { 1 };
+            let r_int: i64 = if !r { 0 } else { 1 };
             resp_int(r_int)
         }
         LuaValue::Number(r) => resp_bulk(r.to_string().as_bytes().to_vec()),
@@ -125,18 +125,14 @@ pub fn key_is_expired(ttl: u64) -> bool {
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards");
     let ts = d.as_secs() * 1000 + d.subsec_millis() as u64;
-    if ttl > 0 && ttl < ts {
-        true
-    } else {
-        false
-    }
+    ttl > 0 && ttl < ts
 }
 
 pub fn now_timestamp_in_millis() -> u64 {
     let d = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards");
-    return d.as_secs() * 1000 + d.subsec_millis() as u64;
+    d.as_secs() * 1000 + d.subsec_millis() as u64
 }
 
 pub fn timestamp_from_ttl(ttl: u64) -> u64 {
@@ -146,9 +142,9 @@ pub fn timestamp_from_ttl(ttl: u64) -> u64 {
 pub fn ttl_from_timestamp(timestamp: u64) -> u64 {
     let now = now_timestamp_in_millis();
     if now > timestamp {
-        return 0;
+        0
     } else {
-        return timestamp - now;
+        timestamp - now
     }
 }
 
@@ -174,11 +170,11 @@ pub fn load_config(
     auth_client: bool,
     ca_cert: &str,
 ) -> io::Result<ServerConfig> {
-    let certs = load_certs(&Path::new(cert))?;
-    let mut keys = load_keys(&Path::new(key))?;
+    let certs = load_certs(Path::new(cert))?;
+    let mut keys = load_keys(Path::new(key))?;
 
     let client_auth = if auth_client {
-        let ca_certs = load_certs(&Path::new(ca_cert)).unwrap();
+        let ca_certs = load_certs(Path::new(ca_cert)).unwrap();
         let mut client_auth_roots = RootCertStore::empty();
         for ca in ca_certs {
             client_auth_roots.add(&ca).unwrap();

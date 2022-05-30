@@ -25,7 +25,7 @@ impl Hincrby {
         Hincrby {
             key: key.to_string(),
             field: field.to_string(),
-            step: step,
+            step,
             valid: true,
         }
     }

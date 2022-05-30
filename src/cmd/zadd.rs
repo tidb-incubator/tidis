@@ -96,7 +96,7 @@ impl Zadd {
                 }
                 Ok(s) => {
                     // check if this is a score args
-                    match String::from_utf8_lossy(&s.as_bytes().to_vec()).parse::<i64>() {
+                    match String::from_utf8_lossy(s.as_bytes()).parse::<i64>() {
                         Ok(score) => {
                             first_score = Some(score);
                             // flags parse done
@@ -125,14 +125,12 @@ impl Zadd {
                 // parse next member
                 let member = parse.next_string()?;
                 zadd.add_member(&member);
+            } else if let Ok(score) = parse.next_int() {
+                let member = parse.next_string()?;
+                zadd.add_score(score);
+                zadd.add_member(&member);
             } else {
-                if let Ok(score) = parse.next_int() {
-                    let member = parse.next_string()?;
-                    zadd.add_score(score);
-                    zadd.add_member(&member);
-                } else {
-                    break;
-                }
+                break;
             }
         }
 
@@ -140,7 +138,7 @@ impl Zadd {
     }
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Zadd> {
-        if argv.len() == 0 {
+        if argv.is_empty() {
             return Ok(Zadd::new_invalid());
         }
         let mut zadd = Zadd::new(&argv[0]);
@@ -172,7 +170,7 @@ impl Zadd {
                 }
                 _ => {
                     // check if this is a score args
-                    match String::from_utf8_lossy(&arg.as_bytes().to_vec()).parse::<i64>() {
+                    match String::from_utf8_lossy(arg.as_bytes()).parse::<i64>() {
                         Ok(score) => {
                             first_score = Some(score);
                             // flags parse done

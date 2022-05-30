@@ -109,7 +109,7 @@ impl Parse {
             // fails, an error is returned.
             //Frame::Simple(data) => atoi::<i64>(data.as_bytes()).ok_or_else(|| MSG.into()),
             Frame::Simple(data) => {
-                match String::from_utf8_lossy(&data.as_bytes().to_vec()).parse::<i64>() {
+                match String::from_utf8_lossy(data.as_bytes()).parse::<i64>() {
                     Ok(value) => Ok(value),
                     Err(_) => Err(MSG.into()),
                 }

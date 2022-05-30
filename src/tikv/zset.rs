@@ -236,7 +236,7 @@ impl ZsetCommandCtx {
                 let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
-                        .do_async_txnkv_zset_expire_if_needed(&key)
+                        .do_async_txnkv_zset_expire_if_needed(key)
                         .await?;
                     return Ok(resp_int(0));
                 }
@@ -269,7 +269,7 @@ impl ZsetCommandCtx {
                 let (ttl, _) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
-                        .do_async_txnkv_zset_expire_if_needed(&key)
+                        .do_async_txnkv_zset_expire_if_needed(key)
                         .await?;
                     return Ok(resp_int(0));
                 }
@@ -316,7 +316,7 @@ impl ZsetCommandCtx {
                 let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
-                        .do_async_txnkv_zset_expire_if_needed(&key)
+                        .do_async_txnkv_zset_expire_if_needed(key)
                         .await?;
                     return Ok(resp_array(vec![]));
                 }
@@ -370,7 +370,7 @@ impl ZsetCommandCtx {
                 let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
-                        .do_async_txnkv_zset_expire_if_needed(&key)
+                        .do_async_txnkv_zset_expire_if_needed(key)
                         .await?;
                     return Ok(resp_array(vec![]));
                 }
@@ -461,7 +461,7 @@ impl ZsetCommandCtx {
                 let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
-                        .do_async_txnkv_zset_expire_if_needed(&key)
+                        .do_async_txnkv_zset_expire_if_needed(key)
                         .await?;
                     return Ok(resp_array(vec![]));
                 }
@@ -614,7 +614,7 @@ impl ZsetCommandCtx {
                 let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
-                        .do_async_txnkv_zset_expire_if_needed(&key)
+                        .do_async_txnkv_zset_expire_if_needed(key)
                         .await?;
                     return Ok(resp_nil());
                 }
@@ -624,11 +624,11 @@ impl ZsetCommandCtx {
                     Some(data_value) => {
                         // calculate the score rank in score key index
                         let score = KeyDecoder::new().decode_key_zset_data_value(&data_value);
-                        let score_key = KeyEncoder::new().encode_txnkv_zset_score_key(&key, score);
+                        let score_key = KeyEncoder::new().encode_txnkv_zset_score_key(key, score);
 
                         // scan from range start
                         let score_key_start =
-                            KeyEncoder::new().encode_txnkv_zset_score_key(&key, 0);
+                            KeyEncoder::new().encode_txnkv_zset_score_key(key, 0);
                         let range = score_key_start..;
                         let from_range: BoundRange = range.into();
                         let iter = ss.scan_keys(from_range, size.try_into().unwrap()).await?;
@@ -639,15 +639,15 @@ impl ZsetCommandCtx {
                             }
                             rank += 1;
                         }
-                        return Ok(resp_int(rank));
+                        Ok(resp_int(rank))
                     }
                     None => {
-                        return Ok(resp_nil());
+                        Ok(resp_nil())
                     }
                 }
             }
             None => {
-                return Ok(resp_nil());
+                Ok(resp_nil())
             }
         }
     }

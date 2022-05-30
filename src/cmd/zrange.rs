@@ -26,10 +26,10 @@ impl Zrange {
     pub fn new(key: &str, min: i64, max: i64, withscores: bool, reverse: bool) -> Zrange {
         Zrange {
             key: key.to_string(),
-            min: min,
-            max: max,
-            withscores: withscores,
-            reverse: reverse,
+            min,
+            max,
+            withscores,
+            reverse,
             valid: true,
         }
     }

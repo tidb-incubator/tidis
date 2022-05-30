@@ -35,11 +35,11 @@ impl Zrangebyscore {
     ) -> Zrangebyscore {
         Zrangebyscore {
             key: key.to_string(),
-            min: min,
-            min_inclusive: min_inclusive,
-            max: max,
-            max_inclusive: max_inclusive,
-            withscores: withscores,
+            min,
+            min_inclusive,
+            max,
+            max_inclusive,
+            withscores,
             valid: true,
         }
     }

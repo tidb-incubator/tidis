@@ -68,7 +68,7 @@ pub static mut SERVER_CONFIG: Option<Config> = None;
 pub fn is_auth_enabled() -> bool {
     unsafe {
         if let Some(c) = &SERVER_CONFIG {
-            if let Some(_) = c.server.password.clone() {
+            if c.server.password.clone().is_some() {
                 return true;
             }
         }
@@ -152,7 +152,7 @@ pub fn config_tls_cert_file_or_default() -> String {
     unsafe {
         if let Some(c) = &SERVER_CONFIG {
             if let Some(s) = c.server.tls_cert_file.clone() {
-                return s.to_string();
+                return s;
             }
         }
     }
@@ -164,7 +164,7 @@ pub fn config_tls_key_file_or_default() -> String {
     unsafe {
         if let Some(c) = &SERVER_CONFIG {
             if let Some(s) = c.server.tls_key_file.clone() {
-                return s.to_string();
+                return s;
             }
         }
     }
@@ -188,7 +188,7 @@ pub fn config_tls_ca_cert_file_or_default() -> String {
     unsafe {
         if let Some(c) = &SERVER_CONFIG {
             if let Some(s) = c.server.tls_ca_cert_file.clone() {
-                return s.to_string();
+                return s;
             }
         }
     }
@@ -232,7 +232,7 @@ pub fn config_prometheus_listen_or_default() -> String {
 pub fn config_prometheus_port_or_default() -> String {
     unsafe {
         if let Some(c) = &SERVER_CONFIG {
-            if let Some(s) = c.server.prometheus_port.clone() {
+            if let Some(s) = c.server.prometheus_port {
                 return s.to_string();
             }
         }

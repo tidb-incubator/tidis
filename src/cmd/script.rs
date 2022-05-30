@@ -37,10 +37,10 @@ impl Script {
         }
         Script {
             script: "".to_owned(),
-            is_load: is_load,
+            is_load,
             sha1_vec: vec![],
-            is_exists: is_exists,
-            is_flush: is_flush,
+            is_exists,
+            is_flush,
             valid: true,
         }
     }

@@ -71,7 +71,7 @@ impl Get {
         let key = parse.next_string()?;
 
         Ok(Get {
-            key: key,
+            key,
             valid: true,
         })
     }

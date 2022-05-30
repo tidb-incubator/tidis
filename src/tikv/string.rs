@@ -139,7 +139,7 @@ impl StringCommandCtx {
                 let data = ret.get(k.as_ref());
                 match data {
                     Some(val) => {
-                        let ttl = KeyDecoder::new().decode_key_ttl(&val);
+                        let ttl = KeyDecoder::new().decode_key_ttl(val);
                         if key_is_expired(ttl) {
                             return Frame::Null;
                         }
@@ -190,7 +190,7 @@ impl StringCommandCtx {
         let client = get_client()?;
         let ekey = KeyEncoder::new().encode_rawkv_string(key);
         let (_, swapped) = client
-            .compare_and_swap(ekey, None.into(), value.to_vec())
+            .compare_and_swap(ekey, None, value.to_vec())
             .await?;
         if swapped {
             Ok(resp_ok())
@@ -224,7 +224,7 @@ impl StringCommandCtx {
                             txn.put(ekey, eval).await?;
                             return Ok(1);
                         }
-                        return Ok(0);
+                        Ok(0)
                     } else {
                         txn.put(ekey, eval).await?;
                         Ok(1)
@@ -408,11 +408,11 @@ impl StringCommandCtx {
                     }
                     let mut txn = txn_rc.lock().await;
                     let ekey = KeyEncoder::new().encode_txnkv_string(&key);
-                    if let Some(_) = txn.get(ekey.to_owned()).await? {
+                    if (txn.get(ekey.to_owned()).await?).is_some() {
                         txn.delete(ekey).await?;
                         return Ok(1);
                     }
-                    return Ok(0);
+                    Ok(0)
                 }
                 .boxed()
             })
@@ -440,7 +440,7 @@ impl StringCommandCtx {
                             return Ok(1);
                         }
                     }
-                    return Ok(0);
+                    Ok(0)
                 }
                 .boxed()
             })
@@ -478,7 +478,7 @@ impl StringCommandCtx {
                                     let new_meta_value = KeyEncoder::new()
                                         .encode_txnkv_string_value(&mut value, timestamp);
                                     txn.put(ekey, new_meta_value).await?;
-                                    return Ok(1);
+                                    Ok(1)
                                 }
                                 DataType::Hash => {
                                     if key_is_expired(ttl) {
@@ -492,7 +492,7 @@ impl StringCommandCtx {
                                     let new_meta_value = KeyEncoder::new()
                                         .encode_txnkv_hash_meta_value(timestamp, size);
                                     txn.put(ekey, new_meta_value).await?;
-                                    return Ok(1);
+                                    Ok(1)
                                 }
                                 DataType::List => {
                                     if key_is_expired(ttl) {
@@ -507,7 +507,7 @@ impl StringCommandCtx {
                                     let new_meta_value = KeyEncoder::new()
                                         .encode_txnkv_list_meta_value(timestamp, left, right);
                                     txn.put(ekey, new_meta_value).await?;
-                                    return Ok(1);
+                                    Ok(1)
                                 }
                                 DataType::Set => {
                                     if key_is_expired(ttl) {
@@ -521,7 +521,7 @@ impl StringCommandCtx {
                                     let new_meta_value = KeyEncoder::new()
                                         .encode_txnkv_set_meta_value(timestamp, size);
                                     txn.put(ekey, new_meta_value).await?;
-                                    return Ok(1);
+                                    Ok(1)
                                 }
                                 DataType::Zset => {
                                     if key_is_expired(ttl) {
@@ -535,7 +535,7 @@ impl StringCommandCtx {
                                     let new_meta_value = KeyEncoder::new()
                                         .encode_txnkv_zset_meta_value(timestamp, size);
                                     txn.put(ekey, new_meta_value).await?;
-                                    return Ok(1);
+                                    Ok(1)
                                 }
                                 _ => Ok(0),
                             }
@@ -567,7 +567,7 @@ impl StringCommandCtx {
                 if key_is_expired(ttl) {
                     match dt {
                         DataType::String => {
-                            self.do_async_txnkv_string_expire_if_needed(&key).await?;
+                            self.do_async_txnkv_string_expire_if_needed(key).await?;
                         }
                         DataType::Hash => {
                             HashCommandCtx::new(self.txn.clone())
@@ -583,13 +583,13 @@ impl StringCommandCtx {
                 }
 
                 if ttl == 0 {
-                    return Ok(resp_int(-1));
+                    Ok(resp_int(-1))
                 } else {
                     let mut ttl = ttl_from_timestamp(ttl) as i64;
                     if !is_millis {
                         ttl /= 1000;
                     }
-                    return Ok(resp_int(ttl));
+                    Ok(resp_int(ttl))
                 }
             }
             None => Ok(resp_int(-2)),
@@ -612,7 +612,7 @@ impl StringCommandCtx {
                     let mut txn = txn_rc.lock().await;
 
                     for key in &keys {
-                        let ekey = KeyEncoder::new().encode_txnkv_string(&key);
+                        let ekey = KeyEncoder::new().encode_txnkv_string(key);
                         let meta_value = txn.get(ekey).await?;
                         if let Some(v) = meta_value {
                             let dt = KeyDecoder::new().decode_key_type(&v);

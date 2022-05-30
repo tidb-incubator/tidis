@@ -23,7 +23,7 @@ impl Pop {
     pub fn new(key: &str, count: i64) -> Pop {
         Pop {
             key: key.to_owned(),
-            count: count,
+            count,
             valid: true,
         }
     }
@@ -41,7 +41,7 @@ impl Pop {
     }
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Pop> {
-        if argv.len() == 0 || argv.len() > 2 {
+        if argv.is_empty() || argv.len() > 2 {
             return Ok(Pop::new_invalid());
         }
         let key = &argv[0];

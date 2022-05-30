@@ -371,7 +371,7 @@ impl Listener {
                 // Receive shutdown notifications.
                 shutdown: Shutdown::new(self.notify_shutdown.subscribe()),
 
-                authorized: if is_auth_enabled() { false } else { true },
+                authorized: !is_auth_enabled(),
 
                 lua: None,
 
@@ -463,7 +463,7 @@ impl TlsListener {
                 db: self.db_holder.db(),
                 connection: Connection::new_tls(&local_addr, &peer_addr, tls_stream),
                 shutdown: Shutdown::new(self.tls_notify_shutdown.subscribe()),
-                authorized: if is_auth_enabled() { false } else { true },
+                authorized: !is_auth_enabled(),
                 lua: None,
                 _shutdown_complete: self.tls_shutdown_complete_tx.clone(),
             };
@@ -541,15 +541,13 @@ impl Handler {
                         self.connection
                             .write_frame(&resp_err("ERR Client sent AUTH, but no password is set"))
                             .await?;
+                    } else if is_auth_matched(c.passwd()) {
+                        self.connection.write_frame(&resp_ok()).await?;
+                        self.authorized = true;
                     } else {
-                        if is_auth_matched(c.passwd()) {
-                            self.connection.write_frame(&resp_ok()).await?;
-                            self.authorized = true;
-                        } else {
-                            self.connection
-                                .write_frame(&resp_err("ERR invalid password"))
-                                .await?;
-                        }
+                        self.connection
+                            .write_frame(&resp_err("ERR invalid password"))
+                            .await?;
                     }
                 }
                 _ => {

@@ -94,7 +94,7 @@ impl SetEX {
         if let Ok(v) = expire {
             return Ok(SetEX::new(key, value, v * 1000));
         }
-        return Ok(SetEX::new_invalid());
+        Ok(SetEX::new_invalid())
     }
 
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {

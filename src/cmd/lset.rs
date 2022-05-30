@@ -25,8 +25,8 @@ impl Lset {
     pub fn new(key: &str, idx: i64, ele: Bytes) -> Lset {
         Lset {
             key: key.to_owned(),
-            idx: idx,
-            element: ele.to_owned(),
+            idx,
+            element: ele,
             valid: true,
         }
     }

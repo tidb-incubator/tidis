@@ -43,7 +43,7 @@ impl Del {
     }
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Del> {
-        if argv.len() == 0 {
+        if argv.is_empty() {
             return Ok(Del {
                 keys: vec![],
                 valid: false,

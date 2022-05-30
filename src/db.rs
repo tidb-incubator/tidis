@@ -80,6 +80,7 @@ struct State {
     /// to break these ties.
     expirations: BTreeMap<(Instant, u64), String>,
 
+    #[allow(dead_code)]
     /// Identifier to use for the next expiration. Each expiration is associated
     /// with a unique identifier. See above for why.
     next_id: u64,
@@ -93,12 +94,15 @@ struct State {
 /// Entry in the key-value store
 #[derive(Debug)]
 struct Entry {
+    #[allow(dead_code)]
     /// Uniquely identifies this entry.
     id: u64,
 
+    #[allow(dead_code)]
     /// Stored data
     data: Bytes,
 
+    #[allow(dead_code)]
     /// Instant at which the entry expires and should be removed from the
     /// database.
     expires_at: Option<Instant>,
@@ -162,6 +166,7 @@ impl Db {
         state.scripts.clear();
     }
 
+    #[allow(dead_code)]
     /// Get the value associated with a key.
     ///
     /// Returns `None` if there is no value associated with the key. This may be
@@ -176,6 +181,7 @@ impl Db {
         state.entries.get(key).map(|entry| entry.data.clone())
     }
 
+    #[allow(dead_code)]
     /// Set the value associated with a key along with an optional expiration
     /// Duration.
     ///
@@ -357,6 +363,7 @@ impl Shared {
 }
 
 impl State {
+    #[allow(dead_code)]
     fn next_expiration(&self) -> Option<Instant> {
         self.expirations
             .keys()

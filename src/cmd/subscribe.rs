@@ -33,6 +33,7 @@ pub struct Unsubscribe {
 type Messages = Pin<Box<dyn Stream<Item = Bytes> + Send>>;
 
 impl Subscribe {
+    #[allow(dead_code)]
     /// Creates a new `Subscribe` command to listen on the specified channels.
     pub(crate) fn new(channels: &[String]) -> Subscribe {
         Subscribe {
@@ -155,6 +156,7 @@ impl Subscribe {
         }
     }
 
+    #[allow(dead_code)]
     /// Converts the command into an equivalent `Frame`.
     ///
     /// This is called by the client when encoding a `Subscribe` command to send
@@ -281,6 +283,7 @@ fn make_message_frame(channel_name: String, msg: Bytes) -> Frame {
 }
 
 impl Unsubscribe {
+    #[allow(dead_code)]
     /// Create a new `Unsubscribe` command with the given `channels`.
     pub(crate) fn new(channels: &[String]) -> Unsubscribe {
         Unsubscribe {
@@ -334,6 +337,7 @@ impl Unsubscribe {
         Ok(Unsubscribe { channels })
     }
 
+    #[allow(dead_code)]
     /// Converts the command into an equivalent `Frame`.
     ///
     /// This is called by the client when encoding an `Unsubscribe` command to

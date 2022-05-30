@@ -49,15 +49,12 @@ impl<'a> ListCommandCtx {
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check key type and ttl
-                            if !matches!(
-                                KeyDecoder::new().decode_key_type(&meta_value),
-                                DataType::List
-                            ) {
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
                                 return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
                             }
 
                             let (ttl, mut left, mut right) =
-                                KeyDecoder::new().decode_key_list_meta(&meta_value);
+                                KeyDecoder::decode_key_list_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()
@@ -151,15 +148,12 @@ impl<'a> ListCommandCtx {
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check key type and ttl
-                            if !matches!(
-                                KeyDecoder::new().decode_key_type(&meta_value),
-                                DataType::List
-                            ) {
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
                                 return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
                             }
 
                             let (ttl, mut left, mut right) =
-                                KeyDecoder::new().decode_key_list_meta(&meta_value);
+                                KeyDecoder::decode_key_list_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()
@@ -273,15 +267,12 @@ impl<'a> ListCommandCtx {
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check key type and ttl
-                            if !matches!(
-                                KeyDecoder::new().decode_key_type(&meta_value),
-                                DataType::List
-                            ) {
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
                                 return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
                             }
 
                             let (ttl, mut left, mut right) =
-                                KeyDecoder::new().decode_key_list_meta(&meta_value);
+                                KeyDecoder::decode_key_list_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()
@@ -368,13 +359,10 @@ impl<'a> ListCommandCtx {
         match ss.get(meta_key).await? {
             Some(meta_value) => {
                 // check key type and ttl
-                if !matches!(
-                    KeyDecoder::new().decode_key_type(&meta_value),
-                    DataType::List
-                ) {
+                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
-                let (ttl, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
+                let (ttl, left, right) = KeyDecoder::decode_key_list_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_list_expire_if_needed(key)
@@ -426,13 +414,10 @@ impl<'a> ListCommandCtx {
         match ss.get(meta_key).await? {
             Some(meta_value) => {
                 // check type and ttl
-                if !matches!(
-                    KeyDecoder::new().decode_key_type(&meta_value),
-                    DataType::List
-                ) {
+                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
-                let (ttl, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
+                let (ttl, left, right) = KeyDecoder::decode_key_list_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_list_expire_if_needed(key)
@@ -459,13 +444,10 @@ impl<'a> ListCommandCtx {
         match ss.get(meta_key).await? {
             Some(meta_value) => {
                 // check type and ttl
-                if !matches!(
-                    KeyDecoder::new().decode_key_type(&meta_value),
-                    DataType::List
-                ) {
+                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
-                let (ttl, left, right) = KeyDecoder::new().decode_key_list_meta(&meta_value);
+                let (ttl, left, right) = KeyDecoder::decode_key_list_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_list_expire_if_needed(key)
@@ -514,14 +496,10 @@ impl<'a> ListCommandCtx {
                     Ok(match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check type and ttl
-                            if !matches!(
-                                KeyDecoder::new().decode_key_type(&meta_value),
-                                DataType::List
-                            ) {
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
                                 return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
                             }
-                            let (ttl, left, right) =
-                                KeyDecoder::new().decode_key_list_meta(&meta_value);
+                            let (ttl, left, right) = KeyDecoder::decode_key_list_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()
@@ -577,8 +555,7 @@ impl<'a> ListCommandCtx {
                     let mut txn = txn_rc.lock().await;
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
-                            let (_, left, right) =
-                                KeyDecoder::new().decode_key_list_meta(&meta_value);
+                            let (_, left, right) = KeyDecoder::decode_key_list_meta(&meta_value);
                             let data_key_start =
                                 KeyEncoder::new().encode_txnkv_list_data_key(&key, left);
                             let range: RangeFrom<Key> = data_key_start..;
@@ -617,8 +594,7 @@ impl<'a> ListCommandCtx {
                     let mut txn = txn_rc.lock().await;
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
-                            let (ttl, left, right) =
-                                KeyDecoder::new().decode_key_list_meta(&meta_value);
+                            let (ttl, left, right) = KeyDecoder::decode_key_list_meta(&meta_value);
                             if !key_is_expired(ttl) {
                                 return Ok(0);
                             }

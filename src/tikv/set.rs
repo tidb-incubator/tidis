@@ -44,15 +44,11 @@ impl SetCommandCtx {
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check key type and ttl
-                            if !matches!(
-                                KeyDecoder::new().decode_key_type(&meta_value),
-                                DataType::Set
-                            ) {
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Set) {
                                 return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
                             }
 
-                            let (ttl, mut size) =
-                                KeyDecoder::new().decode_key_set_meta(&meta_value);
+                            let (ttl, mut size) = KeyDecoder::decode_key_set_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()
@@ -65,8 +61,7 @@ impl SetCommandCtx {
 
                             for m in &members {
                                 // check member already exists
-                                let data_key =
-                                    KeyEncoder::new().encode_txnkv_set_data_key(&key, m);
+                                let data_key = KeyEncoder::new().encode_txnkv_set_data_key(&key, m);
                                 let member_exists = txn.key_exists(data_key.clone()).await?;
                                 if !member_exists {
                                     added += 1;
@@ -83,8 +78,7 @@ impl SetCommandCtx {
                             // create new meta key and meta value
                             for m in &members {
                                 // check member already exists
-                                let data_key =
-                                    KeyEncoder::new().encode_txnkv_set_data_key(&key, m);
+                                let data_key = KeyEncoder::new().encode_txnkv_set_data_key(&key, m);
                                 let member_exists = txn.key_exists(data_key.clone()).await?;
                                 if !member_exists {
                                     txn.put(data_key, vec![]).await?;
@@ -121,15 +115,12 @@ impl SetCommandCtx {
         match ss.get(meta_key).await? {
             Some(meta_value) => {
                 // check key type and ttl
-                if !matches!(
-                    KeyDecoder::new().decode_key_type(&meta_value),
-                    DataType::Set
-                ) {
+                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Set) {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
                 // TODO check ttl
-                let (ttl, size) = KeyDecoder::new().decode_key_set_meta(&meta_value);
+                let (ttl, size) = KeyDecoder::decode_key_set_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_set_expire_if_needed(key)
@@ -162,14 +153,11 @@ impl SetCommandCtx {
         match ss.get(meta_key).await? {
             Some(meta_value) => {
                 // check key type and ttl
-                if !matches!(
-                    KeyDecoder::new().decode_key_type(&meta_value),
-                    DataType::Set
-                ) {
+                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Set) {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let ttl = KeyDecoder::new().decode_key_ttl(&meta_value);
+                let ttl = KeyDecoder::decode_key_ttl(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_set_expire_if_needed(key)
@@ -220,14 +208,11 @@ impl SetCommandCtx {
         match ss.get(meta_key).await? {
             Some(meta_value) => {
                 // check key type and ttl
-                if !matches!(
-                    KeyDecoder::new().decode_key_type(&meta_value),
-                    DataType::Set
-                ) {
+                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Set) {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, size) = KeyDecoder::new().decode_key_set_meta(&meta_value);
+                let (ttl, size) = KeyDecoder::decode_key_set_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_set_expire_if_needed(key)
@@ -244,7 +229,7 @@ impl SetCommandCtx {
                 let resp = iter
                     .map(|k| {
                         // decode member from data key
-                        let user_key = KeyDecoder::new().decode_key_set_member_from_datakey(key, k);
+                        let user_key = KeyDecoder::decode_key_set_member_from_datakey(key, k);
                         resp_bulk(user_key)
                     })
                     .collect();
@@ -278,14 +263,11 @@ impl SetCommandCtx {
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check key type and ttl
-                            if !matches!(
-                                KeyDecoder::new().decode_key_type(&meta_value),
-                                DataType::Set
-                            ) {
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Set) {
                                 return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
                             }
 
-                            let (ttl, size) = KeyDecoder::new().decode_key_set_meta(&meta_value);
+                            let (ttl, size) = KeyDecoder::decode_key_set_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()
@@ -340,15 +322,11 @@ impl SetCommandCtx {
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check key type and ttl
-                            if !matches!(
-                                KeyDecoder::new().decode_key_type(&meta_value),
-                                DataType::Set
-                            ) {
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Set) {
                                 return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
                             }
 
-                            let (ttl, mut size) =
-                                KeyDecoder::new().decode_key_set_meta(&meta_value);
+                            let (ttl, mut size) = KeyDecoder::decode_key_set_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()
@@ -368,8 +346,8 @@ impl SetCommandCtx {
                                 .map(|k| {
                                     data_key_to_delete.push(k.clone());
                                     // decode member from data key
-                                    let member = KeyDecoder::new()
-                                        .decode_key_set_member_from_datakey(&key, k);
+                                    let member =
+                                        KeyDecoder::decode_key_set_member_from_datakey(&key, k);
                                     resp_bulk(member)
                                 })
                                 .collect();
@@ -429,7 +407,7 @@ impl SetCommandCtx {
                     let mut txn = txn_rc.lock().await;
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
-                            let size = KeyDecoder::new().decode_key_set_size(&meta_value);
+                            let size = KeyDecoder::decode_key_set_size(&meta_value);
 
                             let start_key = KeyEncoder::new().encode_txnkv_set_data_key_start(&key);
                             let range = start_key..;
@@ -466,11 +444,11 @@ impl SetCommandCtx {
                     let mut txn = txn_rc.lock().await;
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
-                            let ttl = KeyDecoder::new().decode_key_ttl(&meta_value);
+                            let ttl = KeyDecoder::decode_key_ttl(&meta_value);
                             if !key_is_expired(ttl) {
                                 return Ok(0);
                             }
-                            let size = KeyDecoder::new().decode_key_set_size(&meta_value);
+                            let size = KeyDecoder::decode_key_set_size(&meta_value);
 
                             let start_key = KeyEncoder::new().encode_txnkv_set_data_key_start(&key);
                             let range = start_key..;

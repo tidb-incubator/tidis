@@ -50,15 +50,11 @@ impl ZsetCommandCtx {
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check key type and ttl
-                            if !matches!(
-                                KeyDecoder::new().decode_key_type(&meta_value),
-                                DataType::Zset
-                            ) {
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Zset) {
                                 return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
                             }
 
-                            let (ttl, mut size) =
-                                KeyDecoder::new().decode_key_zset_meta(&meta_value);
+                            let (ttl, mut size) = KeyDecoder::decode_key_zset_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()
@@ -97,8 +93,8 @@ impl ZsetCommandCtx {
                                                 updated_count += 1;
                                             } else {
                                                 // check if score updated
-                                                let old_score = KeyDecoder::new()
-                                                    .decode_key_zset_data_value(
+                                                let old_score =
+                                                    KeyDecoder::decode_key_zset_data_value(
                                                         &old_data_value_data,
                                                     );
                                                 if old_score != new_score {
@@ -112,8 +108,9 @@ impl ZsetCommandCtx {
 
                                         // delete old score key if exists
                                         if member_exists {
-                                            let old_score = KeyDecoder::new()
-                                                .decode_key_zset_data_value(&old_data_value_data);
+                                            let old_score = KeyDecoder::decode_key_zset_data_value(
+                                                &old_data_value_data,
+                                            );
                                             if old_score != new_score {
                                                 let old_score_key = KeyEncoder::new()
                                                     .encode_txnkv_zset_score_key(&key, old_score);
@@ -134,8 +131,9 @@ impl ZsetCommandCtx {
                                             updated_count += 1;
                                         } else {
                                             // check if score updated
-                                            let old_score = KeyDecoder::new()
-                                                .decode_key_zset_data_value(&old_data_value_data);
+                                            let old_score = KeyDecoder::decode_key_zset_data_value(
+                                                &old_data_value_data,
+                                            );
                                             if old_score != new_score {
                                                 updated_count += 1;
                                             }
@@ -148,8 +146,9 @@ impl ZsetCommandCtx {
 
                                     // delete old score key if it exists
                                     if member_exists {
-                                        let old_score = KeyDecoder::new()
-                                            .decode_key_zset_data_value(&old_data_value_data);
+                                        let old_score = KeyDecoder::decode_key_zset_data_value(
+                                            &old_data_value_data,
+                                        );
                                         if old_score != new_score {
                                             let old_score_key = KeyEncoder::new()
                                                 .encode_txnkv_zset_score_key(&key, old_score);
@@ -226,14 +225,11 @@ impl ZsetCommandCtx {
         match ss.get(meta_key).await? {
             Some(meta_value) => {
                 // check key type and ttl
-                if !matches!(
-                    KeyDecoder::new().decode_key_type(&meta_value),
-                    DataType::Zset
-                ) {
+                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Zset) {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
+                let (ttl, size) = KeyDecoder::decode_key_zset_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_zset_expire_if_needed(key)
@@ -259,14 +255,11 @@ impl ZsetCommandCtx {
         match ss.get(meta_key).await? {
             Some(meta_value) => {
                 // check key type and ttl
-                if !matches!(
-                    KeyDecoder::new().decode_key_type(&meta_value),
-                    DataType::Zset
-                ) {
+                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Zset) {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, _) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
+                let (ttl, _) = KeyDecoder::decode_key_zset_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_zset_expire_if_needed(key)
@@ -277,7 +270,7 @@ impl ZsetCommandCtx {
                 let data_key = KeyEncoder::new().encode_txnkv_zset_data_key(key, member);
                 match ss.get(data_key).await? {
                     Some(data_value) => {
-                        let score = KeyDecoder::new().decode_key_zset_data_value(&data_value);
+                        let score = KeyDecoder::decode_key_zset_data_value(&data_value);
                         Ok(resp_bulk(score.to_string().as_bytes().to_vec()))
                     }
                     None => Ok(resp_nil()),
@@ -306,14 +299,11 @@ impl ZsetCommandCtx {
         match ss.get(meta_key.to_owned()).await? {
             Some(meta_value) => {
                 // check key type and ttl
-                if !matches!(
-                    KeyDecoder::new().decode_key_type(&meta_value),
-                    DataType::Zset
-                ) {
+                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Zset) {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
+                let (ttl, size) = KeyDecoder::decode_key_zset_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_zset_expire_if_needed(key)
@@ -360,14 +350,11 @@ impl ZsetCommandCtx {
         match ss.get(meta_key.to_owned()).await? {
             Some(meta_value) => {
                 // check key type and ttl
-                if !matches!(
-                    KeyDecoder::new().decode_key_type(&meta_value),
-                    DataType::Zset
-                ) {
+                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Zset) {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
+                let (ttl, size) = KeyDecoder::decode_key_zset_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_zset_expire_if_needed(key)
@@ -414,8 +401,7 @@ impl ZsetCommandCtx {
                     }
                     if with_scores {
                         // decode vec[u8] to i64
-                        let score =
-                            KeyDecoder::new().decode_key_zset_score_from_scorekey(key, kv.0);
+                        let score = KeyDecoder::decode_key_zset_score_from_scorekey(key, kv.0);
                         if reverse {
                             resp.insert(1, resp_bulk(score.to_string().as_bytes().to_vec()));
                         } else {
@@ -451,14 +437,11 @@ impl ZsetCommandCtx {
         match ss.get(meta_key.to_owned()).await? {
             Some(meta_value) => {
                 // check key type and ttl
-                if !matches!(
-                    KeyDecoder::new().decode_key_type(&meta_value),
-                    DataType::Zset
-                ) {
+                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Zset) {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
+                let (ttl, size) = KeyDecoder::decode_key_zset_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_zset_expire_if_needed(key)
@@ -488,8 +471,7 @@ impl ZsetCommandCtx {
                     }
                     if with_scores {
                         // decode score from score key
-                        let score =
-                            KeyDecoder::new().decode_key_zset_score_from_scorekey(key, kv.0);
+                        let score = KeyDecoder::decode_key_zset_score_from_scorekey(key, kv.0);
                         if reverse {
                             resp.insert(0, resp_bulk(score.to_string().as_bytes().to_vec()));
                         } else {
@@ -527,14 +509,11 @@ impl ZsetCommandCtx {
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check key type and ttl
-                            if !matches!(
-                                KeyDecoder::new().decode_key_type(&meta_value),
-                                DataType::Zset
-                            ) {
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Zset) {
                                 return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
                             }
 
-                            let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
+                            let (ttl, size) = KeyDecoder::decode_key_zset_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()
@@ -560,8 +539,10 @@ impl ZsetCommandCtx {
                                     // push member to resp
                                     resp.push(resp_bulk(kv.1));
                                     // push score to resp
-                                    let score = KeyDecoder::new()
-                                        .decode_key_zset_score_from_scorekey(&key, kv.0.clone());
+                                    let score = KeyDecoder::decode_key_zset_score_from_scorekey(
+                                        &key,
+                                        kv.0.clone(),
+                                    );
                                     resp.push(resp_bulk(score.to_string().as_bytes().to_vec()));
 
                                     txn.delete(data_key).await?;
@@ -604,14 +585,11 @@ impl ZsetCommandCtx {
         match ss.get(meta_key.to_owned()).await? {
             Some(meta_value) => {
                 // check key type and ttl
-                if !matches!(
-                    KeyDecoder::new().decode_key_type(&meta_value),
-                    DataType::Zset
-                ) {
+                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Zset) {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
+                let (ttl, size) = KeyDecoder::decode_key_zset_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_zset_expire_if_needed(key)
@@ -623,12 +601,11 @@ impl ZsetCommandCtx {
                 match ss.get(data_key).await? {
                     Some(data_value) => {
                         // calculate the score rank in score key index
-                        let score = KeyDecoder::new().decode_key_zset_data_value(&data_value);
+                        let score = KeyDecoder::decode_key_zset_data_value(&data_value);
                         let score_key = KeyEncoder::new().encode_txnkv_zset_score_key(key, score);
 
                         // scan from range start
-                        let score_key_start =
-                            KeyEncoder::new().encode_txnkv_zset_score_key(key, 0);
+                        let score_key_start = KeyEncoder::new().encode_txnkv_zset_score_key(key, 0);
                         let range = score_key_start..;
                         let from_range: BoundRange = range.into();
                         let iter = ss.scan_keys(from_range, size.try_into().unwrap()).await?;
@@ -641,14 +618,10 @@ impl ZsetCommandCtx {
                         }
                         Ok(resp_int(rank))
                     }
-                    None => {
-                        Ok(resp_nil())
-                    }
+                    None => Ok(resp_nil()),
                 }
             }
-            None => {
-                Ok(resp_nil())
-            }
+            None => Ok(resp_nil()),
         }
     }
 
@@ -672,14 +645,11 @@ impl ZsetCommandCtx {
                     match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check key type and ttl
-                            if !matches!(
-                                KeyDecoder::new().decode_key_type(&meta_value),
-                                DataType::Zset
-                            ) {
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Zset) {
                                 return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
                             }
 
-                            let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
+                            let (ttl, size) = KeyDecoder::decode_key_zset_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()
@@ -700,7 +670,7 @@ impl ZsetCommandCtx {
 
                                 // decode the score vec to i64
                                 let iscore =
-                                    KeyDecoder::new().decode_key_zset_data_value(&score.unwrap());
+                                    KeyDecoder::decode_key_zset_data_value(&score.unwrap());
                                 // remove member and score key
                                 let score_key =
                                     KeyEncoder::new().encode_txnkv_zset_score_key(&key, iscore);
@@ -752,14 +722,11 @@ impl ZsetCommandCtx {
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check key type and ttl
-                            if !matches!(
-                                KeyDecoder::new().decode_key_type(&meta_value),
-                                DataType::Zset
-                            ) {
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Zset) {
                                 return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
                             }
 
-                            let (ttl, size) = KeyDecoder::new().decode_key_zset_meta(&meta_value);
+                            let (ttl, size) = KeyDecoder::decode_key_zset_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()
@@ -829,7 +796,7 @@ impl ZsetCommandCtx {
                     let mut txn = txn_rc.lock().await;
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
-                            let size = KeyDecoder::new().decode_key_zset_size(&meta_value);
+                            let size = KeyDecoder::decode_key_zset_size(&meta_value);
 
                             let start_key =
                                 KeyEncoder::new().encode_txnkv_zset_data_key_start(&key);
@@ -841,7 +808,7 @@ impl ZsetCommandCtx {
                                 // kv.0 is member key
                                 // kv.1 is score
                                 // decode the score vec to i64
-                                let score = KeyDecoder::new().decode_key_zset_data_value(&kv.1);
+                                let score = KeyDecoder::decode_key_zset_data_value(&kv.1);
                                 // remove member and score key
                                 let score_key =
                                     KeyEncoder::new().encode_txnkv_zset_score_key(&key, score);
@@ -875,11 +842,11 @@ impl ZsetCommandCtx {
                     let mut txn = txn_rc.lock().await;
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
-                            let ttl = KeyDecoder::new().decode_key_ttl(&meta_value);
+                            let ttl = KeyDecoder::decode_key_ttl(&meta_value);
                             if !key_is_expired(ttl) {
                                 return Ok(0);
                             }
-                            let size = KeyDecoder::new().decode_key_zset_size(&meta_value);
+                            let size = KeyDecoder::decode_key_zset_size(&meta_value);
 
                             let start_key =
                                 KeyEncoder::new().encode_txnkv_zset_data_key_start(&key);
@@ -891,7 +858,7 @@ impl ZsetCommandCtx {
                                 // kv.0 is member key
                                 // kv.1 is score
                                 // decode the score vec to i64
-                                let score = KeyDecoder::new().decode_key_zset_data_value(&kv.1);
+                                let score = KeyDecoder::decode_key_zset_data_value(&kv.1);
                                 // remove member and score key
                                 let score_key =
                                     KeyEncoder::new().encode_txnkv_zset_score_key(&key, score);

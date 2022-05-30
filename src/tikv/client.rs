@@ -269,6 +269,7 @@ impl RawClientWrapper {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_cf(&self, cf: ColumnFamily) -> RawClient {
         self.client.with_cf(cf)
     }
@@ -366,6 +367,7 @@ impl RawClientWrapper {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn batch_delete(&self, keys: Vec<Key>) -> Result<(), Error> {
         let mut last_err: Option<Error> = None;
         for i in 0..self.retries {
@@ -389,6 +391,7 @@ impl RawClientWrapper {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn scan(&self, range: BoundRange, limit: u32) -> Result<Vec<KvPair>, Error> {
         let mut last_err: Option<Error> = None;
         for i in 0..self.retries {
@@ -458,6 +461,7 @@ impl RawClientWrapper {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn delete_range(&self, range: BoundRange) -> Result<(), Error> {
         let mut last_err: Option<Error> = None;
         for i in 0..self.retries {

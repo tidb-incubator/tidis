@@ -1,11 +1,11 @@
 use tokio::sync::{broadcast, Notify};
 use tokio::time::{self, Duration, Instant};
 
+use crate::config::LOGGER;
 use bytes::Bytes;
+use slog::debug;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
-use slog::debug;
-use crate::config::LOGGER;
 
 /// A wrapper around a `Db` instance. This exists to allow orderly cleanup
 /// of the `Db` by signalling the background purge task to shut down when

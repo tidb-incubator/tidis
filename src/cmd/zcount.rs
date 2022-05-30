@@ -1,17 +1,17 @@
 use std::sync::Arc;
 
-use crate::cmd::{Parse};
+use crate::cmd::Parse;
+use crate::config::is_use_txn_api;
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::zset::ZsetCommandCtx;
-use crate::{Connection, Frame};
-use crate::config::{is_use_txn_api};
 use crate::utils::{resp_err, resp_invalid_arguments};
+use crate::{Connection, Frame};
 
+use crate::config::LOGGER;
 use bytes::{Buf, Bytes};
+use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
-use crate::config::LOGGER;
-use slog::debug;
 
 #[derive(Debug)]
 pub struct Zcount {
@@ -59,14 +59,18 @@ impl Zcount {
             bmin.advance(1);
             min_inclusive = false;
         }
-        let min = String::from_utf8_lossy(&bmin.to_vec()).parse::<i64>().unwrap();
-        
+        let min = String::from_utf8_lossy(&bmin.to_vec())
+            .parse::<i64>()
+            .unwrap();
+
         let mut bmax = parse.next_bytes()?;
         if bmax[0] == b'(' {
             bmax.advance(1);
             max_inclusive = false;
         }
-        let max = String::from_utf8_lossy(&bmax.to_vec()).parse::<i64>().unwrap();
+        let max = String::from_utf8_lossy(&bmax.to_vec())
+            .parse::<i64>()
+            .unwrap();
 
         let z = Zcount::new(&key, min, min_inclusive, max, max_inclusive);
 
@@ -88,14 +92,18 @@ impl Zcount {
             bmin.advance(1);
             min_inclusive = false;
         }
-        let min = String::from_utf8_lossy(&bmin.to_vec()).parse::<i64>().unwrap();
-        
+        let min = String::from_utf8_lossy(&bmin.to_vec())
+            .parse::<i64>()
+            .unwrap();
+
         let mut bmax = Bytes::from(argv[2].clone());
         if bmax[0] == b'(' {
             bmax.advance(1);
             max_inclusive = false;
         }
-        let max = String::from_utf8_lossy(&bmax.to_vec()).parse::<i64>().unwrap();
+        let max = String::from_utf8_lossy(&bmax.to_vec())
+            .parse::<i64>()
+            .unwrap();
 
         let z = Zcount::new(&argv[0], min, min_inclusive, max, max_inclusive);
         Ok(z)
@@ -103,7 +111,13 @@ impl Zcount {
 
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         let response = self.zcount(None).await?;
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
         dst.write_frame(&response).await?;
 
         Ok(())
@@ -111,10 +125,18 @@ impl Zcount {
 
     pub async fn zcount(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
         if !self.valid {
-            return Ok(resp_invalid_arguments())
+            return Ok(resp_invalid_arguments());
         }
         if is_use_txn_api() {
-            ZsetCommandCtx::new(txn).do_async_txnkv_zcount(&self.key, self.min, self.min_inclusive, self.max, self.max_inclusive).await
+            ZsetCommandCtx::new(txn)
+                .do_async_txnkv_zcount(
+                    &self.key,
+                    self.min,
+                    self.min_inclusive,
+                    self.max,
+                    self.max_inclusive,
+                )
+                .await
         } else {
             Ok(resp_err("not supported yet"))
         }

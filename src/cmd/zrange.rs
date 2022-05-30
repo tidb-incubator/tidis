@@ -1,16 +1,16 @@
 use std::sync::Arc;
 
-use crate::cmd::{Parse};
+use crate::cmd::Parse;
+use crate::config::is_use_txn_api;
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::zset::ZsetCommandCtx;
-use crate::{Connection, Frame};
-use crate::config::{is_use_txn_api};
 use crate::utils::{resp_err, resp_invalid_arguments};
+use crate::{Connection, Frame};
 
-use tikv_client::Transaction;
-use tokio::sync::Mutex;
 use crate::config::LOGGER;
 use slog::debug;
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 
 #[derive(Debug)]
 pub struct Zrange {
@@ -58,15 +58,15 @@ impl Zrange {
         while let Ok(v) = parse.next_string() {
             match v.to_uppercase().as_str() {
                 // flags implement in single command, such as ZRANGEBYSCORE
-                "BYSCORE" => {},
-                "BYLEX" => {},
+                "BYSCORE" => {}
+                "BYLEX" => {}
                 "REV" => {
                     reverse = true;
-                },
-                "LIMIT" => {},
+                }
+                "LIMIT" => {}
                 "WITHSCORES" => {
                     withscores = true;
-                },
+                }
                 _ => {}
             }
         }
@@ -84,11 +84,11 @@ impl Zrange {
         let max;
         match argv[1].parse::<i64>() {
             Ok(v) => min = v,
-            Err(_) => return Ok(Zrange::new_invalid())
+            Err(_) => return Ok(Zrange::new_invalid()),
         }
         match argv[2].parse::<i64>() {
             Ok(v) => max = v,
-            Err(_) => return Ok(Zrange::new_invalid())
+            Err(_) => return Ok(Zrange::new_invalid()),
         }
         let mut withscores = false;
         let mut reverse = false;
@@ -96,15 +96,15 @@ impl Zrange {
         for arg in &argv[2..] {
             match arg.to_uppercase().as_str() {
                 // flags implement in single command, such as ZRANGEBYSCORE
-                "BYSCORE" => {},
-                "BYLEX" => {},
+                "BYSCORE" => {}
+                "BYLEX" => {}
                 "REV" => {
                     reverse = true;
-                },
-                "LIMIT" => {},
+                }
+                "LIMIT" => {}
                 "WITHSCORES" => {
                     withscores = true;
-                },
+                }
                 _ => {}
             }
         }
@@ -115,7 +115,13 @@ impl Zrange {
 
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         let response = self.zrange(None).await?;
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
         dst.write_frame(&response).await?;
 
         Ok(())
@@ -126,7 +132,9 @@ impl Zrange {
             return Ok(resp_invalid_arguments());
         }
         if is_use_txn_api() {
-            ZsetCommandCtx::new(txn).do_async_txnkv_zrange(&self.key, self.min, self.max, self.withscores, self.reverse).await
+            ZsetCommandCtx::new(txn)
+                .do_async_txnkv_zrange(&self.key, self.min, self.max, self.withscores, self.reverse)
+                .await
         } else {
             Ok(resp_err("not supported yet"))
         }

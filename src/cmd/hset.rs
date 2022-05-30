@@ -1,16 +1,16 @@
 use std::sync::Arc;
 
-use crate::cmd::{Parse};
+use crate::cmd::Parse;
+use crate::config::is_use_txn_api;
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::hash::HashCommandCtx;
-use crate::{Connection, Frame};
-use crate::config::{is_use_txn_api};
 use crate::utils::{resp_err, resp_invalid_arguments};
+use crate::{Connection, Frame};
 
-use tokio::sync::Mutex;
-use tikv_client::{KvPair, Transaction};
 use crate::config::LOGGER;
 use slog::debug;
+use tikv_client::{KvPair, Transaction};
+use tokio::sync::Mutex;
 
 #[derive(Debug)]
 pub struct Hset {
@@ -22,7 +22,7 @@ pub struct Hset {
 impl Hset {
     pub fn new() -> Hset {
         Hset {
-            field_and_value:vec![],
+            field_and_value: vec![],
             key: String::new(),
             valid: true,
         }
@@ -59,7 +59,7 @@ impl Hset {
 
         let key = parse.next_string()?;
         hset.set_key(&key);
-        
+
         loop {
             if let Ok(field) = parse.next_string() {
                 if let Ok(value) = parse.next_bytes() {
@@ -85,7 +85,7 @@ impl Hset {
 
         for idx in (1..argv.len()).step_by(2) {
             let field = argv[idx].to_owned();
-            let value = argv[idx+1].to_owned().as_bytes().to_vec();
+            let value = argv[idx + 1].to_owned().as_bytes().to_vec();
             let kv = KvPair::new(field, value);
             hset.add_field_value(kv);
         }
@@ -94,18 +94,30 @@ impl Hset {
 
     pub(crate) async fn apply(self, dst: &mut Connection, is_hmset: bool) -> crate::Result<()> {
         let response = self.hset(None, is_hmset).await?;
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
         dst.write_frame(&response).await?;
 
         Ok(())
     }
 
-    pub async fn hset(&self, txn: Option<Arc<Mutex<Transaction>>>, is_hmset: bool) -> AsyncResult<Frame> {
+    pub async fn hset(
+        &self,
+        txn: Option<Arc<Mutex<Transaction>>>,
+        is_hmset: bool,
+    ) -> AsyncResult<Frame> {
         if !self.valid {
             return Ok(resp_invalid_arguments());
         }
         if is_use_txn_api() {
-            HashCommandCtx::new(txn).do_async_txnkv_hset(&self.key, &self.field_and_value, is_hmset).await
+            HashCommandCtx::new(txn)
+                .do_async_txnkv_hset(&self.key, &self.field_and_value, is_hmset)
+                .await
         } else {
             Ok(resp_err("not supported yet"))
         }

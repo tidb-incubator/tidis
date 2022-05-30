@@ -8,20 +8,19 @@ use std::fs::OpenOptions;
 
 lazy_static! {
     pub static ref LOGGER: slog::Logger = slog::Logger::root(
-        slog_term::FullFormat::new(
-            slog_term::PlainSyncDecorator::new(OpenOptions::new()
-                                                .create(true)
-                                                .write(true)
-                                                .truncate(true)
-                                                .open(log_file())
-                                                .unwrap()
-            )
-        )
+        slog_term::FullFormat::new(slog_term::PlainSyncDecorator::new(
+            OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(log_file())
+                .unwrap()
+        ))
         .build()
         .filter_level(slog::Level::from_usize(log_level()).unwrap())
         .fuse(),
-        slog::o!());
-        
+        slog::o!()
+    );
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -219,7 +218,6 @@ pub fn config_instance_id_or_default() -> String {
     "1".to_owned()
 }
 
-
 pub fn config_prometheus_listen_or_default() -> String {
     unsafe {
         if let Some(c) = &SERVER_CONFIG {
@@ -243,7 +241,7 @@ pub fn config_prometheus_port_or_default() -> String {
 }
 
 pub fn config_local_pool_number() -> usize {
-    unsafe{
+    unsafe {
         if let Some(c) = &SERVER_CONFIG {
             if let Some(s) = c.backend.local_pool_number {
                 return s;

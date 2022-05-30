@@ -1,33 +1,20 @@
 use tikv_service::{
-    server,
-    set_instance_id,
-    do_async_connect,
-    PrometheusServer,
-    Config,
-    set_global_config,
-    config_listen_or_default,
-    config_port_or_default,
-    config_tls_listen_or_default,
-    config_tls_port_or_default,
-    config_tls_cert_file_or_default,
-    config_tls_key_file_or_default,
-    config_tls_ca_cert_file_or_default,
-    config_tls_auth_client_or_default,
-    config_prometheus_listen_or_default,
-    config_prometheus_port_or_default,
-    config_pd_addrs_or_default,
-    config_instance_id_or_default,
-    utils,
+    config_instance_id_or_default, config_listen_or_default, config_pd_addrs_or_default,
+    config_port_or_default, config_prometheus_listen_or_default, config_prometheus_port_or_default,
+    config_tls_auth_client_or_default, config_tls_ca_cert_file_or_default,
+    config_tls_cert_file_or_default, config_tls_key_file_or_default, config_tls_listen_or_default,
+    config_tls_port_or_default, do_async_connect, server, set_global_config, set_instance_id,
+    utils, Config, PrometheusServer,
 };
 
 use slog::info;
 
-use structopt::StructOpt;
 use async_std::net::TcpListener;
-use tokio::signal;
 use std::fs;
 use std::process::exit;
 use std::sync::Arc;
+use structopt::StructOpt;
+use tokio::signal;
 
 use async_tls::TlsAcceptor;
 
@@ -39,8 +26,8 @@ pub async fn main() -> tikv_service::Result<()> {
 
     match cli.config {
         Some(config_file_name) => {
-            let config_content = fs::read_to_string(config_file_name)
-            .expect("Failed to read config file");
+            let config_content =
+                fs::read_to_string(config_file_name).expect("Failed to read config file");
 
             // deserialize toml config
             config = match toml::from_str(&config_content) {
@@ -50,7 +37,7 @@ pub async fn main() -> tikv_service::Result<()> {
                     exit(1);
                 }
             };
-        },
+        }
         None => (),
     };
 
@@ -77,7 +64,10 @@ pub async fn main() -> tikv_service::Result<()> {
     let c_tls_auth_client = config_tls_auth_client_or_default();
     let tls_auth_client = cli.tls_auth_client.unwrap_or(c_tls_auth_client);
     let c_tls_ca_cert_file = config_tls_ca_cert_file_or_default();
-    let tls_ca_cert_file = cli.tls_ca_cert_file.as_deref().unwrap_or(&c_tls_ca_cert_file);
+    let tls_ca_cert_file = cli
+        .tls_ca_cert_file
+        .as_deref()
+        .unwrap_or(&c_tls_ca_cert_file);
     let c_pd_addrs = config_pd_addrs_or_default();
     let pd_addrs = cli.pd_addrs.as_deref().unwrap_or(&c_pd_addrs);
     let c_instance_id = config_instance_id_or_default();
@@ -103,7 +93,10 @@ pub async fn main() -> tikv_service::Result<()> {
     //do_async_txn_connect(addrs).await?;
     do_async_connect(addrs).await?;
 
-    let server = PrometheusServer::new(format!("{}:{}", &prom_listen, prom_port), instance_id as i64);
+    let server = PrometheusServer::new(
+        format!("{}:{}", &prom_listen, prom_port),
+        instance_id as i64,
+    );
     tokio::spawn(async move {
         server.run().await;
     });
@@ -112,18 +105,29 @@ pub async fn main() -> tikv_service::Result<()> {
     let mut tls_listener = None;
     let mut tls_acceptor = None;
     if port != "0" {
-        info!(tikv_service::config::LOGGER, "TiKV Service Server Listen on: {}:{}", &listen_addr, port);
+        info!(
+            tikv_service::config::LOGGER,
+            "TiKV Service Server Listen on: {}:{}", &listen_addr, port
+        );
         // Bind a TCP listener
         listener = Some(TcpListener::bind(&format!("{}:{}", &listen_addr, port)).await?);
     }
 
     if tls_port != "0" && tls_cert_file != "" && tls_cert_file != "" {
-        info!(tikv_service::config::LOGGER, "TiKV Service Server SSL Listen on: {}:{}", &tls_listen_addr, tls_port);
-        tls_listener = Some(TcpListener::bind(&format!("{}:{}", &tls_listen_addr, tls_port)).await?);
-        let tls_config = utils::load_config(&tls_cert_file, &tls_key_file, tls_auth_client, &tls_ca_cert_file)?;
+        info!(
+            tikv_service::config::LOGGER,
+            "TiKV Service Server SSL Listen on: {}:{}", &tls_listen_addr, tls_port
+        );
+        tls_listener =
+            Some(TcpListener::bind(&format!("{}:{}", &tls_listen_addr, tls_port)).await?);
+        let tls_config = utils::load_config(
+            &tls_cert_file,
+            &tls_key_file,
+            tls_auth_client,
+            &tls_ca_cert_file,
+        )?;
         tls_acceptor = Some(TlsAcceptor::from(Arc::new(tls_config)));
     }
-
 
     server::run(listener, tls_listener, tls_acceptor, signal::ctrl_c()).await;
 
@@ -172,4 +176,3 @@ struct Cli {
     #[structopt(name = "config", long = "--config")]
     config: Option<String>,
 }
-

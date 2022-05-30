@@ -1,30 +1,16 @@
 use std::sync::Arc;
 
-use tokio::sync::Mutex;
+use super::{errors::AsyncResult, errors::RTError};
 use crate::db::Db;
-use crate::{Frame, Command, utils::resp_invalid_arguments};
-use tikv_client::{Transaction};
-use super::{
-    errors::AsyncResult,
-    errors::RTError,
-};
-use crate::utils::{
-    lua_resp_to_redis_resp,
-    redis_resp_to_lua_resp, resp_err,
-};
+use crate::utils::{lua_resp_to_redis_resp, redis_resp_to_lua_resp, resp_err};
+use crate::{utils::resp_invalid_arguments, Command, Frame};
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 
 use crate::config::LOGGER;
-use slog::{
-    debug,
-    error,
-};
+use slog::{debug, error};
 
-use mlua::{
-    Lua,
-    Value as LuaValue,
-    prelude::*,
-    Variadic,
-};
+use mlua::{prelude::*, Lua, Value as LuaValue, Variadic};
 
 #[derive(Clone)]
 pub struct LuaCommandCtx<'a> {
@@ -34,20 +20,20 @@ pub struct LuaCommandCtx<'a> {
 
 impl<'a> LuaCommandCtx<'a> {
     pub fn new(txn: Option<Arc<Mutex<Transaction>>>, lua: &'a Option<Lua>) -> Self {
-        LuaCommandCtx {
-            txn,
-            lua,
-        }
+        LuaCommandCtx { txn, lua }
     }
 
-    pub async fn do_async_eval_inner(self, script: &str, keys: &Vec<String>, args: &Vec<String>) -> LuaResult<Frame> {
+    pub async fn do_async_eval_inner(
+        self,
+        script: &str,
+        keys: &Vec<String>,
+        args: &Vec<String>,
+    ) -> LuaResult<Frame> {
         let keys = keys.clone();
         let args = args.clone();
         let lua = match self.lua {
             Some(lua) => lua,
-            None => {
-                return Ok(resp_err("lua context is not initialized"))
-            }
+            None => return Ok(resp_err("lua context is not initialized")),
         };
         //let lua = lua_rc.lock().await;
 
@@ -57,28 +43,30 @@ impl<'a> LuaCommandCtx<'a> {
         let keys_table = lua.create_table()?;
         for idx in 0..keys.len() {
             let key = keys[idx].clone();
-            keys_table.set(idx+1, key)?;
+            keys_table.set(idx + 1, key)?;
         }
         let args_table = lua.create_table()?;
         for idx in 0..args.len() {
             let arg = args[idx].clone();
-            args_table.set(idx+1, arg)?;
+            args_table.set(idx + 1, arg)?;
         }
 
         globals.set("KEYS", keys_table)?;
         globals.set("ARGV", args_table)?;
-        
+
         // Regist redis.call etc to handle redis.* command call in lua
         // create redis.* commands table
         let redis = lua.create_table()?;
         let txn_rc = self.txn;
-        
+
         let redis_call = lua.create_async_function(move |_lua, args: Variadic<String>| {
             let txn_rc = txn_rc.clone();
             // package arguments(without cmd) to argv
             async move {
                 if (&args).len() == 0 {
-                    return Ok(LuaValue::String(_lua.create_string("invalid arguments").unwrap()));
+                    return Ok(LuaValue::String(
+                        _lua.create_string("invalid arguments").unwrap(),
+                    ));
                 }
                 let cmd_name = &args.as_slice()[0];
                 let mut argv = vec![];
@@ -145,17 +133,19 @@ impl<'a> LuaCommandCtx<'a> {
                     Command::Zcount(cmd) => cmd.zcount(txn_rc.clone()).await,
                     Command::Zpopmin(cmd) => cmd.zpop(txn_rc.clone(), true).await,
                     Command::Zrank(cmd) => cmd.zrank(txn_rc.clone()).await,
-                    _ => {Ok(resp_invalid_arguments())}
+                    _ => Ok(resp_invalid_arguments()),
                 };
                 match result {
                     Ok(resp) => {
                         debug!(LOGGER, "response call from lua {:?}", resp);
                         let lua_resp = redis_resp_to_lua_resp(resp, _lua);
                         return Ok(lua_resp);
-                    },
+                    }
                     Err(e) => {
                         error!(LOGGER, "response call from lua failed {}", e);
-                        return Ok(LuaValue::String(_lua.create_string(&e.to_string()).unwrap()));
+                        return Ok(LuaValue::String(
+                            _lua.create_string(&e.to_string()).unwrap(),
+                        ));
                     }
                 }
             }
@@ -175,12 +165,16 @@ impl<'a> LuaCommandCtx<'a> {
         Ok(redis_resp)
     }
 
-    pub async fn do_async_eval(self, script: &str, _: &Db, keys: &Vec<String>, args: &Vec<String>) -> AsyncResult<Frame> {
+    pub async fn do_async_eval(
+        self,
+        script: &str,
+        _: &Db,
+        keys: &Vec<String>,
+        args: &Vec<String>,
+    ) -> AsyncResult<Frame> {
         let lua_resp = self.clone().do_async_eval_inner(script, keys, args).await;
         match lua_resp {
-            Ok(resp) => {
-                Ok(resp)
-            },
+            Ok(resp) => Ok(resp),
             Err(err) => {
                 //return Ok(resp_err(&err.to_string()));
                 Err(RTError::StringError(err.to_string()))
@@ -188,26 +182,30 @@ impl<'a> LuaCommandCtx<'a> {
         }
     }
 
-    pub async fn do_async_evalsha(self, sha1: &str, db: &Db, keys: &Vec<String>, args: &Vec<String>) -> AsyncResult<Frame> {
+    pub async fn do_async_evalsha(
+        self,
+        sha1: &str,
+        db: &Db,
+        keys: &Vec<String>,
+        args: &Vec<String>,
+    ) -> AsyncResult<Frame> {
         // get script from cache with sha1 key
         let script = db.get_script(sha1);
         match script {
             Some(script) => {
-                let lua_resp = self.clone().do_async_eval_inner(&String::from_utf8_lossy(&script.to_vec()), keys, args).await;
+                let lua_resp = self
+                    .clone()
+                    .do_async_eval_inner(&String::from_utf8_lossy(&script.to_vec()), keys, args)
+                    .await;
                 match lua_resp {
-                    Ok(resp) => {
-                        Ok(resp)
-                    },
+                    Ok(resp) => Ok(resp),
                     Err(err) => {
                         //return Ok(resp_err(&err.to_string()));
                         Err(RTError::StringError(err.to_string()))
                     }
                 }
-            },
-            None => {
-                Ok(resp_err("NOSCRIPT No matching script. Please use EVAL."))
             }
+            None => Ok(resp_err("NOSCRIPT No matching script. Please use EVAL.")),
         }
-        
     }
 }

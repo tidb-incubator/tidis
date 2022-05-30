@@ -1,6 +1,6 @@
+use crate::tikv::get_instance_id;
 use tikv_client::Key;
 use tikv_client::Value;
-use crate::tikv::get_instance_id;
 
 use super::DataType;
 
@@ -12,7 +12,9 @@ impl KeyEncoder {
     pub fn new() -> Self {
         let inst_id_bytes = get_instance_id().to_be_bytes().to_vec();
         let inst_id = String::from_utf8(inst_id_bytes).unwrap();
-        KeyEncoder { instance_id: inst_id}
+        KeyEncoder {
+            instance_id: inst_id,
+        }
     }
 
     fn get_prefix(&self, tp: DataType) -> String {
@@ -24,11 +26,7 @@ impl KeyEncoder {
             DataType::Zset => "Z",
             DataType::Null => "N",
         };
-        format!(
-            "x$R_{}_{}",
-            self.instance_id,
-            dt_prefix
-        )
+        format!("x$R_{}_{}", self.instance_id, dt_prefix)
     }
 
     fn get_type_bytes(&self, dt: DataType) -> u8 {
@@ -106,9 +104,8 @@ impl KeyEncoder {
         ret.into()
     }
 
-
     /// idx range [0, 1<<64]
-    /// left initial value  1<<32, left is point to the left element 
+    /// left initial value  1<<32, left is point to the left element
     /// right initial value 1<<32, right is point to the next right position of right element
     /// list is indicated as null if left index equal to right
     pub fn encode_txnkv_list_data_key(&self, key: &str, idx: u64) -> Key {

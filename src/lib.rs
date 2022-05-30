@@ -30,8 +30,8 @@ extern crate lazy_static;
 #[macro_use]
 extern crate prometheus;
 
-extern crate thiserror;
 extern crate hyper;
+extern crate thiserror;
 
 pub mod cmd;
 pub use cmd::Command;
@@ -58,41 +58,41 @@ mod metrics;
 pub use metrics::PrometheusServer;
 
 mod tikv;
-pub use tikv::set_instance_id;
+pub use tikv::do_async_connect;
 pub use tikv::do_async_raw_connect;
 pub use tikv::do_async_txn_connect;
-pub use tikv::do_async_connect;
+pub use tikv::set_instance_id;
 
 pub mod utils;
 
 pub mod config;
-pub use config::Config;
-pub use config::set_global_config;
-pub use config::get_global_config;
-pub use config::is_try_one_pc_commit;
-pub use config::is_use_async_commit;
-pub use config::is_use_txn_api;
-pub use config::is_use_pessimistic_txn;
 pub use config::config_instance_id_or_default;
 pub use config::config_listen_or_default;
+pub use config::config_local_pool_number;
 pub use config::config_pd_addrs_or_default;
 pub use config::config_port_or_default;
-pub use config::config_tls_listen_or_default;
-pub use config::config_tls_port_or_default;
-pub use config::config_tls_cert_file_or_default;
-pub use config::config_tls_key_file_or_default;
-pub use config::config_tls_ca_cert_file_or_default;
-pub use config::config_tls_auth_client_or_default;
 pub use config::config_prometheus_listen_or_default;
 pub use config::config_prometheus_port_or_default;
-pub use config::config_local_pool_number;
+pub use config::config_tls_auth_client_or_default;
+pub use config::config_tls_ca_cert_file_or_default;
+pub use config::config_tls_cert_file_or_default;
+pub use config::config_tls_key_file_or_default;
+pub use config::config_tls_listen_or_default;
+pub use config::config_tls_port_or_default;
+pub use config::get_global_config;
 pub use config::is_auth_enabled;
 pub use config::is_auth_matched;
-pub use config::txn_retry_count;
-pub use config::txn_region_backoff_delay_ms;
-pub use config::txn_region_backoff_delay_attemps;
-pub use config::txn_lock_backoff_delay_ms;
+pub use config::is_try_one_pc_commit;
+pub use config::is_use_async_commit;
+pub use config::is_use_pessimistic_txn;
+pub use config::is_use_txn_api;
+pub use config::set_global_config;
 pub use config::txn_lock_backoff_delay_attemps;
+pub use config::txn_lock_backoff_delay_ms;
+pub use config::txn_region_backoff_delay_attemps;
+pub use config::txn_region_backoff_delay_ms;
+pub use config::txn_retry_count;
+pub use config::Config;
 
 /// Default port that a redis server listens on.
 ///

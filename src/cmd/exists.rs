@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
+use crate::config::is_use_txn_api;
+use crate::tikv::errors::AsyncResult;
+use crate::tikv::string::StringCommandCtx;
 use crate::utils::resp_invalid_arguments;
 use crate::{Connection, Frame, Parse};
-use crate::tikv::string::StringCommandCtx;
-use crate::config::{is_use_txn_api};
-use crate::tikv::errors::AsyncResult;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
@@ -46,9 +46,15 @@ impl Exists {
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Exists> {
         if argv.len() == 0 {
-            return Ok(Exists{keys: vec![], valid: false})
+            return Ok(Exists {
+                keys: vec![],
+                valid: false,
+            });
         }
-        Ok(Exists{keys: argv.to_owned(), valid: true})
+        Ok(Exists {
+            keys: argv.to_owned(),
+            valid: true,
+        })
     }
 
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
@@ -57,7 +63,13 @@ impl Exists {
             Err(e) => Frame::Error(e.to_string()),
         };
 
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
 
         dst.write_frame(&response).await?;
 
@@ -69,9 +81,13 @@ impl Exists {
             return Ok(resp_invalid_arguments());
         }
         if is_use_txn_api() {
-            StringCommandCtx::new(txn).do_async_txnkv_exists(&self.keys).await
+            StringCommandCtx::new(txn)
+                .do_async_txnkv_exists(&self.keys)
+                .await
         } else {
-            StringCommandCtx::new(txn).do_async_rawkv_exists(&self.keys).await
+            StringCommandCtx::new(txn)
+                .do_async_rawkv_exists(&self.keys)
+                .await
         }
     }
 }

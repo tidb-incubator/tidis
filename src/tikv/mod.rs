@@ -1,10 +1,10 @@
+use pprof::protos::Message;
 use std::collections::{HashMap, LinkedList};
 use std::fs::File;
 use std::io::Write;
 use std::sync::{Arc, RwLock};
-use pprof::protos::Message;
-use tokio::sync::Mutex;
 use std::time::Duration;
+use tokio::sync::Mutex;
 
 use tikv_client::{RawClient, Transaction, TransactionClient};
 
@@ -13,17 +13,17 @@ use crate::config::LOGGER;
 use self::client::RawClientWrapper;
 use self::client::TxnClientWrapper;
 
-use self::errors::{RTError, AsyncResult};
+use self::errors::{AsyncResult, RTError};
 
-pub mod string;
-pub mod hash;
-pub mod list;
-pub mod set;
-pub mod zset;
-pub mod lua;
-pub mod errors;
 pub mod client;
 pub mod encoding;
+pub mod errors;
+pub mod hash;
+pub mod list;
+pub mod lua;
+pub mod set;
+pub mod string;
+pub mod zset;
 
 lazy_static! {
     pub static ref PD_ADDRS: Arc<RwLock<Option<Vec<String>>>> = Arc::new(RwLock::new(None));
@@ -38,10 +38,10 @@ pub static mut PROFILER_GUARD: Option<pprof::ProfilerGuard> = None;
 pub fn start_profiler() {
     unsafe {
         let guard = pprof::ProfilerGuardBuilder::default()
-        .frequency(1000)
-        //.blocklist(&["libc", "libgcc", "pthread", "vdso"])
-        .build()
-        .unwrap();
+            .frequency(1000)
+            //.blocklist(&["libc", "libgcc", "pthread", "vdso"])
+            .build()
+            .unwrap();
         PROFILER_GUARD = Some(guard);
     }
 }
@@ -83,21 +83,20 @@ pub fn get_instance_id() -> u64 {
     unsafe { INSTANCE_ID }
 }
 
-
 pub fn get_client() -> Result<RawClientWrapper, RTError> {
-    if unsafe {TIKV_RAW_CLIENT.is_none() } {
-        return Err(RTError::StringError(String::from("Not Connected")))
+    if unsafe { TIKV_RAW_CLIENT.is_none() } {
+        return Err(RTError::StringError(String::from("Not Connected")));
     }
-    let client = unsafe {TIKV_RAW_CLIENT.as_ref().unwrap() };
+    let client = unsafe { TIKV_RAW_CLIENT.as_ref().unwrap() };
     let ret = RawClientWrapper::new(client);
     Ok(ret)
 }
 
 pub fn get_txn_client() -> Result<TxnClientWrapper<'static>, RTError> {
-    if unsafe {TIKV_RAW_CLIENT.is_none() } {
-        return Err(RTError::StringError(String::from("Not Connected")))
+    if unsafe { TIKV_RAW_CLIENT.is_none() } {
+        return Err(RTError::StringError(String::from("Not Connected")));
     }
-    let client = unsafe {TIKV_TXN_CLIENT.as_ref().unwrap() };
+    let client = unsafe { TIKV_TXN_CLIENT.as_ref().unwrap() };
     let ret = TxnClientWrapper::new(client);
     Ok(ret)
 }
@@ -105,7 +104,6 @@ pub fn get_txn_client() -> Result<TxnClientWrapper<'static>, RTError> {
 pub async fn sleep(ms: u32) {
     tokio::time::sleep(Duration::from_millis(ms as u64)).await;
 }
-
 
 pub async fn do_async_txn_connect(addrs: Vec<String>) -> AsyncResult<()> {
     PD_ADDRS.write().unwrap().replace(addrs.clone());

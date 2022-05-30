@@ -1,16 +1,16 @@
 use std::sync::Arc;
 
-use crate::cmd::{Parse};
+use crate::cmd::Parse;
+use crate::config::is_use_txn_api;
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::zset::ZsetCommandCtx;
-use crate::{Connection, Frame};
-use crate::config::{is_use_txn_api};
 use crate::utils::{resp_err, resp_invalid_arguments};
+use crate::{Connection, Frame};
 
-use tikv_client::Transaction;
-use tokio::sync::Mutex;
 use crate::config::LOGGER;
 use slog::debug;
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 
 #[derive(Debug)]
 pub struct Zpop {
@@ -43,7 +43,11 @@ impl Zpop {
         if let Ok(c) = parse.next_int() {
             count = c;
         }
-        Ok(Zpop{key, count, valid: true })
+        Ok(Zpop {
+            key,
+            count,
+            valid: true,
+        })
     }
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Zpop> {
@@ -61,20 +65,31 @@ impl Zpop {
     }
 
     pub(crate) async fn apply(self, dst: &mut Connection, from_min: bool) -> crate::Result<()> {
-        
         let response = self.zpop(None, from_min).await?;
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
         dst.write_frame(&response).await?;
 
         Ok(())
     }
 
-    pub async fn zpop(&self, txn: Option<Arc<Mutex<Transaction>>>, from_min: bool) -> AsyncResult<Frame> {
+    pub async fn zpop(
+        &self,
+        txn: Option<Arc<Mutex<Transaction>>>,
+        from_min: bool,
+    ) -> AsyncResult<Frame> {
         if !self.valid {
             return Ok(resp_invalid_arguments());
         }
         if is_use_txn_api() {
-            ZsetCommandCtx::new(txn).do_async_txnkv_zpop(&self.key, from_min, self.count as u64).await
+            ZsetCommandCtx::new(txn)
+                .do_async_txnkv_zpop(&self.key, from_min, self.count as u64)
+                .await
         } else {
             Ok(resp_err("not supported yet"))
         }

@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
+use crate::config::is_use_txn_api;
+use crate::config::LOGGER;
 use crate::tikv::errors::AsyncResult;
-use crate::utils::{resp_err, timestamp_from_ttl, resp_invalid_arguments};
-use crate::{Connection, Frame, Parse};
 use crate::tikv::string::StringCommandCtx;
-use crate::config::{is_use_txn_api};
+use crate::utils::{resp_err, resp_invalid_arguments, timestamp_from_ttl};
+use crate::{Connection, Frame, Parse};
+use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
-use crate::config::LOGGER;
-use slog::debug;
 
 #[derive(Debug)]
 pub struct Expire {
@@ -47,7 +47,11 @@ impl Expire {
         let key = parse.next_string()?;
         let seconds = parse.next_int()?;
 
-        Ok(Expire { key: key, seconds: seconds, valid: true})
+        Ok(Expire {
+            key: key,
+            seconds: seconds,
+            valid: true,
+        })
     }
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Expire> {
@@ -61,19 +65,35 @@ impl Expire {
         }
     }
 
-    pub(crate) async fn apply(self, dst: &mut Connection, is_millis: bool, expire_at: bool) -> crate::Result<()> {
+    pub(crate) async fn apply(
+        self,
+        dst: &mut Connection,
+        is_millis: bool,
+        expire_at: bool,
+    ) -> crate::Result<()> {
         let response = match self.expire(is_millis, expire_at, None).await {
             Ok(val) => val,
             Err(e) => Frame::Error(e.to_string()),
         };
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
 
         dst.write_frame(&response).await?;
 
         Ok(())
     }
 
-    pub async fn expire(self, is_millis: bool, expire_at: bool, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+    pub async fn expire(
+        self,
+        is_millis: bool,
+        expire_at: bool,
+        txn: Option<Arc<Mutex<Transaction>>>,
+    ) -> AsyncResult<Frame> {
         if !self.valid {
             return Ok(resp_invalid_arguments());
         }
@@ -85,7 +105,9 @@ impl Expire {
             if !expire_at {
                 ttl = timestamp_from_ttl(ttl);
             }
-            StringCommandCtx::new(txn).do_async_txnkv_expire(&self.key, ttl).await
+            StringCommandCtx::new(txn)
+                .do_async_txnkv_expire(&self.key, ttl)
+                .await
         } else {
             Ok(resp_err("not supported yet"))
         }

@@ -1,16 +1,16 @@
 use std::sync::Arc;
 
-use crate::cmd::{Parse};
+use crate::cmd::Parse;
+use crate::config::is_use_txn_api;
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::zset::ZsetCommandCtx;
-use crate::{Connection, Frame};
-use crate::config::{is_use_txn_api};
 use crate::utils::{resp_err, resp_invalid_arguments};
+use crate::{Connection, Frame};
 
-use tikv_client::Transaction;
-use tokio::sync::Mutex;
 use crate::config::LOGGER;
 use slog::debug;
+use tikv_client::Transaction;
+use tokio::sync::Mutex;
 
 #[derive(Debug)]
 pub struct Zadd {
@@ -70,11 +70,10 @@ impl Zadd {
         self.scores.push(score);
     }
 
-
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Zadd> {
         let key = parse.next_string()?;
         let mut zadd = Zadd::new(&key);
-        let mut first_score:Option<i64>;
+        let mut first_score: Option<i64>;
 
         // try to parse the flag
         loop {
@@ -85,9 +84,7 @@ impl Zadd {
                 Ok(s) if s.to_uppercase() == "XX" => {
                     zadd.set_exists(true);
                 }
-                Ok(s) if s.to_uppercase() == "CH" => {
-                    zadd.set_changed_only(true)
-                }
+                Ok(s) if s.to_uppercase() == "CH" => zadd.set_changed_only(true),
                 Ok(s) if s.to_uppercase() == "GT" => {
                     // TODO:
                 }
@@ -104,7 +101,7 @@ impl Zadd {
                             first_score = Some(score);
                             // flags parse done
                             break;
-                        },
+                        }
                         Err(err) => {
                             // not support flags
                             return Err(err.into());
@@ -147,12 +144,12 @@ impl Zadd {
             return Ok(Zadd::new_invalid());
         }
         let mut zadd = Zadd::new(&argv[0]);
-        let mut first_score:Option<i64>;
+        let mut first_score: Option<i64>;
 
         // try to parse the flag
         let mut idx = 1;
         loop {
-            let arg =  argv[idx].to_uppercase();
+            let arg = argv[idx].to_uppercase();
             if idx >= argv.len() {
                 return Ok(Zadd::new_invalid());
             }
@@ -163,9 +160,7 @@ impl Zadd {
                 "XX" => {
                     zadd.set_exists(true);
                 }
-                "CH" => {
-                    zadd.set_changed_only(true)
-                }
+                "CH" => zadd.set_changed_only(true),
                 "GT" => {
                     // TODO:
                 }
@@ -182,7 +177,7 @@ impl Zadd {
                             first_score = Some(score);
                             // flags parse done
                             break;
-                        },
+                        }
                         Err(_) => {
                             // not support flags
                             return Ok(Zadd::new_invalid());
@@ -231,9 +226,14 @@ impl Zadd {
     }
 
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        
         let response = self.zadd(None).await?;
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
         dst.write_frame(&response).await?;
 
         Ok(())
@@ -244,7 +244,16 @@ impl Zadd {
             return Ok(resp_invalid_arguments());
         }
         if is_use_txn_api() {
-            ZsetCommandCtx::new(txn).do_async_txnkv_zadd(&self.key, &self.members, &self.scores, self.exists, self.changed_only, false).await
+            ZsetCommandCtx::new(txn)
+                .do_async_txnkv_zadd(
+                    &self.key,
+                    &self.members,
+                    &self.scores,
+                    self.exists,
+                    self.changed_only,
+                    false,
+                )
+                .await
         } else {
             Ok(resp_err("not supported yet"))
         }

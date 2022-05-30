@@ -1,17 +1,17 @@
 use std::sync::Arc;
 
-use crate::cmd::{Parse};
+use crate::cmd::Parse;
+use crate::config::is_use_txn_api;
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::list::ListCommandCtx;
-use crate::{Connection, Frame};
-use crate::config::{is_use_txn_api};
 use crate::utils::{resp_err, resp_invalid_arguments};
+use crate::{Connection, Frame};
 
+use crate::config::LOGGER;
 use bytes::Bytes;
+use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
-use crate::config::LOGGER;
-use slog::debug;
 
 #[derive(Debug)]
 pub struct Push {
@@ -75,18 +75,30 @@ impl Push {
 
     pub(crate) async fn apply(self, dst: &mut Connection, op_left: bool) -> crate::Result<()> {
         let response = self.push(None, op_left).await?;
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
         dst.write_frame(&response).await?;
 
         Ok(())
     }
 
-    pub async fn push(&self, txn: Option<Arc<Mutex<Transaction>>>, op_left: bool) -> AsyncResult<Frame> {
+    pub async fn push(
+        &self,
+        txn: Option<Arc<Mutex<Transaction>>>,
+        op_left: bool,
+    ) -> AsyncResult<Frame> {
         if !self.valid {
             return Ok(resp_invalid_arguments());
         }
         if is_use_txn_api() {
-            ListCommandCtx::new(txn).do_async_txnkv_push(&self.key, &self.items, op_left).await
+            ListCommandCtx::new(txn)
+                .do_async_txnkv_push(&self.key, &self.items, op_left)
+                .await
         } else {
             Ok(resp_err("not supported yet"))
         }

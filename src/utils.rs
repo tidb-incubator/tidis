@@ -1,15 +1,16 @@
-use tokio::{
-    time::Duration
-};
-use std::{time::{SystemTime, UNIX_EPOCH}, convert::TryInto};
 use crate::frame::Frame;
-use mlua::{
-    Value as LuaValue,
-    Lua,
+use mlua::{Lua, Value as LuaValue};
+use std::{
+    convert::TryInto,
+    time::{SystemTime, UNIX_EPOCH},
 };
+use tokio::time::Duration;
 
 use async_std::io;
-use rustls::{internal::pemfile::{certs, rsa_private_keys}, AllowAnyAuthenticatedClient, RootCertStore};
+use rustls::{
+    internal::pemfile::{certs, rsa_private_keys},
+    AllowAnyAuthenticatedClient, RootCertStore,
+};
 use rustls::{Certificate, NoClientAuth, PrivateKey, ServerConfig};
 use std::fs::File;
 use std::io::BufReader;
@@ -57,19 +58,13 @@ pub async fn sleep(ms: u32) {
 
 pub fn lua_resp_to_redis_resp(resp: LuaValue) -> Frame {
     match resp {
-        LuaValue::String(r) => {
-            resp_bulk(r.to_str().unwrap().as_bytes().to_vec())
-        },
-        LuaValue::Integer(r) => {
-            resp_int(r)
-        },
+        LuaValue::String(r) => resp_bulk(r.to_str().unwrap().as_bytes().to_vec()),
+        LuaValue::Integer(r) => resp_int(r),
         LuaValue::Boolean(r) => {
             let r_int: i64 = if r == false { 0 } else { 1 };
             resp_int(r_int)
-        },
-        LuaValue::Number(r) => {
-            resp_bulk(r.to_string().as_bytes().to_vec())
-        },
+        }
+        LuaValue::Number(r) => resp_bulk(r.to_string().as_bytes().to_vec()),
         LuaValue::Table(r) => {
             let len: i64 = r.raw_get("__self_length__").unwrap();
             //let len: usize = r.len().unwrap().try_into().unwrap();
@@ -77,63 +72,59 @@ pub fn lua_resp_to_redis_resp(resp: LuaValue) -> Frame {
             for idx in 0..len {
                 // key is start from 1
                 // if key not exists in lua table, it means the value is nil
-                let key = idx+1;//.to_string();
+                let key = idx + 1; //.to_string();
                 let v: LuaValue = r.raw_get(key).unwrap();
                 arr.push(lua_resp_to_redis_resp(v));
             }
             resp_array(arr)
-        },
-        LuaValue::Nil => {
-            resp_nil()
         }
-        LuaValue::Error(r) => { resp_err(&r.to_string())},
-        _ => {resp_err("panic")},
+        LuaValue::Nil => resp_nil(),
+        LuaValue::Error(r) => resp_err(&r.to_string()),
+        _ => resp_err("panic"),
     }
 }
 
 pub fn redis_resp_to_lua_resp(resp: Frame, lua: &Lua) -> LuaValue {
     match resp {
-        Frame::Simple(v) => {
-            LuaValue::String(lua.create_string(&v).unwrap())
-        },
+        Frame::Simple(v) => LuaValue::String(lua.create_string(&v).unwrap()),
         Frame::Bulk(v) => {
             let str = String::from_utf8_lossy(&v).to_string();
             LuaValue::String(lua.create_string(&str).unwrap())
-        },
-        Frame::Error(e) => {
-            LuaValue::String(lua.create_string(&e).unwrap())
-        },
-        Frame::Integer(i) => {
-            LuaValue::Integer(i)
-        },
-        Frame::Null => {
-            LuaValue::Nil
-        },
+        }
+        Frame::Error(e) => LuaValue::String(lua.create_string(&e).unwrap()),
+        Frame::Integer(i) => LuaValue::Integer(i),
+        Frame::Null => LuaValue::Nil,
         Frame::Array(arr) => {
             let len = arr.len();
             let table = lua.create_table().unwrap();
             if len == 0 {
-                table.raw_set("__self_length__", LuaValue::Integer(len as i64)).unwrap();
+                table
+                    .raw_set("__self_length__", LuaValue::Integer(len as i64))
+                    .unwrap();
             }
             for idx in 0..len {
                 let v = redis_resp_to_lua_resp(arr[idx].clone(), lua);
                 // if v is nil, table set will remove the item in table, but we should save the the nil item in table
                 if v != LuaValue::Nil {
-                    let key = idx+1;//.to_string();
+                    let key = idx + 1; //.to_string();
                     table.raw_set(key, v).unwrap();
                 }
-                // save the length of the redis array in table, but this will have side effect 
-                table.raw_set("__self_length__", LuaValue::Integer(len as i64)).unwrap();
+                // save the length of the redis array in table, but this will have side effect
+                table
+                    .raw_set("__self_length__", LuaValue::Integer(len as i64))
+                    .unwrap();
             }
-            
+
             LuaValue::Table(table)
         }
     }
 }
 
 pub fn key_is_expired(ttl: u64) -> bool {
-    let d = SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards");
-    let ts = d.as_secs()*1000 + d.subsec_millis() as u64;
+    let d = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards");
+    let ts = d.as_secs() * 1000 + d.subsec_millis() as u64;
     if ttl > 0 && ttl < ts {
         true
     } else {
@@ -142,8 +133,10 @@ pub fn key_is_expired(ttl: u64) -> bool {
 }
 
 pub fn now_timestamp_in_millis() -> u64 {
-    let d = SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards");
-    return d.as_secs()*1000 + d.subsec_millis() as u64;
+    let d = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards");
+    return d.as_secs() * 1000 + d.subsec_millis() as u64;
 }
 
 pub fn timestamp_from_ttl(ttl: u64) -> u64 {
@@ -153,7 +146,7 @@ pub fn timestamp_from_ttl(ttl: u64) -> u64 {
 pub fn ttl_from_timestamp(timestamp: u64) -> u64 {
     let now = now_timestamp_in_millis();
     if now > timestamp {
-        return 0
+        return 0;
     } else {
         return timestamp - now;
     }
@@ -175,7 +168,12 @@ fn load_keys(path: &Path) -> io::Result<Vec<PrivateKey>> {
 /// See https://docs.rs/rustls/0.19.0/rustls/struct.ServerConfig.html for details
 ///
 /// A TLS server needs a certificate and a fitting private key
-pub fn load_config(cert: &str, key: &str, auth_client: bool, ca_cert: &str) -> io::Result<ServerConfig> {
+pub fn load_config(
+    cert: &str,
+    key: &str,
+    auth_client: bool,
+    ca_cert: &str,
+) -> io::Result<ServerConfig> {
     let certs = load_certs(&Path::new(cert))?;
     let mut keys = load_keys(&Path::new(key))?;
 

@@ -1,11 +1,11 @@
-use crate::db::Db;
-use crate::utils::{resp_invalid_arguments, resp_ok, resp_bulk, resp_int, resp_array};
-use crate::{Connection, Frame, Parse};
-use crate::tikv::errors::AsyncResult;
-use bytes::Bytes;
-use sha1::{Sha1, Digest};
-use hex::ToHex;
 use crate::config::LOGGER;
+use crate::db::Db;
+use crate::tikv::errors::AsyncResult;
+use crate::utils::{resp_array, resp_bulk, resp_int, resp_invalid_arguments, resp_ok};
+use crate::{Connection, Frame, Parse};
+use bytes::Bytes;
+use hex::ToHex;
+use sha1::{Digest, Sha1};
 use slog::debug;
 
 #[derive(Debug)]
@@ -26,13 +26,13 @@ impl Script {
         match subcommand.to_uppercase().as_str() {
             "LOAD" => {
                 is_load = true;
-            },
+            }
             "EXISTS" => {
                 is_exists = true;
-            },
+            }
             "FLUSH" => {
                 is_flush = true;
-            },
+            }
             _ => {}
         }
         Script {
@@ -71,13 +71,13 @@ impl Script {
             "LOAD" => {
                 let script = parse.next_string()?;
                 cmd.set_script(&script);
-            },
+            }
             "EXISTS" => {
                 while let Ok(sha1) = parse.next_string() {
                     cmd.add_sha1(&sha1);
                 }
-            },
-            "FLUSH" => {},
+            }
+            "FLUSH" => {}
             _ => {}
         }
 
@@ -90,7 +90,13 @@ impl Script {
             Err(e) => Frame::Error(e.to_string()),
         };
 
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
 
         dst.write_frame(&response).await?;
 
@@ -100,7 +106,7 @@ impl Script {
     pub async fn script(&self, db: &Db) -> AsyncResult<Frame> {
         // check argument parse validation
         if !self.valid {
-            return Ok(resp_invalid_arguments())
+            return Ok(resp_invalid_arguments());
         }
         if self.is_load {
             // calculate script sha1

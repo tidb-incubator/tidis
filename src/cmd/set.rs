@@ -1,16 +1,16 @@
 use crate::cmd::{Parse, ParseError};
+use crate::config::is_use_txn_api;
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::string::StringCommandCtx;
+use crate::utils::{resp_invalid_arguments, timestamp_from_ttl};
 use crate::{Connection, Frame};
-use crate::config::{is_use_txn_api};
-use crate::utils::{timestamp_from_ttl, resp_invalid_arguments};
 
+use crate::config::LOGGER;
 use bytes::Bytes;
+use slog::debug;
+use std::sync::Arc;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
-use std::sync::Arc;
-use crate::config::LOGGER;
-use slog::debug;
 
 /// Set `key` to hold the string `value`.
 ///
@@ -144,7 +144,13 @@ impl Set {
             Err(err) => return Err(err.into()),
         }
 
-        Ok(Set { key, value, expire, nx, valid: true })
+        Ok(Set {
+            key,
+            value,
+            expire,
+            nx,
+            valid: true,
+        })
     }
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Set> {
@@ -182,7 +188,13 @@ impl Set {
 
             idx += 1;
         }
-        Ok(Set { key, value, expire, nx, valid: true })
+        Ok(Set {
+            key,
+            value,
+            expire,
+            nx,
+            valid: true,
+        })
     }
 
     /// Apply the `Set` command to the specified `Db` instance.
@@ -190,43 +202,40 @@ impl Set {
     /// The response is written to `dst`. This is called by the server in order
     /// to execute a received command.
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        
         let response = match self.nx {
-            Some(_) => {
-                match self.put_not_exists(None).await {
-                    Ok(val) => val,
-                    Err(e) => Frame::Error(e.to_string()),
-                }
+            Some(_) => match self.put_not_exists(None).await {
+                Ok(val) => val,
+                Err(e) => Frame::Error(e.to_string()),
             },
-            None => {
-                match self.put(None).await {
-                    Ok(val) => val,
-                    Err(e) => Frame::Error(e.to_string()),
-                }
+            None => match self.put(None).await {
+                Ok(val) => val,
+                Err(e) => Frame::Error(e.to_string()),
             },
         };
-        debug!(LOGGER, "res, {} -> {}, {:?}", dst.local_addr(), dst.peer_addr(), response);
+        debug!(
+            LOGGER,
+            "res, {} -> {}, {:?}",
+            dst.local_addr(),
+            dst.peer_addr(),
+            response
+        );
         dst.write_frame(&response).await?;
 
         Ok(())
     }
 
-    pub(crate) async fn set(self, txn: Option<Arc<Mutex<Transaction>>>) ->  AsyncResult<Frame> {
+    pub(crate) async fn set(self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
         if !self.valid {
             return Ok(resp_invalid_arguments());
         }
         let response = match self.nx {
-            Some(_) => {
-                match self.put_not_exists(txn).await {
-                    Ok(val) => val,
-                    Err(e) => Frame::Error(e.to_string()),
-                }
+            Some(_) => match self.put_not_exists(txn).await {
+                Ok(val) => val,
+                Err(e) => Frame::Error(e.to_string()),
             },
-            None => {
-                match self.put(txn).await {
-                    Ok(val) => val,
-                    Err(e) => Frame::Error(e.to_string()),
-                }
+            None => match self.put(txn).await {
+                Ok(val) => val,
+                Err(e) => Frame::Error(e.to_string()),
             },
         };
         Ok(response)
@@ -234,9 +243,13 @@ impl Set {
 
     async fn put_not_exists(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
         if is_use_txn_api() {
-            StringCommandCtx::new(txn).do_async_txnkv_put_not_exists(&self.key, &self.value).await
+            StringCommandCtx::new(txn)
+                .do_async_txnkv_put_not_exists(&self.key, &self.value)
+                .await
         } else {
-            StringCommandCtx::new(txn).do_async_rawkv_put_not_exists(&self.key, &self.value).await
+            StringCommandCtx::new(txn)
+                .do_async_rawkv_put_not_exists(&self.key, &self.value)
+                .await
         }
     }
 
@@ -246,9 +259,13 @@ impl Set {
             if self.expire.is_some() {
                 ts = timestamp_from_ttl(self.expire.unwrap() as u64);
             }
-            StringCommandCtx::new(txn).do_async_txnkv_put(&self.key, &self.value, ts).await
+            StringCommandCtx::new(txn)
+                .do_async_txnkv_put(&self.key, &self.value, ts)
+                .await
         } else {
-            StringCommandCtx::new(txn).do_async_rawkv_put(&self.key, &self.value).await
+            StringCommandCtx::new(txn)
+                .do_async_rawkv_put(&self.key, &self.value)
+                .await
         }
     }
 }

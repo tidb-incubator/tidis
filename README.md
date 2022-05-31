@@ -1,5 +1,7 @@
 # TiKV-Service
 
+[![CI](https://github.com/tidbcloud/tikv-service/actions/workflows/ci.yml/badge.svg)](https://github.com/tidbcloud/tikv-service/actions/workflows/ci.yml)
+
 `TiKV-Service` is the service layer for TiKV, aims to provide multiple model distributed storage service powered by PingCAP.
 
 - [x] Redis

@@ -1,7 +1,7 @@
 name: CI
 
 on:
-  pull-request:
+  pull_request:
     branches:
       - master
   workflow_dispatch:

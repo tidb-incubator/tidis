@@ -24,7 +24,7 @@ jobs:
       - name: Install `rust` toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable-1.61.0
+          toolchain: 1.61.0
           default: true
           profile: minimal
           components: clippy

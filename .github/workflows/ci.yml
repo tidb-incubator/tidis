@@ -12,8 +12,8 @@ concurrency:
 
 jobs:
   dev:
-    name: Run clippy and rustfmt then build and test
-    runs-on: large-quota
+    name: Run fmt, clippy and check
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v2
       - name: Configure git for private modules

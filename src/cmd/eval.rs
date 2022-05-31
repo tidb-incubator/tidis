@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::config::is_use_txn_api;
 use crate::db::Db;
-use crate::tikv::errors::AsyncResult;
+use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::get_txn_client;
 use crate::tikv::lua::LuaCommandCtx;
 use crate::utils::resp_err;
@@ -72,10 +72,7 @@ impl Eval {
         db: &Db,
         lua: &Option<Lua>,
     ) -> crate::Result<()> {
-        let response = match self.eval(is_sha, db, lua).await {
-            Ok(val) => val,
-            Err(e) => Frame::Error(e.to_string()),
-        };
+        let response = self.eval(is_sha, db, lua).await.unwrap_or_else(Into::into);
 
         debug!(
             LOGGER,
@@ -92,7 +89,7 @@ impl Eval {
 
     async fn eval(&self, is_sha: bool, db: &Db, lua: &Option<Lua>) -> AsyncResult<Frame> {
         if !is_use_txn_api() {
-            return Ok(resp_err("not supported yet"));
+            return Ok(resp_err(REDIS_NOT_SUPPORTED_ERR));
         }
 
         // create new txn
@@ -118,7 +115,7 @@ impl Eval {
             Err(e) => {
                 let mut txn = txn_rc.lock().await;
                 txn.rollback().await?;
-                Ok(resp_err(&e.to_string()))
+                Ok(resp_err(e))
             }
         }
     }

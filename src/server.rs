@@ -26,6 +26,9 @@ use crate::config::LOGGER;
 use tokio_util::task::LocalPoolHandle;
 
 use crate::config_local_pool_number;
+use crate::tikv::errors::{
+    REDIS_AUTH_INVALID_PASSWORD_ERR, REDIS_AUTH_REQUIRED_ERR, REDIS_AUTH_WHEN_DISABLED_ERR,
+};
 
 /// Server listener state. Created in the `run` call. It includes a `run` method
 /// which performs the TCP listening and initialization of per-connection state.
@@ -535,21 +538,21 @@ impl Handler {
                     // check password and update connection authorized flag
                     if !is_auth_enabled() {
                         self.connection
-                            .write_frame(&resp_err("ERR Client sent AUTH, but no password is set"))
+                            .write_frame(&resp_err(REDIS_AUTH_WHEN_DISABLED_ERR))
                             .await?;
                     } else if is_auth_matched(c.passwd()) {
                         self.connection.write_frame(&resp_ok()).await?;
                         self.authorized = true;
                     } else {
                         self.connection
-                            .write_frame(&resp_err("ERR invalid password"))
+                            .write_frame(&resp_err(REDIS_AUTH_INVALID_PASSWORD_ERR))
                             .await?;
                     }
                 }
                 _ => {
                     if !self.authorized {
                         self.connection
-                            .write_frame(&resp_err("NOAUTH Authentication required."))
+                            .write_frame(&resp_err(REDIS_AUTH_REQUIRED_ERR))
                             .await?;
                     } else {
                         match cmd {

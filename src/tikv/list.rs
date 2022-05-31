@@ -3,7 +3,6 @@ use super::get_txn_client;
 use super::{
     encoding::{DataType, KeyDecoder, KeyEncoder},
     errors::AsyncResult,
-    errors::RTError,
 };
 use crate::utils::{resp_array, resp_bulk, resp_err, resp_int, resp_nil, resp_ok};
 use crate::{utils::key_is_expired, Frame};
@@ -50,7 +49,7 @@ impl<'a> ListCommandCtx {
                         Some(meta_value) => {
                             // check key type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
-                                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                                return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
                             let (ttl, mut left, mut right) =
@@ -122,7 +121,7 @@ impl<'a> ListCommandCtx {
 
         match resp {
             Ok(n) => Ok(resp_int(n as i64)),
-            Err(e) => Ok(resp_err(&e.to_string())),
+            Err(e) => Ok(resp_err(e)),
         }
     }
 
@@ -149,7 +148,7 @@ impl<'a> ListCommandCtx {
                         Some(meta_value) => {
                             // check key type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
-                                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                                return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
                             let (ttl, mut left, mut right) =
@@ -242,7 +241,7 @@ impl<'a> ListCommandCtx {
                     Ok(resp_array(values))
                 }
             }
-            Err(e) => Ok(resp_err(&e.to_string())),
+            Err(e) => Ok(resp_err(e)),
         }
     }
 
@@ -268,7 +267,7 @@ impl<'a> ListCommandCtx {
                         Some(meta_value) => {
                             // check key type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
-                                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                                return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
                             let (ttl, mut left, mut right) =
@@ -338,7 +337,7 @@ impl<'a> ListCommandCtx {
 
         match resp {
             Ok(_) => Ok(resp_ok()),
-            Err(e) => Ok(resp_err(&e.to_string())),
+            Err(e) => Ok(resp_err(e)),
         }
     }
 
@@ -497,7 +496,7 @@ impl<'a> ListCommandCtx {
                         Some(meta_value) => {
                             // check type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
-                                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                                return Err(REDIS_WRONG_TYPE_ERR);
                             }
                             let (ttl, left, right) = KeyDecoder::decode_key_list_meta(&meta_value);
                             if key_is_expired(ttl) {
@@ -505,7 +504,7 @@ impl<'a> ListCommandCtx {
                                 self.clone()
                                     .do_async_txnkv_list_expire_if_needed(&key)
                                     .await?;
-                                return Err(RTError::StringError(REDIS_NO_SUCH_KEY_ERR.into()));
+                                return Err(REDIS_NO_SUCH_KEY_ERR);
                             }
 
                             // convert idx to positive is needed
@@ -515,7 +514,7 @@ impl<'a> ListCommandCtx {
 
                             let uidx = idx + left as i64;
                             if idx < 0 || uidx < left as i64 || uidx > (right - 1) as i64 {
-                                return Err(RTError::StringError(REDIS_INDEX_OUT_OF_RANGE.into()));
+                                return Err(REDIS_INDEX_OUT_OF_RANGE_ERR);
                             }
 
                             let data_key =
@@ -526,7 +525,7 @@ impl<'a> ListCommandCtx {
                         }
                         None => {
                             // -Err no such key
-                            Err(RTError::StringError(REDIS_NO_SUCH_KEY_ERR.into()))
+                            Err(REDIS_NO_SUCH_KEY_ERR)
                         }
                     })
                 }
@@ -536,7 +535,7 @@ impl<'a> ListCommandCtx {
 
         match resp {
             Ok(_) => Ok(resp_ok()),
-            Err(e) => Ok(resp_err(&e.to_string())),
+            Err(e) => Ok(resp_err(e)),
         }
     }
 

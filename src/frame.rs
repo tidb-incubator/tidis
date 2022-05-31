@@ -1,6 +1,7 @@
 //! Provides a type representing a Redis protocol frame as well as utilities for
 //! parsing frames from a byte array.
 
+use crate::tikv::errors::RTError;
 use bytes::{Buf, Bytes};
 use std::convert::TryInto;
 use std::fmt;
@@ -12,7 +13,8 @@ use std::string::FromUtf8Error;
 #[derive(Clone, Debug)]
 pub enum Frame {
     Simple(String),
-    Error(String),
+    ErrorOwned(String),
+    ErrorString(&'static str),
     Integer(i64),
     Bulk(Bytes),
     Null,
@@ -121,7 +123,7 @@ impl Frame {
                 // Convert the line to a String
                 let string = String::from_utf8(line)?;
 
-                Ok(Frame::Error(string))
+                Ok(Frame::ErrorOwned(string))
             }
             b':' => {
                 let len = get_decimal(src)?;
@@ -184,7 +186,8 @@ impl fmt::Display for Frame {
 
         match self {
             Frame::Simple(response) => response.fmt(fmt),
-            Frame::Error(msg) => write!(fmt, "error: {}", msg),
+            Frame::ErrorOwned(msg) => write!(fmt, "error: {}", msg),
+            Frame::ErrorString(msg) => write!(fmt, "error: {}", msg),
             Frame::Integer(num) => num.fmt(fmt),
             Frame::Bulk(msg) => match str::from_utf8(msg) {
                 Ok(string) => string.fmt(fmt),
@@ -201,6 +204,16 @@ impl fmt::Display for Frame {
 
                 Ok(())
             }
+        }
+    }
+}
+
+impl From<RTError> for Frame {
+    fn from(e: RTError) -> Self {
+        match e {
+            RTError::Owned(s) => Frame::ErrorOwned(s),
+            RTError::String(s) => Frame::ErrorString(s),
+            RTError::TikvClient(_) => Frame::ErrorString("ERR tikv client error"),
         }
     }
 }

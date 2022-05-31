@@ -1,4 +1,5 @@
 use crate::config::LOGGER;
+use crate::tikv::errors::REDIS_NOT_SUPPORTED_DEBUG_SUB_COMMAND_ERR;
 use crate::tikv::{start_profiler, stop_profiler};
 use crate::utils::{resp_err, resp_ok};
 use crate::{Connection, Parse};
@@ -32,7 +33,7 @@ impl Debug {
                 stop_profiler();
                 resp_ok()
             }
-            _ => resp_err("not supported debug subcommand"),
+            _ => resp_err(REDIS_NOT_SUPPORTED_DEBUG_SUB_COMMAND_ERR),
         };
 
         debug!(

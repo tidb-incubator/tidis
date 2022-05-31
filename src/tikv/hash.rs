@@ -2,7 +2,6 @@ use super::get_txn_client;
 use super::{
     encoding::{DataType, KeyDecoder, KeyEncoder},
     errors::AsyncResult,
-    errors::RTError,
 };
 use crate::{
     utils::{key_is_expired, resp_ok},
@@ -50,7 +49,7 @@ impl<'a> HashCommandCtx {
                         Some(meta_value) => {
                             // check key type is hash
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
-                                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                                return Err(REDIS_WRONG_TYPE_ERR);
                             }
                             // already exists
                             let (ttl, mut size) = KeyDecoder::decode_key_hash_meta(&meta_value);
@@ -122,7 +121,7 @@ impl<'a> HashCommandCtx {
                     Ok(resp_int(num as i64))
                 }
             }
-            Err(e) => Ok(resp_err(&e.to_string())),
+            Err(e) => Ok(resp_err(e)),
         }
     }
 
@@ -390,7 +389,7 @@ impl<'a> HashCommandCtx {
                         Some(meta_value) => {
                             // check key type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
-                                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                                return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
                             let (ttl, size) = KeyDecoder::decode_key_hash_meta(&meta_value);
@@ -429,7 +428,7 @@ impl<'a> HashCommandCtx {
 
         match resp {
             Ok(n) => Ok(resp_int(n)),
-            Err(e) => Ok(resp_err(&e.to_string())),
+            Err(e) => Ok(resp_err(e)),
         }
     }
 
@@ -454,7 +453,7 @@ impl<'a> HashCommandCtx {
                         Some(meta_value) => {
                             // check key type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
-                                return Err(RTError::StringError(REDIS_WRONG_TYPE_ERR.into()));
+                                return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
                             let (ttl, mut size) = KeyDecoder::decode_key_hash_meta(&meta_value);
@@ -475,8 +474,8 @@ impl<'a> HashCommandCtx {
                                         Ok(ival) => {
                                             prev_int = ival;
                                         }
-                                        Err(err) => {
-                                            return Err(RTError::StringError(err.to_string()));
+                                        Err(_) => {
+                                            return Err(REDIS_VALUE_IS_NOT_INTEGER_ERR);
                                         }
                                     }
                                 }
@@ -510,7 +509,7 @@ impl<'a> HashCommandCtx {
 
         match resp {
             Ok(n) => Ok(resp_int(n)),
-            Err(e) => Ok(resp_err(&e.to_string())),
+            Err(e) => Ok(resp_err(e)),
         }
     }
 

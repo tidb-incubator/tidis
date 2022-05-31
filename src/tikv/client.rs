@@ -189,7 +189,7 @@ impl TxnClientWrapper<'static> {
                         Err(e) => {
                             error!(LOGGER, "error to begin new transaction: {}", e);
                             if self.retries == 0 {
-                                return Err(RTError::TikvClientError(Box::new(e)));
+                                return Err(RTError::TikvClient(Box::new(e)));
                             }
                             continue;
                         }
@@ -209,7 +209,7 @@ impl TxnClientWrapper<'static> {
                                 error!(LOGGER, "error to commit transaction: {}", e);
                                 if self.error_retryable(&e) {
                                     if self.retries == 0 {
-                                        return Err(RTError::TikvClientError(Box::new(e)));
+                                        return Err(RTError::TikvClient(Box::new(e)));
                                     }
                                     debug!(
                                         LOGGER,
@@ -222,10 +222,10 @@ impl TxnClientWrapper<'static> {
                         Err(e) => {
                             txn.rollback().await?;
                             error!(LOGGER, "error occured so rollback transaction: {}", e);
-                            if let RTError::TikvClientError(client_err) = e {
+                            if let RTError::TikvClient(client_err) = e {
                                 if self.error_retryable(&client_err) {
                                     if self.retries == 0 {
-                                        return Err(RTError::TikvClientError(client_err));
+                                        return Err(RTError::TikvClient(client_err));
                                     }
                                     debug!(
                                         LOGGER,
@@ -234,7 +234,7 @@ impl TxnClientWrapper<'static> {
                                     );
                                     continue;
                                 } else {
-                                    return Err(RTError::TikvClientError(client_err));
+                                    return Err(RTError::TikvClient(client_err));
                                 }
                             } else {
                                 return Err(e);
@@ -246,7 +246,7 @@ impl TxnClientWrapper<'static> {
                     sleep(std::cmp::min(2 + retry_count * 10, 200)).await;
                 }
                 error!(LOGGER, "transaction retry count reached limit");
-                Err(RTError::TikvClientError(Box::new(StringError(
+                Err(RTError::TikvClient(Box::new(StringError(
                     "retry count exceeded".to_string(),
                 ))))
             }

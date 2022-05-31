@@ -9,6 +9,7 @@ use crate::{
 };
 use ::futures::future::FutureExt;
 use std::collections::HashMap;
+use std::str;
 use std::sync::Arc;
 use tikv_client::{Key, KvPair, Transaction, Value};
 use tokio::sync::Mutex;
@@ -16,7 +17,7 @@ use tokio::sync::Mutex;
 use super::errors::*;
 use super::{get_client, get_txn_client};
 use super::{hash::HashCommandCtx, list::ListCommandCtx, set::SetCommandCtx, zset::ZsetCommandCtx};
-use crate::utils::{key_is_expired, resp_err, resp_int, sleep, ttl_from_timestamp};
+use crate::utils::{key_is_expired, resp_err, resp_int, resp_ok_ignore, sleep, ttl_from_timestamp};
 use bytes::Bytes;
 #[derive(Clone)]
 pub struct StringCommandCtx {
@@ -97,10 +98,7 @@ impl StringCommandCtx {
                 .boxed()
             })
             .await;
-        match resp {
-            Ok(_) => Ok(resp_ok()),
-            Err(e) => Err(RTError::StringError(e.to_string())),
-        }
+        resp.map(resp_ok_ignore)
     }
 
     pub async fn do_async_rawkv_batch_get(self, keys: &[String]) -> AsyncResult<Frame> {
@@ -178,7 +176,7 @@ impl StringCommandCtx {
             .await;
         match resp {
             Ok(_) => Ok(resp_ok()),
-            Err(e) => Ok(resp_err(&e.to_string())),
+            Err(e) => Ok(resp_err(e)),
         }
     }
 
@@ -240,7 +238,7 @@ impl StringCommandCtx {
                     Ok(resp_ok())
                 }
             }
-            Err(e) => Ok(resp_err(&e.to_string())),
+            Err(e) => Ok(resp_err(e)),
         }
     }
 
@@ -287,15 +285,10 @@ impl StringCommandCtx {
             let prev: Option<Vec<u8>>;
             let prev_int: i64;
             match client.get(ekey.clone()).await? {
-                Some(val) => match String::from_utf8_lossy(&val).parse::<i64>() {
-                    Ok(ival) => {
-                        prev_int = ival;
-                        prev = Some(val.clone());
-                    }
-                    Err(err) => {
-                        return Err(RTError::StringError(err.to_string()));
-                    }
-                },
+                Some(val) => {
+                    prev_int = String::from_utf8_lossy(&val).parse::<i64>()?;
+                    prev = Some(val.clone());
+                }
                 None => {
                     prev = None;
                     prev_int = 0;
@@ -317,7 +310,7 @@ impl StringCommandCtx {
             sleep(std::cmp::min(i, 200)).await;
         }
         if !swapped {
-            Err(RTError::StringError("Cannot swapped".to_owned()))
+            Err(REDIS_COMPARE_AND_SWAP_EXHAUSTED_ERR)
         } else {
             Ok(resp_int(new_int))
         }
@@ -350,17 +343,10 @@ impl StringCommandCtx {
                                     .await?;
                                 prev_int = 0;
                             } else {
-                                let real_value = KeyDecoder::decode_key_string_value(&val);
-                                match String::from_utf8_lossy(&real_value).parse::<i64>() {
-                                    Ok(ival) => {
-                                        prev_int = ival;
-                                    }
-                                    Err(_) => {
-                                        return Err(RTError::StringError(
-                                            REDIS_VALUE_IS_NOT_INTEGER.to_string(),
-                                        ));
-                                    }
-                                }
+                                let real_value = KeyDecoder::decode_key_string_slice(&val);
+                                prev_int = str::from_utf8(real_value)
+                                    .map_err(RTError::to_is_not_integer_error)?
+                                    .parse::<i64>()?;
                             }
                         }
                         None => {
@@ -385,7 +371,7 @@ impl StringCommandCtx {
 
         match resp {
             Ok(n) => Ok(resp_int(n)),
-            Err(e) => Ok(resp_err(&e.to_string())),
+            Err(e) => Ok(resp_err(e)),
         }
     }
 
@@ -466,10 +452,9 @@ impl StringCommandCtx {
                                         self.do_async_txnkv_string_expire_if_needed(&key).await?;
                                         return Ok(0);
                                     }
-                                    let mut value =
-                                        KeyDecoder::decode_key_string_value(&meta_value);
+                                    let value = KeyDecoder::decode_key_string_slice(&meta_value);
                                     let new_meta_value = KeyEncoder::new()
-                                        .encode_txnkv_string_value(&mut value, timestamp);
+                                        .encode_txnkv_string_slice(value, timestamp);
                                     txn.put(ekey, new_meta_value).await?;
                                     Ok(1)
                                 }
@@ -541,7 +526,7 @@ impl StringCommandCtx {
             .await;
         match resp {
             Ok(v) => Ok(resp_int(v)),
-            Err(e) => Ok(resp_err(&e.to_string())),
+            Err(e) => Ok(resp_err(e)),
         }
     }
 
@@ -657,7 +642,7 @@ impl StringCommandCtx {
             .await;
         match resp {
             Ok(v) => Ok(resp_int(v)),
-            Err(e) => Ok(resp_err(&e.to_string())),
+            Err(e) => Ok(resp_err(e)),
         }
     }
 }

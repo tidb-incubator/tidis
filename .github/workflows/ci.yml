@@ -47,7 +47,7 @@ jobs:
           EXTRA_CARGO_ARGS: --no-run
         working-directory: ./
         run: |
-          cargo fmt
+          cargo fmt --check
       - name: Run clippy
         env:
           RUSTFLAGS: -Dwarnings

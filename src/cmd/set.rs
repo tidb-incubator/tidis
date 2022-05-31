@@ -203,9 +203,10 @@ impl Set {
     /// to execute a received command.
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
         let response = match self.nx {
-            Some(_) => self.put_not_exists(None).await.unwrap_or_else(Into::into),
-            None => self.put(None).await.unwrap_or_else(Into::into),
-        };
+            Some(_) => self.put_not_exists(None).await,
+            None => self.put(None).await,
+        }
+        .unwrap_or_else(Into::into);
         debug!(
             LOGGER,
             "res, {} -> {}, {:?}",

@@ -1,24 +1,69 @@
 name: CI
 
 on:
-  push:
-    branches: [ master ]
   pull_request:
-    branches: [ master ]
+    branches:
+      - master
+  workflow_dispatch:
+
+# Concurrency ensures that only a single job or workflow using the same concurrency group will run at a time.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
-
-    runs-on: ubuntu-latest
-
+  dev:
+    name: Run fmt, clippy and check
+    runs-on: self-hosted
     steps:
-    - uses: actions/checkout@v2
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
-    - name: rustfmt
-      uses: actions-rs/cargo@v1
-      with:
-        command: fmt
-        args: --all -- --check
+      - uses: actions/checkout@v2
+      - uses: lukka/get-cmake@latest
+      - name: Configure git for private modules
+        env:
+          TOKEN: ${{ secrets.GIT_ACTION_BOT }}
+        run: git config --global url."https://${TOKEN}@github.com/".insteadOf "https://github.com/"
+      - name: Install `rust` toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.61.0
+          default: true
+          profile: minimal
+          components: clippy
+      - uses: Swatinem/rust-cache@v1
+      - name: Cache cargo registry
+        uses: actions/cache@v2
+        continue-on-error: false
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+                        cargo-
+      - name: Run format
+        env:
+          RUSTFLAGS: -Dwarnings
+          RUST_BACKTRACE: "1"
+          LOG_LEVEL: INFO
+          EXTRA_CARGO_ARGS: --no-run
+        working-directory: ./
+        run: |
+          cargo fmt --check
+      - name: Run clippy
+        env:
+          RUSTFLAGS: -Dwarnings
+          RUST_BACKTRACE: "1"
+          LOG_LEVEL: INFO
+          EXTRA_CARGO_ARGS: --no-run
+        working-directory: ./
+        run: |
+          cargo clippy
+      - name: Run check
+        env:
+          RUSTFLAGS: -Dwarnings
+          RUST_BACKTRACE: "1"
+          LOG_LEVEL: INFO
+          EXTRA_CARGO_ARGS: --no-run
+        working-directory: ./
+        run: |
+          cargo check

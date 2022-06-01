@@ -10,10 +10,8 @@ pub struct KeyEncoder {
 
 impl KeyEncoder {
     pub fn new() -> Self {
-        let inst_id_bytes = get_instance_id().to_be_bytes().to_vec();
-        let inst_id = String::from_utf8(inst_id_bytes).unwrap();
         KeyEncoder {
-            instance_id: inst_id,
+            instance_id: get_instance_id().to_string(),
         }
     }
 

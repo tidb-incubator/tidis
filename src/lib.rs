@@ -63,6 +63,8 @@ pub use tikv::do_async_raw_connect;
 pub use tikv::do_async_txn_connect;
 pub use tikv::set_instance_id;
 
+pub mod cluster;
+
 pub mod utils;
 
 pub mod config;

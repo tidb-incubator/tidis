@@ -27,6 +27,14 @@ impl KeyDecoder {
         u64::from_be_bytes(value[1..9].try_into().unwrap())
     }
 
+    pub fn decode_topo_key_addr(value: &[u8]) -> &[u8] {
+        &value[14..]
+    }
+
+    pub fn decode_topo_value(value: &[u8]) -> u64 {
+        u64::from_be_bytes(value.try_into().unwrap())
+    }
+
     pub fn decode_key_string_value(value: &[u8]) -> Value {
         value[9..].to_vec()
     }

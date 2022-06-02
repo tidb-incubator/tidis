@@ -28,7 +28,7 @@ impl KeyDecoder {
     }
 
     pub fn decode_topo_key_addr(value: &[u8]) -> &[u8] {
-        &value[14..]
+        &value[13..]
     }
 
     pub fn decode_topo_value(value: &[u8]) -> u64 {

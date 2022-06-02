@@ -68,6 +68,9 @@ pub mod cluster;
 pub mod utils;
 
 pub mod config;
+pub use config::config_cluster_broadcast_addr_or_default;
+pub use config::config_cluster_topology_expire_or_default;
+pub use config::config_cluster_topology_interval_or_default;
 pub use config::config_instance_id_or_default;
 pub use config::config_listen_or_default;
 pub use config::config_local_pool_number;

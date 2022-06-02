@@ -6,7 +6,11 @@ use crate::metrics::{
 use crate::tikv::encoding::{KeyDecoder, KeyEncoder};
 use crate::tikv::get_txn_client;
 use crate::utils::{self, resp_err, resp_ok, sleep};
-use crate::{is_auth_enabled, is_auth_matched, Command, Connection, Db, DbDropGuard, Shutdown};
+use crate::{
+    config_cluster_topology_expire_or_default, config_cluster_topology_interval_or_default,
+    config_local_pool_number, is_auth_enabled, is_auth_matched, Command, Connection, Db,
+    DbDropGuard, Shutdown,
+};
 
 use async_std::net::{TcpListener, TcpStream};
 use futures::FutureExt;
@@ -27,7 +31,6 @@ use crate::config::LOGGER;
 
 use tokio_util::task::LocalPoolHandle;
 
-use crate::config_local_pool_number;
 use crate::tikv::errors::{
     REDIS_AUTH_INVALID_PASSWORD_ERR, REDIS_AUTH_REQUIRED_ERR, REDIS_AUTH_WHEN_DISABLED_ERR,
 };
@@ -119,6 +122,8 @@ struct Handler {
     /// will need to interact with `db` in order to complete the work.
     db: Db,
 
+    topo: Cluster,
+
     /// The TCP connection decorated with the redis protocol encoder / decoder
     /// implemented using a buffered `TcpStream`.
     ///
@@ -205,6 +210,14 @@ pub async fn run(
     // a receiver is needed, the subscribe() method on the sender is used to create
     // one.
     let db_holder = DbDropGuard::new();
+
+    let topo_manager = TopologyManager {
+        address: topo_addr,
+        topo_holder: topo_holder.clone(),
+        interval: config_cluster_topology_interval_or_default(),
+        expire: config_cluster_topology_expire_or_default(),
+    };
+
     if tcp_enabled && !tls_enabled {
         let (notify_shutdown, _) = broadcast::channel(1);
         let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
@@ -225,6 +238,9 @@ pub async fn run(
                 if let Err(err) = res {
                     error!(LOGGER, "failed to accept, cause {}", err.to_string());
                 }
+            }
+            _ = topo_manager.run() => {
+                error!(LOGGER, "topology manager exit");
             }
             _ = shutdown => {
                 // The shutdown signal has been received.
@@ -261,6 +277,9 @@ pub async fn run(
                 if let Err(err) = tls_res {
                     error!(LOGGER, "failed to accept, cause {}", err.to_string());
                 }
+            }
+            _ = topo_manager.run() => {
+                error!(LOGGER, "topology manager exit");
             }
             _ = shutdown => {
                 // The shutdown signal has been received.
@@ -315,6 +334,9 @@ pub async fn run(
                 if let Err(err) = tls_res {
                     error!(LOGGER, "failed to accept, cause {}", err.to_string());
                 }
+            }
+            _ = topo_manager.run() => {
+                error!(LOGGER, "topology manager exit");
             }
             _ = shutdown => {
                 // The shutdown signal has been received.
@@ -392,6 +414,8 @@ impl Listener {
             let mut handler = Handler {
                 // Get a handle to the shared database.
                 db: self.db_holder.db(),
+
+                topo: self.topo_holder.clone(),
 
                 // Initialize the connection state. This allocates read/write
                 // buffers to perform redis protocol frame parsing.
@@ -492,6 +516,7 @@ impl TlsListener {
 
             let mut handler = Handler {
                 db: self.db_holder.db(),
+                topo: self.topo_holder.clone(),
                 connection: Connection::new_tls(&local_addr, &peer_addr, tls_stream),
                 shutdown: Shutdown::new(self.tls_notify_shutdown.subscribe()),
                 authorized: !is_auth_enabled(),
@@ -581,9 +606,8 @@ impl TopologyManager {
 
             // random sleep a small period for jitter tick
             let jitter = rng.gen::<u8>();
-            sleep(jitter as u32);
+            sleep(jitter as u32).await;
         }
-        Ok(())
     }
 }
 
@@ -690,6 +714,7 @@ impl Handler {
                         // peer.
                         cmd.apply(
                             &self.db,
+                            &self.topo,
                             &mut self.connection,
                             &mut self.lua,
                             &mut self.shutdown,

@@ -168,7 +168,10 @@ pub use auth::Auth;
 mod debug;
 pub use debug::Debug;
 
-use crate::{Connection, Db, Frame, Parse, ParseError, Shutdown};
+mod cluster;
+pub use cluster::Cluster;
+
+use crate::{cluster::Cluster as Topo, Connection, Db, Frame, Parse, ParseError, Shutdown};
 
 /// Enumeration of supported Redis commands.
 ///
@@ -248,6 +251,8 @@ pub enum Command {
 
     Auth(Auth),
     Debug(Debug),
+
+    Cluster(Cluster),
     Unknown(Unknown),
 }
 
@@ -344,6 +349,7 @@ impl Command {
             "zrank" => Command::Zrank(Zrank::parse_frames(&mut parse)?),
             "auth" => Command::Auth(Auth::parse_frames(&mut parse)?),
             "debug" => Command::Debug(Debug::parse_frames(&mut parse)?),
+            "cluster" => Command::Cluster(Cluster::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -443,6 +449,7 @@ impl Command {
     pub(crate) async fn apply(
         self,
         db: &Db,
+        topo: &Topo,
         dst: &mut Connection,
         lua: &mut Option<Lua>,
         shutdown: &mut Shutdown,
@@ -514,6 +521,8 @@ impl Command {
             Zrank(cmd) => cmd.apply(dst).await,
 
             Debug(cmd) => cmd.apply(dst).await,
+
+            Cluster(cmd) => cmd.apply(topo, dst).await,
 
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
@@ -592,6 +601,7 @@ impl Command {
             Command::Zrank(_) => "zrank",
             Command::Auth(_) => "auth",
             Command::Debug(_) => "debug",
+            Command::Cluster(_) => "cluster",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

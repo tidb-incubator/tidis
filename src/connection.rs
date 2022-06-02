@@ -245,7 +245,27 @@ impl Connection {
 
                 // Iterate and encode each entry in the array.
                 for entry in &**val {
-                    self.write_value(entry).await?;
+                    // TODO make this to be recursive
+                    // we need nested array response only for `cluster slots` command for now
+                    match entry {
+                        Frame::Array(val) => {
+                            self.write_all(b"*").await?;
+                            self.write_decimal(val.len() as i64).await?;
+                            for entry in &**val {
+                                match entry {
+                                    Frame::Array(val) => {
+                                        self.write_all(b"*").await?;
+                                        self.write_decimal(val.len() as i64).await?;
+                                        for entry in &**val {
+                                            self.write_value(entry).await?;
+                                        }
+                                    }
+                                    _ => self.write_value(entry).await?,
+                                }
+                            }
+                        }
+                        _ => self.write_value(entry).await?,
+                    }
                 }
             }
             // The frame type is a literal. Encode the value directly.
@@ -293,8 +313,8 @@ impl Connection {
             }
             // Encoding an `Array` from within a value cannot be done using a
             // recursive strategy. In general, async fns do not support
-            // recursion. No needed to encode nested arrays yet,
-            // so for now it is skipped.
+            // recursion.
+            // We do support at most 3 nested array response in up-level for now.
             Frame::Array(_val) => unreachable!(),
         }
 

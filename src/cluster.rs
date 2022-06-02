@@ -4,7 +4,7 @@ use hex::ToHex;
 use sha1::{Digest, Sha1};
 
 use crate::{
-    utils::{resp_array, resp_bulk, resp_int, resp_nil, resp_str},
+    utils::{resp_array, resp_bulk, resp_int, resp_str},
     Frame,
 };
 
@@ -21,19 +21,6 @@ pub struct Node {
     slots: String,
     role: String,
     flags: Option<String>,
-}
-
-impl Node {
-    fn new(id: &str, ip: &str, port: u64, slots: &str, role: &str, flags: Option<String>) -> Node {
-        Node {
-            id: id.to_owned(),
-            ip: ip.to_owned(),
-            port,
-            slots: slots.to_owned(),
-            role: role.to_owned(),
-            flags,
-        }
-    }
 }
 
 impl Cluster {
@@ -54,7 +41,7 @@ impl Cluster {
         addrs.sort();
         assert!(addrs.len() > 0);
 
-        let slots_step = 16384 / addrs.len();
+        let slots_step = 16384 / addrs.len() - 1;
         let mut slot_start = 0;
         let nodes = addrs
             .iter()
@@ -100,7 +87,7 @@ impl Cluster {
         addrs.sort();
         assert!(addrs.len() > 0);
 
-        let slots_step = 16384 / addrs.len();
+        let slots_step = 16384 / addrs.len() - 1;
         let mut slot_start = 0;
         let mut nodes = addrs
             .iter()
@@ -118,7 +105,7 @@ impl Cluster {
                     slot_end = 16383;
                 }
 
-                let flags = if matches!(my_addr, addr) {
+                let flags = if my_addr == addr {
                     Some("myself".to_owned())
                 } else {
                     None
@@ -159,7 +146,7 @@ impl Cluster {
         addrs != local_addrs
     }
 
-    fn cluster_nodes(&self) -> Frame {
+    pub fn cluster_nodes(&self) -> Frame {
         let nodes_guard = self.nodes.read().unwrap();
 
         let node_strs: Vec<String> = nodes_guard
@@ -179,10 +166,13 @@ impl Cluster {
             })
             .collect();
 
-        resp_bulk(node_strs.join("\r\n").into_bytes())
+        // Append the suffix \r\n
+        let mut resp = node_strs.join("\r\n").into_bytes();
+        resp.extend_from_slice(&"\r\n".as_bytes());
+        resp_bulk(resp)
     }
 
-    fn cluster_slots(&self) -> Frame {
+    pub fn cluster_slots(&self) -> Frame {
         let nodes_guard = self.nodes.read().unwrap();
 
         let slot_ranges: Vec<Frame> = nodes_guard
@@ -199,7 +189,7 @@ impl Cluster {
                 slot_range.push(resp_int(slot_end));
 
                 let mut node_info = Vec::with_capacity(3);
-                node_info.push(resp_str(&node.ip));
+                node_info.push(resp_bulk(node.ip.clone().into_bytes()));
                 node_info.push(resp_int(node.port as i64));
                 node_info.push(resp_bulk(node.id.clone().into_bytes()));
 
@@ -208,5 +198,27 @@ impl Cluster {
             })
             .collect();
         resp_array(slot_ranges)
+    }
+
+    pub fn cluster_info(&self) -> Frame {
+        let nodes_guard = self.nodes.read().unwrap();
+        let nodes_num = nodes_guard.len();
+        drop(nodes_guard);
+
+        // use \r\n for multiline?
+        let str = format!(
+            r#"cluster_state:ok
+cluster_slots_assigned:16384
+cluster_slots_ok:16384
+cluster_slots_pfail:0
+cluster_slots_fail:0
+cluster_known_nodes:{}
+cluster_size:{}
+cluster_current_epoch:1
+cluster_my_epoch:1
+"#,
+            nodes_num, nodes_num
+        );
+        resp_str(&str)
     }
 }

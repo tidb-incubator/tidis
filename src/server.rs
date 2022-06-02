@@ -7,9 +7,9 @@ use crate::tikv::encoding::{KeyDecoder, KeyEncoder};
 use crate::tikv::get_txn_client;
 use crate::utils::{self, resp_err, resp_ok, sleep};
 use crate::{
-    config_cluster_topology_expire_or_default, config_cluster_topology_interval_or_default,
-    config_local_pool_number, is_auth_enabled, is_auth_matched, Command, Connection, Db,
-    DbDropGuard, Shutdown,
+    config_cluster_broadcast_addr_or_default, config_cluster_topology_expire_or_default,
+    config_cluster_topology_interval_or_default, config_local_pool_number, is_auth_enabled,
+    is_auth_matched, Command, Connection, Db, DbDropGuard, Shutdown,
 };
 
 use async_std::net::{TcpListener, TcpStream};
@@ -190,17 +190,11 @@ pub async fn run(
     tls_listener: Option<TcpListener>,
     tls_acceptor: Option<TlsAcceptor>,
     shutdown: impl Future,
-    listen_addr: String,
-    tls_listen_addr: String,
 ) {
     let tcp_enabled = listener.is_some();
     let tls_enabled = tls_listener.is_some();
 
-    let topo_addr = if tcp_enabled {
-        listen_addr
-    } else {
-        tls_listen_addr
-    };
+    let topo_addr = config_cluster_broadcast_addr_or_default();
 
     let topo_holder = Cluster::build_myself(&topo_addr);
 

@@ -129,15 +129,7 @@ pub async fn main() -> tikv_service::Result<()> {
         tls_acceptor = Some(TlsAcceptor::from(Arc::new(tls_config)));
     }
 
-    server::run(
-        listener,
-        tls_listener,
-        tls_acceptor,
-        signal::ctrl_c(),
-        format!("{}:{}", &listen_addr, port),
-        format!("{}:{}", &tls_listen_addr, tls_port),
-    )
-    .await;
+    server::run(listener, tls_listener, tls_acceptor, signal::ctrl_c()).await;
 
     Ok(())
 }

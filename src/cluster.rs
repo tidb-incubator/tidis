@@ -4,7 +4,7 @@ use hex::ToHex;
 use sha1::{Digest, Sha1};
 
 use crate::{
-    utils::{resp_array, resp_bulk, resp_int, resp_str},
+    utils::{resp_array, resp_bulk, resp_int},
     Frame,
 };
 
@@ -31,15 +31,14 @@ impl Cluster {
     }
 
     pub fn build_myself(addr: &str) -> Self {
-        let mut addrs = Vec::new();
-        addrs.push(addr.to_owned());
+        let addrs = vec![addr.to_owned()];
         Self::build_from_meta(&addrs, addr)
     }
 
     fn build_from_meta(addrs: &[String], my_addr: &str) -> Self {
         let mut addrs = addrs.to_owned();
         addrs.sort();
-        assert!(addrs.len() > 0);
+        assert!(!addrs.is_empty());
 
         let slots_step = 16384 / addrs.len() - 1;
         let mut slot_start = 0;
@@ -52,7 +51,7 @@ impl Cluster {
                 let sha1 = hasher.finalize();
                 let id = sha1.encode_hex::<String>();
 
-                let mut addr_part = addr.split(":");
+                let mut addr_part = addr.split(':');
 
                 let mut slot_end = slot_start + slots_step;
                 if slot_end + slots_step > 16383 {
@@ -65,7 +64,7 @@ impl Cluster {
                     None
                 };
 
-                let slots_range = format!("{}-{}", slot_start.to_string(), slot_end.to_string());
+                let slots_range = format!("{}-{}", slot_start, slot_end);
 
                 slot_start = slot_end + 1;
 
@@ -85,7 +84,7 @@ impl Cluster {
     pub fn update_topo(&mut self, addrs: &[String], my_addr: &str) {
         let mut addrs = addrs.to_owned();
         addrs.sort();
-        assert!(addrs.len() > 0);
+        assert!(!addrs.is_empty());
 
         let slots_step = 16384 / addrs.len() - 1;
         let mut slot_start = 0;
@@ -98,7 +97,7 @@ impl Cluster {
                 let sha1 = hasher.finalize();
                 let id = sha1.encode_hex::<String>();
 
-                let mut addr_part = addr.split(":");
+                let mut addr_part = addr.split(':');
 
                 let mut slot_end = slot_start + slots_step;
                 if slot_end + slots_step > 16383 {
@@ -111,7 +110,7 @@ impl Cluster {
                     None
                 };
 
-                let slots_range = format!("{}-{}", slot_start.to_string(), slot_end.to_string());
+                let slots_range = format!("{}-{}", slot_start, slot_end);
 
                 slot_start = slot_end + 1;
 
@@ -168,7 +167,7 @@ impl Cluster {
 
         // Append the suffix \r\n
         let mut resp = node_strs.join("\r\n").into_bytes();
-        resp.extend_from_slice(&"\r\n".as_bytes());
+        resp.extend_from_slice("\r\n".as_bytes());
         resp_bulk(resp)
     }
 
@@ -181,15 +180,14 @@ impl Cluster {
                 let mut slot_range = Vec::with_capacity(3);
 
                 let slots_clone = node.slots.clone();
-                let mut slot = slots_clone.split("-");
+                let mut slot = slots_clone.split('-');
                 let slot_start = slot.next().unwrap().parse::<i64>().unwrap();
                 let slot_end = slot.next().unwrap().parse::<i64>().unwrap();
 
                 slot_range.push(resp_int(slot_start));
                 slot_range.push(resp_int(slot_end));
 
-                let mut node_info = Vec::with_capacity(3);
-                node_info.push(resp_bulk(node.ip.clone().into_bytes()));
+                let mut node_info = vec![resp_bulk(node.ip.clone().into_bytes())];
                 node_info.push(resp_int(node.port as i64));
                 node_info.push(resp_bulk(node.id.clone().into_bytes()));
 
@@ -205,20 +203,17 @@ impl Cluster {
         let nodes_num = nodes_guard.len();
         drop(nodes_guard);
 
-        // use \r\n for multiline?
         let str = format!(
-            r#"cluster_state:ok
-cluster_slots_assigned:16384
-cluster_slots_ok:16384
-cluster_slots_pfail:0
-cluster_slots_fail:0
-cluster_known_nodes:{}
-cluster_size:{}
-cluster_current_epoch:1
-cluster_my_epoch:1
-"#,
+            "cluster_state:ok\r\n\
+        cluster_slots_assigned:16384\r\n\
+        cluster_slots_ok:16384\r\ncluster_slots_pfail:0\r\n\
+        cluster_slots_fail:0\r\n\
+        cluster_known_nodes:{}\r\n\
+        cluster_size:{}\r\n\
+        cluster_current_epoch:1\r\n\
+        cluster_my_epoch:1\r\n",
             nodes_num, nodes_num
         );
-        resp_str(&str)
+        resp_bulk(str.into_bytes())
     }
 }

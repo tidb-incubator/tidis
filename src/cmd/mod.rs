@@ -171,6 +171,9 @@ pub use debug::Debug;
 mod cluster;
 pub use cluster::Cluster;
 
+mod fake;
+pub use fake::Fake;
+
 use crate::{cluster::Cluster as Topo, Connection, Db, Frame, Parse, ParseError, Shutdown};
 
 /// Enumeration of supported Redis commands.
@@ -253,6 +256,11 @@ pub enum Command {
     Debug(Debug),
 
     Cluster(Cluster),
+    ReadWrite(Fake),
+    ReadOnly(Fake),
+    Client(Fake),
+    Info(Fake),
+
     Unknown(Unknown),
 }
 
@@ -350,6 +358,10 @@ impl Command {
             "auth" => Command::Auth(Auth::parse_frames(&mut parse)?),
             "debug" => Command::Debug(Debug::parse_frames(&mut parse)?),
             "cluster" => Command::Cluster(Cluster::parse_frames(&mut parse)?),
+            "readwrite" => Command::ReadWrite(Fake::parse_frames(&mut parse, "readwrite")?),
+            "readonly" => Command::ReadOnly(Fake::parse_frames(&mut parse, "readonly")?),
+            "client" => Command::Client(Fake::parse_frames(&mut parse, "client")?),
+            "info" => Command::Info(Fake::parse_frames(&mut parse, "info")?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -523,6 +535,10 @@ impl Command {
             Debug(cmd) => cmd.apply(dst).await,
 
             Cluster(cmd) => cmd.apply(topo, dst).await,
+            ReadWrite(cmd) => cmd.apply("readwrite", dst).await,
+            ReadOnly(cmd) => cmd.apply("readonly", dst).await,
+            Client(cmd) => cmd.apply("client", dst).await,
+            Info(cmd) => cmd.apply("info", dst).await,
 
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
@@ -602,6 +618,10 @@ impl Command {
             Command::Auth(_) => "auth",
             Command::Debug(_) => "debug",
             Command::Cluster(_) => "cluster",
+            Command::ReadWrite(_) => "readwrite",
+            Command::ReadOnly(_) => "readonly",
+            Command::Client(_) => "client",
+            Command::Info(_) => "info",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

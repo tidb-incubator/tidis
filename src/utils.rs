@@ -26,7 +26,7 @@ pub fn resp_ok_ignore<T>(_: T) -> Frame {
 }
 
 pub fn resp_invalid_arguments() -> Frame {
-    Frame::Simple("Invalid arguments".to_string())
+    Frame::ErrorString("Invalid arguments")
 }
 
 pub fn resp_err(e: RTError) -> Frame {

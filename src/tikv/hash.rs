@@ -368,7 +368,7 @@ impl<'a> HashCommandCtx {
 
             Ok(resp_array(resp))
         } else {
-            Ok(resp_nil())
+            Ok(resp_array(vec![]))
         }
     }
 

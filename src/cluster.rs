@@ -35,7 +35,7 @@ impl Cluster {
         Self::build_from_meta(&addrs, addr)
     }
 
-    fn build_from_meta(addrs: &[String], my_addr: &str) -> Self {
+    fn build_nodes_from_addrs(addrs: &[String], my_addr: &str) -> Vec<Node> {
         let mut addrs = addrs.to_owned();
         addrs.sort();
         assert!(!addrs.is_empty());
@@ -78,52 +78,16 @@ impl Cluster {
                 }
             })
             .collect::<Vec<Node>>();
+        nodes
+    }
+
+    fn build_from_meta(addrs: &[String], my_addr: &str) -> Self {
+        let nodes = Self::build_nodes_from_addrs(addrs, my_addr);
         Self::new(&nodes)
     }
 
     pub fn update_topo(&mut self, addrs: &[String], my_addr: &str) {
-        let mut addrs = addrs.to_owned();
-        addrs.sort();
-        assert!(!addrs.is_empty());
-
-        let slots_step = 16384 / addrs.len() - 1;
-        let mut slot_start = 0;
-        let mut nodes = addrs
-            .iter()
-            .map(|addr| {
-                // generate id from address
-                let mut hasher = Sha1::new();
-                hasher.update(addr);
-                let sha1 = hasher.finalize();
-                let id = sha1.encode_hex::<String>();
-
-                let mut addr_part = addr.split(':');
-
-                let mut slot_end = slot_start + slots_step;
-                if slot_end + slots_step > 16383 {
-                    slot_end = 16383;
-                }
-
-                let flags = if my_addr == addr {
-                    Some("myself".to_owned())
-                } else {
-                    None
-                };
-
-                let slots_range = format!("{}-{}", slot_start, slot_end);
-
-                slot_start = slot_end + 1;
-
-                Node {
-                    id,
-                    ip: addr_part.next().unwrap().to_owned(),
-                    port: addr_part.next().unwrap().parse::<u64>().unwrap(),
-                    slots: slots_range,
-                    role: "master".to_owned(),
-                    flags,
-                }
-            })
-            .collect::<Vec<Node>>();
+        let mut nodes = Self::build_nodes_from_addrs(addrs, my_addr);
 
         let mut nodes_guard = self.nodes.write().unwrap();
         nodes_guard.clear();

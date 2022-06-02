@@ -233,7 +233,7 @@ impl Set {
     async fn put_not_exists(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
         if is_use_txn_api() {
             StringCommandCtx::new(txn)
-                .do_async_txnkv_put_not_exists(&self.key, &self.value)
+                .do_async_txnkv_put_not_exists(&self.key, &self.value, false)
                 .await
         } else {
             StringCommandCtx::new(txn)

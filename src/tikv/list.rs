@@ -379,7 +379,7 @@ impl<'a> ListCommandCtx {
                     r_right += llen;
                 }
                 if r_left > r_right || r_left > llen {
-                    return Ok(resp_nil());
+                    return Ok(resp_array(vec![]));
                 }
 
                 let real_left = r_left + left as i64;
@@ -397,7 +397,7 @@ impl<'a> ListCommandCtx {
                 let resp = iter.map(|kv| resp_bulk(kv.1)).collect();
                 Ok(resp_array(resp))
             }
-            None => Ok(resp_nil()),
+            None => Ok(resp_array(vec![])),
         }
     }
 
@@ -492,7 +492,7 @@ impl<'a> ListCommandCtx {
                         self.txn = Some(txn_rc.clone());
                     }
                     let mut txn = txn_rc.lock().await;
-                    Ok(match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
@@ -527,7 +527,7 @@ impl<'a> ListCommandCtx {
                             // -Err no such key
                             Err(REDIS_NO_SUCH_KEY_ERR)
                         }
-                    })
+                    }
                 }
                 .boxed()
             })

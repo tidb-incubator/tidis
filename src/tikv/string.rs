@@ -199,6 +199,7 @@ impl StringCommandCtx {
         mut self,
         key: &str,
         value: &Bytes,
+        return_number: bool,
     ) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
@@ -232,6 +233,9 @@ impl StringCommandCtx {
 
         match resp {
             Ok(n) => {
+                if return_number {
+                    return Ok(resp_int(n as i64));
+                }
                 if n == 0 {
                     Ok(resp_nil())
                 } else {

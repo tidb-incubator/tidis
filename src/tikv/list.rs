@@ -560,7 +560,7 @@ impl<'a> ListCommandCtx {
                             let range: RangeFrom<Key> = data_key_start..;
                             let from_range: BoundRange = range.into();
                             let len = right - left;
-                            let iter = txn.scan(from_range, len.try_into().unwrap()).await?;
+                            let iter = txn.scan_keys(from_range, len.try_into().unwrap()).await?;
 
                             for k in iter {
                                 txn.delete(k).await?;
@@ -602,7 +602,7 @@ impl<'a> ListCommandCtx {
                             let range: RangeFrom<Key> = data_key_start..;
                             let from_range: BoundRange = range.into();
                             let len = right - left;
-                            let iter = txn.scan(from_range, len.try_into().unwrap()).await?;
+                            let iter = txn.scan_keys(from_range, len.try_into().unwrap()).await?;
 
                             for k in iter {
                                 txn.delete(k).await?;

@@ -38,6 +38,26 @@ impl KeyEncoder {
         }
     }
 
+    /// encode key for register myself to tikv, for topology usage
+    pub fn encode_txnkv_cluster_topo(&self, addr: &str) -> Key {
+        let ret = format!("x_{}_T_{}", self.instance_id, addr);
+        ret.into()
+    }
+
+    pub fn encode_txnkv_cluster_topo_value(&self, ttl: u64) -> Value {
+        ttl.to_be_bytes().to_vec()
+    }
+
+    pub fn encode_txnkv_cluster_topo_start(&self) -> Key {
+        let ret = format!("x_{}_T_", self.instance_id);
+        ret.into()
+    }
+
+    pub fn encode_txnkv_cluster_topo_end(&self) -> Key {
+        let ret = format!("x_{}_T`", self.instance_id);
+        ret.into()
+    }
+
     pub fn encode_rawkv_string(&self, key: &str) -> Key {
         let prefix = self.get_prefix(DataType::String);
         let ret = format!("{}_M_{}", prefix, key);

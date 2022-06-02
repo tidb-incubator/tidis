@@ -46,6 +46,9 @@ struct Server {
     password: Option<String>,
     log_level: Option<String>,
     log_file: Option<String>,
+    cluster_broadcast_addr: Option<String>,
+    cluster_topology_interval: Option<u64>,
+    cluster_topology_expire: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -250,6 +253,48 @@ pub fn config_local_pool_number() -> usize {
     }
     // default use 8 localset pool to handle connections
     8
+}
+
+pub fn config_cluster_broadcast_addr_or_default() -> String {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(s) = c.server.cluster_broadcast_addr.clone() {
+                return s;
+            }
+        }
+    }
+    // use listen addr if broadcast address not set
+    format!(
+        "{}:{}",
+        config_listen_or_default(),
+        config_port_or_default()
+    )
+}
+
+pub fn config_cluster_topology_interval_or_default() -> u64 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(s) = c.server.cluster_topology_interval {
+                return s;
+            }
+        }
+    }
+
+    // default update interval set to 10s
+    10000
+}
+
+pub fn config_cluster_topology_expire_or_default() -> u64 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(s) = c.server.cluster_topology_expire {
+                return s;
+            }
+        }
+    }
+
+    // default expire set to 30s, 3 times to update interval
+    30000
 }
 
 fn log_level_str() -> String {

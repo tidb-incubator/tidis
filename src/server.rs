@@ -1,23 +1,29 @@
-//! Minimal Redis server implementation
-//!
-//! Provides an async `run` function that listens for inbound connections,
-//! spawning a task per connection.
-
+use crate::cluster::Cluster;
 use crate::metrics::{
     CURRENT_CONNECTION_COUNTER, REQUEST_CMD_COUNTER, REQUEST_CMD_FINISH_COUNTER,
     REQUEST_CMD_HANDLE_TIME, REQUEST_COUNTER,
 };
-use crate::utils::{resp_err, resp_ok};
-use crate::{is_auth_enabled, is_auth_matched, Command, Connection, Db, DbDropGuard, Shutdown};
+use crate::tikv::encoding::{KeyDecoder, KeyEncoder};
+use crate::tikv::get_txn_client;
+use crate::utils::{self, resp_err, resp_ok, sleep};
+use crate::{
+    config_cluster_broadcast_addr_or_default, config_cluster_topology_expire_or_default,
+    config_cluster_topology_interval_or_default, config_local_pool_number, is_auth_enabled,
+    is_auth_matched, Command, Connection, Db, DbDropGuard, Shutdown,
+};
 
 use async_std::net::{TcpListener, TcpStream};
+use futures::FutureExt;
 use std::future::Future;
+use std::ops::Range;
+use tikv_client::{BoundRange, Key};
 
 use async_std::prelude::StreamExt;
 use async_tls::TlsAcceptor;
-use slog::{debug, error, info};
+use rand::Rng;
+use slog::{debug, error, info, warn};
 use tokio::sync::{broadcast, mpsc};
-use tokio::time::{self, Duration, Instant};
+use tokio::time::{self, Duration, Instant, MissedTickBehavior};
 
 use mlua::{Lua, LuaOptions, StdLib};
 
@@ -25,7 +31,6 @@ use crate::config::LOGGER;
 
 use tokio_util::task::LocalPoolHandle;
 
-use crate::config_local_pool_number;
 use crate::tikv::errors::{
     REDIS_AUTH_INVALID_PASSWORD_ERR, REDIS_AUTH_REQUIRED_ERR, REDIS_AUTH_WHEN_DISABLED_ERR,
 };
@@ -42,6 +47,8 @@ struct Listener {
     /// This holds a wrapper around an `Arc`. The internal `Db` can be
     /// retrieved and passed into the per connection state (`Handler`).
     db_holder: DbDropGuard,
+
+    topo_holder: Cluster,
 
     /// TCP listener supplied by the `run` caller.
     listener: TcpListener,
@@ -84,11 +91,24 @@ struct Listener {
 
 struct TlsListener {
     db_holder: DbDropGuard,
+    topo_holder: Cluster,
     tls_listener: TcpListener,
     tls_acceptor: TlsAcceptor,
     tls_notify_shutdown: broadcast::Sender<()>,
     tls_shutdown_complete_rx: mpsc::Receiver<()>,
     tls_shutdown_complete_tx: mpsc::Sender<()>,
+}
+#[derive(Debug, Clone)]
+struct TopologyManager {
+    /// address of this instance
+    ///
+    /// address will use listen:port if port is non-zero, otherwise tls_listen:tls_port instead
+    address: String,
+
+    topo_holder: Cluster,
+
+    interval: u64, // in milliseconds
+    expire: u64,   // in milliseconds
 }
 
 /// Per-connection handler. Reads requests from `connection` and applies the
@@ -101,6 +121,8 @@ struct Handler {
     /// The implementation of the command is in the `cmd` module. Each command
     /// will need to interact with `db` in order to complete the work.
     db: Db,
+
+    topo: Cluster,
 
     /// The TCP connection decorated with the redis protocol encoder / decoder
     /// implemented using a buffered `TcpStream`.
@@ -171,12 +193,25 @@ pub async fn run(
 ) {
     let tcp_enabled = listener.is_some();
     let tls_enabled = tls_listener.is_some();
+
+    let topo_addr = config_cluster_broadcast_addr_or_default();
+
+    let topo_holder = Cluster::build_myself(&topo_addr);
+
     // When the provided `shutdown` future completes, we must send a shutdown
     // message to all active connections. We use a broadcast channel for this
     // purpose. The call below ignores the receiver of the broadcast pair, and when
     // a receiver is needed, the subscribe() method on the sender is used to create
     // one.
     let db_holder = DbDropGuard::new();
+
+    let topo_manager = TopologyManager {
+        address: topo_addr,
+        topo_holder: topo_holder.clone(),
+        interval: config_cluster_topology_interval_or_default(),
+        expire: config_cluster_topology_expire_or_default(),
+    };
+
     if tcp_enabled && !tls_enabled {
         let (notify_shutdown, _) = broadcast::channel(1);
         let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
@@ -185,6 +220,7 @@ pub async fn run(
         let mut server = Listener {
             listener: listener.unwrap(),
             db_holder: db_holder.clone(),
+            topo_holder: topo_holder.clone(),
             // limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
             notify_shutdown,
             shutdown_complete_tx,
@@ -196,6 +232,9 @@ pub async fn run(
                 if let Err(err) = res {
                     error!(LOGGER, "failed to accept, cause {}", err.to_string());
                 }
+            }
+            _ = topo_manager.run() => {
+                error!(LOGGER, "topology manager exit");
             }
             _ = shutdown => {
                 // The shutdown signal has been received.
@@ -220,6 +259,7 @@ pub async fn run(
         let mut tls_server = TlsListener {
             tls_listener: tls_listener.unwrap(),
             db_holder: db_holder.clone(),
+            topo_holder: topo_holder.clone(),
             tls_acceptor: tls_acceptor.unwrap(),
             tls_notify_shutdown,
             tls_shutdown_complete_tx,
@@ -231,6 +271,9 @@ pub async fn run(
                 if let Err(err) = tls_res {
                     error!(LOGGER, "failed to accept, cause {}", err.to_string());
                 }
+            }
+            _ = topo_manager.run() => {
+                error!(LOGGER, "topology manager exit");
             }
             _ = shutdown => {
                 // The shutdown signal has been received.
@@ -256,6 +299,7 @@ pub async fn run(
         let mut server = Listener {
             listener: listener.unwrap(),
             db_holder: db_holder.clone(),
+            topo_holder: topo_holder.clone(),
             // limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
             notify_shutdown,
             shutdown_complete_tx,
@@ -267,6 +311,7 @@ pub async fn run(
         let mut tls_server = TlsListener {
             tls_listener: tls_listener.unwrap(),
             db_holder: db_holder.clone(),
+            topo_holder: topo_holder.clone(),
             tls_acceptor: tls_acceptor.unwrap(),
             tls_notify_shutdown,
             tls_shutdown_complete_tx,
@@ -283,6 +328,9 @@ pub async fn run(
                 if let Err(err) = tls_res {
                     error!(LOGGER, "failed to accept, cause {}", err.to_string());
                 }
+            }
+            _ = topo_manager.run() => {
+                error!(LOGGER, "topology manager exit");
             }
             _ = shutdown => {
                 // The shutdown signal has been received.
@@ -360,6 +408,8 @@ impl Listener {
             let mut handler = Handler {
                 // Get a handle to the shared database.
                 db: self.db_holder.db(),
+
+                topo: self.topo_holder.clone(),
 
                 // Initialize the connection state. This allocates read/write
                 // buffers to perform redis protocol frame parsing.
@@ -460,6 +510,7 @@ impl TlsListener {
 
             let mut handler = Handler {
                 db: self.db_holder.db(),
+                topo: self.topo_holder.clone(),
                 connection: Connection::new_tls(&local_addr, &peer_addr, tls_stream),
                 shutdown: Shutdown::new(self.tls_notify_shutdown.subscribe()),
                 authorized: !is_auth_enabled(),
@@ -477,6 +528,80 @@ impl TlsListener {
         }
 
         Ok(())
+    }
+}
+
+impl TopologyManager {
+    async fn run(self) -> crate::Result<()> {
+        let mut interval = time::interval(Duration::from_millis(self.interval));
+        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        let mut rng = rand::thread_rng();
+        let address = self.address;
+        let expire = self.expire;
+        let topo_holder = self.topo_holder.clone();
+        loop {
+            interval.tick().await;
+
+            let mut txn_client = get_txn_client()?;
+            // do all work in one txn
+            let resp = txn_client
+                .exec_in_txn(None, |txn_rc| {
+                    let address = address.clone();
+                    let expire = expire;
+                    let mut topo_holder = topo_holder.clone();
+                    async move {
+                        let mut txn = txn_rc.lock().await;
+                        // refresh myself infomation to backend store
+                        let topo_key = KeyEncoder::new().encode_txnkv_cluster_topo(&address);
+                        let ttl = utils::timestamp_from_ttl(expire);
+                        let topo_value = KeyEncoder::new().encode_txnkv_cluster_topo_value(ttl);
+                        txn.put(topo_key, topo_value).await?;
+
+                        // expire stale entries
+                        // expire should be configured as 3 times of interval at least
+                        let topo_start_key = KeyEncoder::new().encode_txnkv_cluster_topo_start();
+                        let topo_end_key = KeyEncoder::new().encode_txnkv_cluster_topo_end();
+                        let range: Range<Key> = topo_start_key..topo_end_key;
+                        let bound_range: BoundRange = range.into();
+                        let iter = txn.scan(bound_range, u32::MAX).await?;
+
+                        let mut remaining_node = Vec::new();
+
+                        for kv in iter {
+                            let ts = KeyDecoder::decode_topo_value(&kv.1);
+                            let ttl = utils::ttl_from_timestamp(ts);
+                            if ttl == 0 {
+                                txn.delete(kv.0).await?;
+                            } else {
+                                let encoded_key: Vec<u8> = kv.0.into();
+                                let addr = KeyDecoder::decode_topo_key_addr(&encoded_key);
+                                remaining_node.push(String::from_utf8_lossy(addr).to_string());
+                            }
+                        }
+
+                        // update topology snapshot and build topology in local if needed
+                        // check if member changed
+                        if topo_holder.cluster_member_changed(&remaining_node) {
+                            topo_holder.update_topo(&remaining_node, &address);
+                        }
+
+                        Ok(())
+                    }
+                    .boxed()
+                })
+                .await;
+
+            match resp {
+                Ok(_) => {}
+                Err(err) => {
+                    warn!(LOGGER, "topology update failed: {}", err);
+                }
+            }
+
+            // random sleep a small period for jitter tick
+            let jitter = rng.gen::<u8>();
+            sleep(jitter as u32).await;
+        }
     }
 }
 
@@ -583,6 +708,7 @@ impl Handler {
                         // peer.
                         cmd.apply(
                             &self.db,
+                            &self.topo,
                             &mut self.connection,
                             &mut self.lua,
                             &mut self.shutdown,

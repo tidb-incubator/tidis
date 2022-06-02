@@ -116,7 +116,7 @@ impl SetNX {
         }
         if is_use_txn_api() {
             StringCommandCtx::new(txn)
-                .do_async_txnkv_put_not_exists(&self.key, &self.value)
+                .do_async_txnkv_put_not_exists(&self.key, &self.value, true)
                 .await
         } else {
             StringCommandCtx::new(txn)

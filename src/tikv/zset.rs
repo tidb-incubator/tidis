@@ -275,7 +275,7 @@ impl ZsetCommandCtx {
                     None => Ok(resp_nil()),
                 }
             }
-            None => Ok(resp_int(0)),
+            None => Ok(resp_nil()),
         }
     }
 

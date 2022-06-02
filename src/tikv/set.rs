@@ -188,7 +188,7 @@ impl SetCommandCtx {
                 if member_len == 1 {
                     Ok(resp_int(0))
                 } else {
-                    Ok(resp_array(vec![]))
+                    Ok(resp_array(vec![resp_int(0); member_len]))
                 }
             }
         }

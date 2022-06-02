@@ -37,7 +37,7 @@ impl Cluster {
     }
 
     fn build_nodes_from_addrs(addrs: &[String], my_addr: &str) -> Vec<Node> {
-        let mut addrs: Vec<&str> = addrs.iter().map(String::as_str).collect();
+        let mut addrs = addrs.to_owned();
         addrs.sort();
         assert!(!addrs.is_empty());
 
@@ -59,11 +59,13 @@ impl Cluster {
                     slot_end = 16383;
                 }
 
-                let flags = if &my_addr == addr {
+                let flags = if my_addr == addr {
                     Some("myself".to_owned())
                 } else {
                     None
                 };
+
+                let slot_start_this = slot_start;
 
                 slot_start = slot_end + 1;
 
@@ -71,7 +73,7 @@ impl Cluster {
                     id,
                     ip: addr_part.next().unwrap().to_owned(),
                     port: addr_part.next().unwrap().parse::<u64>().unwrap(),
-                    slot_start,
+                    slot_start: slot_start_this,
                     slot_end,
                     role: "master".to_owned(),
                     flags,
@@ -95,7 +97,7 @@ impl Cluster {
     }
 
     pub fn cluster_member_changed(&self, addrs: &[String]) -> bool {
-        let mut addrs: Vec<&str> = addrs.iter().map(String::as_str).collect();
+        let mut addrs = addrs.to_owned();
         addrs.sort();
 
         let nodes_guard = self.nodes.read().unwrap();
@@ -122,7 +124,7 @@ impl Cluster {
                 };
 
                 let node_str = format!(
-                    "{} {}:{}@0 {}-{} - 0 0 0 connected {}",
+                    "{} {}:{}@0 {} - 0 0 0 connected {}-{}",
                     node.id, node.ip, node.port, flag_and_role, node.slot_start, node.slot_end
                 );
                 node_str

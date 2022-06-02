@@ -264,7 +264,11 @@ pub fn config_cluster_broadcast_addr_or_default() -> String {
         }
     }
     // use listen addr if broadcast address not set
-    config_listen_or_default()
+    format!(
+        "{}:{}",
+        config_listen_or_default(),
+        config_port_or_default()
+    )
 }
 
 pub fn config_cluster_topology_interval_or_default() -> u64 {

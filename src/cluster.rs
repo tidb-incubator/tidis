@@ -18,7 +18,8 @@ pub struct Node {
     id: String,
     ip: String,
     port: u64,
-    slots: String,
+    slot_start: usize,
+    slot_end: usize,
     role: String,
     flags: Option<String>,
 }
@@ -36,13 +37,13 @@ impl Cluster {
     }
 
     fn build_nodes_from_addrs(addrs: &[String], my_addr: &str) -> Vec<Node> {
-        let mut addrs = addrs.to_owned();
+        let mut addrs: Vec<&str> = addrs.iter().map(String::as_str).collect();
         addrs.sort();
         assert!(!addrs.is_empty());
 
         let slots_step = 16384 / addrs.len() - 1;
         let mut slot_start = 0;
-        let nodes = addrs
+        let nodes: Vec<Node> = addrs
             .iter()
             .map(|addr| {
                 // generate id from address
@@ -58,13 +59,11 @@ impl Cluster {
                     slot_end = 16383;
                 }
 
-                let flags = if my_addr == addr {
+                let flags = if &my_addr == addr {
                     Some("myself".to_owned())
                 } else {
                     None
                 };
-
-                let slots_range = format!("{}-{}", slot_start, slot_end);
 
                 slot_start = slot_end + 1;
 
@@ -72,12 +71,13 @@ impl Cluster {
                     id,
                     ip: addr_part.next().unwrap().to_owned(),
                     port: addr_part.next().unwrap().parse::<u64>().unwrap(),
-                    slots: slots_range,
+                    slot_start,
+                    slot_end,
                     role: "master".to_owned(),
                     flags,
                 }
             })
-            .collect::<Vec<Node>>();
+            .collect();
         nodes
     }
 
@@ -95,7 +95,7 @@ impl Cluster {
     }
 
     pub fn cluster_member_changed(&self, addrs: &[String]) -> bool {
-        let mut addrs = addrs.to_owned();
+        let mut addrs: Vec<&str> = addrs.iter().map(String::as_str).collect();
         addrs.sort();
 
         let nodes_guard = self.nodes.read().unwrap();
@@ -122,8 +122,8 @@ impl Cluster {
                 };
 
                 let node_str = format!(
-                    "{} {}:{}@0 {} - 0 0 0 connected {}",
-                    node.id, node.ip, node.port, flag_and_role, node.slots
+                    "{} {}:{}@0 {}-{} - 0 0 0 connected {}",
+                    node.id, node.ip, node.port, flag_and_role, node.slot_start, node.slot_end
                 );
                 node_str
             })
@@ -143,13 +143,11 @@ impl Cluster {
             .map(|node| {
                 let mut slot_range = Vec::with_capacity(3);
 
-                let slots_clone = node.slots.clone();
-                let mut slot = slots_clone.split('-');
-                let slot_start = slot.next().unwrap().parse::<i64>().unwrap();
-                let slot_end = slot.next().unwrap().parse::<i64>().unwrap();
+                let slot_start = node.slot_start;
+                let slot_end = node.slot_end;
 
-                slot_range.push(resp_int(slot_start));
-                slot_range.push(resp_int(slot_end));
+                slot_range.push(resp_int(slot_start as i64));
+                slot_range.push(resp_int(slot_end as i64));
 
                 let mut node_info = vec![resp_bulk(node.ip.clone().into_bytes())];
                 node_info.push(resp_int(node.port as i64));
@@ -163,9 +161,7 @@ impl Cluster {
     }
 
     pub fn cluster_info(&self) -> Frame {
-        let nodes_guard = self.nodes.read().unwrap();
-        let nodes_num = nodes_guard.len();
-        drop(nodes_guard);
+        let nodes_num = self.nodes.read().unwrap().len();
 
         let str = format!(
             "cluster_state:ok\r\n\

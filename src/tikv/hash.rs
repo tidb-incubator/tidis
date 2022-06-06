@@ -1,8 +1,8 @@
-use super::get_txn_client;
 use super::{
-    encoding::{DataType, KeyDecoder, KeyEncoder},
+    encoding::{DataType, KeyDecoder},
     errors::AsyncResult,
 };
+use super::{get_txn_client, KEY_ENCODER};
 use crate::{
     utils::{key_is_expired, resp_ok},
     Frame,
@@ -34,7 +34,7 @@ impl<'a> HashCommandCtx {
     ) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
-        let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_hash_meta_key(&key);
         let fvs_copy = fvs.to_vec();
         let fvs_len = fvs_copy.len();
         let resp = client
@@ -66,7 +66,7 @@ impl<'a> HashCommandCtx {
 
                             for kv in fvs_copy {
                                 let field: Vec<u8> = kv.0.into();
-                                let datakey = KeyEncoder::new().encode_txnkv_hash_data_key(
+                                let datakey = KEY_ENCODER.encode_txnkv_hash_data_key(
                                     &key,
                                     &String::from_utf8_lossy(&field),
                                 );
@@ -79,8 +79,7 @@ impl<'a> HashCommandCtx {
                             }
 
                             // update meta key
-                            let new_metaval =
-                                KeyEncoder::new().encode_txnkv_hash_meta_value(ttl, size);
+                            let new_metaval = KEY_ENCODER.encode_txnkv_hash_meta_value(ttl, size);
                             txn.put(meta_key, new_metaval).await?;
                         }
                         None => {
@@ -90,7 +89,7 @@ impl<'a> HashCommandCtx {
 
                             for kv in fvs_copy {
                                 let field: Vec<u8> = kv.0.into();
-                                let datakey = KeyEncoder::new().encode_txnkv_hash_data_key(
+                                let datakey = KEY_ENCODER.encode_txnkv_hash_data_key(
                                     &key,
                                     &String::from_utf8_lossy(&field),
                                 );
@@ -103,8 +102,7 @@ impl<'a> HashCommandCtx {
                             }
 
                             // set meta key
-                            let new_metaval =
-                                KeyEncoder::new().encode_txnkv_hash_meta_value(ttl, size);
+                            let new_metaval = KEY_ENCODER.encode_txnkv_hash_meta_value(ttl, size);
                             txn.put(meta_key, new_metaval).await?;
                         }
                     }
@@ -129,7 +127,7 @@ impl<'a> HashCommandCtx {
         let client = get_txn_client()?;
         let key = key.to_owned();
         let field = field.to_owned();
-        let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_hash_meta_key(&key);
 
         let mut ss = match self.txn.clone() {
             Some(txn) => client.snapshot_from_txn(txn).await,
@@ -150,7 +148,7 @@ impl<'a> HashCommandCtx {
                     return Ok(resp_nil());
                 }
 
-                let data_key = KeyEncoder::new().encode_txnkv_hash_data_key(&key, &field);
+                let data_key = KEY_ENCODER.encode_txnkv_hash_data_key(&key, &field);
 
                 match ss.get(data_key).await? {
                     Some(data) => Ok(resp_bulk(data)),
@@ -165,7 +163,7 @@ impl<'a> HashCommandCtx {
         let client = get_txn_client()?;
         let key = key.to_owned();
         let field = field.to_owned();
-        let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_hash_meta_key(&key);
 
         let mut ss = match self.txn.clone() {
             Some(txn) => client.snapshot_from_txn(txn).await,
@@ -186,7 +184,7 @@ impl<'a> HashCommandCtx {
                     return Ok(resp_int(0));
                 }
 
-                let data_key = KeyEncoder::new().encode_txnkv_hash_data_key(&key, &field);
+                let data_key = KEY_ENCODER.encode_txnkv_hash_data_key(&key, &field);
 
                 match ss.get(data_key).await? {
                     Some(data) => Ok(resp_int(data.len() as i64)),
@@ -201,7 +199,7 @@ impl<'a> HashCommandCtx {
         let client = get_txn_client()?;
         let key = key.to_owned();
         let field = field.to_owned();
-        let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_hash_meta_key(&key);
 
         let mut ss = match self.txn.clone() {
             Some(txn) => client.snapshot_from_txn(txn).await,
@@ -222,7 +220,7 @@ impl<'a> HashCommandCtx {
                     return Ok(resp_int(0));
                 }
 
-                let data_key = KeyEncoder::new().encode_txnkv_hash_data_key(&key, &field);
+                let data_key = KEY_ENCODER.encode_txnkv_hash_data_key(&key, &field);
 
                 if ss.key_exists(data_key).await? {
                     Ok(resp_int(1))
@@ -236,7 +234,7 @@ impl<'a> HashCommandCtx {
 
     pub async fn do_async_txnkv_hmget(self, key: &str, fields: &[String]) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
-        let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(key);
+        let meta_key = KEY_ENCODER.encode_txnkv_hash_meta_key(key);
         let mut ss = match self.txn.clone() {
             Some(txn) => client.snapshot_from_txn(txn).await,
             None => client.newest_snapshot().await,
@@ -260,7 +258,7 @@ impl<'a> HashCommandCtx {
                 }
 
                 for field in fields {
-                    let data_key = KeyEncoder::new().encode_txnkv_hash_data_key(key, field);
+                    let data_key = KEY_ENCODER.encode_txnkv_hash_data_key(key, field);
                     match ss.get(data_key).await? {
                         Some(data) => {
                             resp.push(resp_bulk(data));
@@ -282,7 +280,7 @@ impl<'a> HashCommandCtx {
 
     pub async fn do_async_txnkv_hlen(self, key: &str) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
-        let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(key);
+        let meta_key = KEY_ENCODER.encode_txnkv_hash_meta_key(key);
         let mut ss = match self.txn.clone() {
             Some(txn) => client.snapshot_from_txn(txn).await,
             None => client.newest_snapshot().await,
@@ -317,7 +315,7 @@ impl<'a> HashCommandCtx {
         with_value: bool,
     ) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
-        let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(key);
+        let meta_key = KEY_ENCODER.encode_txnkv_hash_meta_key(key);
         let mut ss = match self.txn.clone() {
             Some(txn) => client.snapshot_from_txn(txn).await,
             None => client.newest_snapshot().await,
@@ -339,7 +337,7 @@ impl<'a> HashCommandCtx {
 
             let size = KeyDecoder::decode_key_hash_size(&meta_value);
 
-            let data_key_start = KeyEncoder::new().encode_txnkv_hash_data_key_start(key);
+            let data_key_start = KEY_ENCODER.encode_txnkv_hash_data_key_start(key);
             let range: RangeFrom<Key> = data_key_start..;
             let from_range: BoundRange = range.into();
             // scan return iterator
@@ -376,7 +374,7 @@ impl<'a> HashCommandCtx {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
         let fields = fields.to_vec();
-        let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_hash_meta_key(&key);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -405,8 +403,7 @@ impl<'a> HashCommandCtx {
 
                             for field in fields {
                                 // check data key exists
-                                let data_key =
-                                    KeyEncoder::new().encode_txnkv_hash_data_key(&key, &field);
+                                let data_key = KEY_ENCODER.encode_txnkv_hash_data_key(&key, &field);
                                 if txn.key_exists(data_key.clone()).await? {
                                     // delete in txn
                                     txn.delete(data_key).await?;
@@ -414,7 +411,7 @@ impl<'a> HashCommandCtx {
                                 }
                             }
                             // update meta key
-                            let new_meta_value = KeyEncoder::new()
+                            let new_meta_value = KEY_ENCODER
                                 .encode_txnkv_hash_meta_value(ttl, size - deleted as u64);
                             txn.put(meta_key, new_meta_value).await?;
                             Ok(deleted)
@@ -441,8 +438,8 @@ impl<'a> HashCommandCtx {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
         let field = field.to_owned();
-        let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
-        let data_key = KeyEncoder::new().encode_txnkv_hash_data_key(&key, &field);
+        let meta_key = KEY_ENCODER.encode_txnkv_hash_meta_key(&key);
+        let data_key = KEY_ENCODER.encode_txnkv_hash_data_key(&key, &field);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -483,8 +480,8 @@ impl<'a> HashCommandCtx {
                                     // filed not exist
                                     prev_int = 0;
                                     // update meta key
-                                    let new_meta_value = KeyEncoder::new()
-                                        .encode_txnkv_hash_meta_value(ttl, size + 1);
+                                    let new_meta_value =
+                                        KEY_ENCODER.encode_txnkv_hash_meta_value(ttl, size + 1);
                                     txn.put(meta_key, new_meta_value).await?;
                                 }
                             }
@@ -492,7 +489,7 @@ impl<'a> HashCommandCtx {
                         None => {
                             prev_int = 0;
                             // create new meta key first
-                            let meta_value = KeyEncoder::new().encode_txnkv_hash_meta_value(0, 1);
+                            let meta_value = KEY_ENCODER.encode_txnkv_hash_meta_value(0, 1);
                             txn.put(meta_key, meta_value).await?;
                         }
                     }
@@ -516,7 +513,7 @@ impl<'a> HashCommandCtx {
     pub async fn do_async_txnkv_hash_del(mut self, key: &str) -> AsyncResult<i64> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
-        let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_hash_meta_key(&key);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_arc| {
@@ -529,8 +526,7 @@ impl<'a> HashCommandCtx {
                         Some(meta_value) => {
                             let size = KeyDecoder::decode_key_hash_size(&meta_value);
 
-                            let data_key_start =
-                                KeyEncoder::new().encode_txnkv_hash_data_key_start(&key);
+                            let data_key_start = KEY_ENCODER.encode_txnkv_hash_data_key_start(&key);
                             let range: RangeFrom<Key> = data_key_start..;
                             let from_range: BoundRange = range.into();
                             // scan return iterator
@@ -554,7 +550,7 @@ impl<'a> HashCommandCtx {
     pub async fn do_async_txnkv_hash_expire_if_needed(mut self, key: &str) -> AsyncResult<i64> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
-        let meta_key = KeyEncoder::new().encode_txnkv_hash_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_hash_meta_key(&key);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_arc| {
@@ -572,8 +568,7 @@ impl<'a> HashCommandCtx {
 
                             let size = KeyDecoder::decode_key_hash_size(&meta_value);
 
-                            let data_key_start =
-                                KeyEncoder::new().encode_txnkv_hash_data_key_start(&key);
+                            let data_key_start = KEY_ENCODER.encode_txnkv_hash_data_key_start(&key);
                             let range: RangeFrom<Key> = data_key_start..;
                             let from_range: BoundRange = range.into();
                             // scan return iterator

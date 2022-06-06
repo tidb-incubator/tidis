@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use crate::config::is_use_txn_api;
-use crate::tikv::encoding::KeyEncoder;
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::string::StringCommandCtx;
+use crate::tikv::KEY_ENCODER;
 use crate::utils::resp_invalid_arguments;
 use crate::{Connection, Frame, Parse};
 use tikv_client::{KvPair, Transaction};
@@ -97,9 +97,8 @@ impl Mset {
         let mut kvs = Vec::new();
         if is_use_txn_api() {
             for (idx, key) in self.keys.iter().enumerate() {
-                let val =
-                    KeyEncoder::new().encode_txnkv_string_value(&mut self.vals[idx].to_vec(), 0);
-                let ekey = KeyEncoder::new().encode_txnkv_string(key);
+                let val = KEY_ENCODER.encode_txnkv_string_value(&mut self.vals[idx].to_vec(), 0);
+                let ekey = KEY_ENCODER.encode_txnkv_string(key);
                 let kvpair = KvPair::from((ekey, val.to_vec()));
                 kvs.push(kvpair);
             }
@@ -109,7 +108,7 @@ impl Mset {
         } else {
             for (idx, key) in self.keys.iter().enumerate() {
                 let val = &self.vals[idx];
-                let ekey = KeyEncoder::new().encode_rawkv_string(key);
+                let ekey = KEY_ENCODER.encode_rawkv_string(key);
                 let kvpair = KvPair::from((ekey, val.to_vec()));
                 kvs.push(kvpair);
             }

@@ -1,7 +1,8 @@
 use super::errors::*;
 use super::get_txn_client;
+use super::KEY_ENCODER;
 use super::{
-    encoding::{DataType, KeyDecoder, KeyEncoder},
+    encoding::{DataType, KeyDecoder},
     errors::AsyncResult,
 };
 use crate::utils::{key_is_expired, resp_array, resp_bulk, resp_err, resp_int, resp_nil};
@@ -37,7 +38,7 @@ impl ZsetCommandCtx {
         let members = members.to_owned();
         let scores = scores.to_owned();
 
-        let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_zset_meta_key(&key);
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
                 async move {
@@ -66,10 +67,10 @@ impl ZsetCommandCtx {
                             let mut added_count = 0;
 
                             for idx in 0..members.len() {
-                                let data_key = KeyEncoder::new()
-                                    .encode_txnkv_zset_data_key(&key, &members[idx]);
+                                let data_key =
+                                    KEY_ENCODER.encode_txnkv_zset_data_key(&key, &members[idx]);
                                 let new_score = scores[idx];
-                                let score_key = KeyEncoder::new().encode_txnkv_zset_score_key(
+                                let score_key = KEY_ENCODER.encode_txnkv_zset_score_key(
                                     &key,
                                     new_score,
                                     &members[idx],
@@ -104,8 +105,8 @@ impl ZsetCommandCtx {
                                                 }
                                             }
                                         }
-                                        let data_value = KeyEncoder::new()
-                                            .encode_txnkv_zset_data_value(new_score);
+                                        let data_value =
+                                            KEY_ENCODER.encode_txnkv_zset_data_value(new_score);
                                         txn.put(data_key, data_value).await?;
 
                                         // delete old score key if exists
@@ -114,7 +115,7 @@ impl ZsetCommandCtx {
                                                 &old_data_value_data,
                                             );
                                             if old_score != new_score {
-                                                let old_score_key = KeyEncoder::new()
+                                                let old_score_key = KEY_ENCODER
                                                     .encode_txnkv_zset_score_key(
                                                         &key,
                                                         old_score,
@@ -146,7 +147,7 @@ impl ZsetCommandCtx {
                                         }
                                     }
                                     let data_value =
-                                        KeyEncoder::new().encode_txnkv_zset_data_value(new_score);
+                                        KEY_ENCODER.encode_txnkv_zset_data_value(new_score);
                                     let member = members[idx].clone();
                                     txn.put(data_key, data_value).await?;
 
@@ -156,7 +157,7 @@ impl ZsetCommandCtx {
                                             &old_data_value_data,
                                         );
                                         if old_score != new_score {
-                                            let old_score_key = KeyEncoder::new()
+                                            let old_score_key = KEY_ENCODER
                                                 .encode_txnkv_zset_score_key(
                                                     &key,
                                                     old_score,
@@ -171,7 +172,7 @@ impl ZsetCommandCtx {
 
                             // update meta key
                             if added_count > 0 {
-                                let new_meta_value = KeyEncoder::new()
+                                let new_meta_value = KEY_ENCODER
                                     .encode_txnkv_zset_meta_value(ttl, size + added_count);
                                 txn.put(meta_key, new_meta_value).await?;
                             }
@@ -191,23 +192,21 @@ impl ZsetCommandCtx {
                             }
                             // create new key
                             for idx in 0..members.len() {
-                                let data_key = KeyEncoder::new()
-                                    .encode_txnkv_zset_data_key(&key, &members[idx]);
+                                let data_key =
+                                    KEY_ENCODER.encode_txnkv_zset_data_key(&key, &members[idx]);
                                 let score = scores[idx];
                                 let member = members[idx].clone();
-                                let score_key = KeyEncoder::new()
-                                    .encode_txnkv_zset_score_key(&key, score, &member);
+                                let score_key =
+                                    KEY_ENCODER.encode_txnkv_zset_score_key(&key, score, &member);
                                 // add data key and score key
-                                let data_value =
-                                    KeyEncoder::new().encode_txnkv_zset_data_value(score);
+                                let data_value = KEY_ENCODER.encode_txnkv_zset_data_value(score);
                                 txn.put(data_key, data_value).await?;
                                 // TODO check old score key exists, in case of zadd same field with different scores?
                                 txn.put(score_key, member).await?;
                             }
                             // add meta key
                             let size = members.len() as u64;
-                            let new_meta_value =
-                                KeyEncoder::new().encode_txnkv_zset_meta_value(0, size);
+                            let new_meta_value = KEY_ENCODER.encode_txnkv_zset_meta_value(0, size);
                             txn.put(meta_key, new_meta_value).await?;
                             Ok(size)
                         }
@@ -225,7 +224,7 @@ impl ZsetCommandCtx {
 
     pub async fn do_async_txnkv_zcard(self, key: &str) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
-        let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(key);
+        let meta_key = KEY_ENCODER.encode_txnkv_zset_meta_key(key);
 
         let mut ss = match self.txn.clone() {
             Some(txn) => client.snapshot_from_txn(txn).await,
@@ -255,7 +254,7 @@ impl ZsetCommandCtx {
 
     pub async fn do_async_txnkv_zcore(self, key: &str, member: &str) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
-        let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(key);
+        let meta_key = KEY_ENCODER.encode_txnkv_zset_meta_key(key);
 
         let mut ss = match self.txn.clone() {
             Some(txn) => client.snapshot_from_txn(txn).await,
@@ -277,7 +276,7 @@ impl ZsetCommandCtx {
                     return Ok(resp_int(0));
                 }
 
-                let data_key = KeyEncoder::new().encode_txnkv_zset_data_key(key, member);
+                let data_key = KEY_ENCODER.encode_txnkv_zset_data_key(key, member);
                 match ss.get(data_key).await? {
                     Some(data_value) => {
                         let score = KeyDecoder::decode_key_zset_data_value(&data_value);
@@ -299,7 +298,7 @@ impl ZsetCommandCtx {
         max_inclusive: bool,
     ) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
-        let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(key);
+        let meta_key = KEY_ENCODER.encode_txnkv_zset_meta_key(key);
 
         let mut ss = match self.txn.clone() {
             Some(txn) => client.snapshot_from_txn(txn).await,
@@ -328,8 +327,8 @@ impl ZsetCommandCtx {
                     max -= 1;
                 }
 
-                let start_key = KeyEncoder::new().encode_txnkv_zset_score_key_range_start(key, min);
-                let end_key = KeyEncoder::new().encode_txnkv_zset_score_key_range_end(key, max);
+                let start_key = KEY_ENCODER.encode_txnkv_zset_score_key_range_start(key, min);
+                let end_key = KEY_ENCODER.encode_txnkv_zset_score_key_range_end(key, max);
                 let range = start_key..=end_key;
                 let bound_range: BoundRange = range.into();
                 let iter = ss.scan(bound_range, size.try_into().unwrap()).await?;
@@ -349,7 +348,7 @@ impl ZsetCommandCtx {
         reverse: bool,
     ) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
-        let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(key);
+        let meta_key = KEY_ENCODER.encode_txnkv_zset_meta_key(key);
 
         let mut ss = match self.txn.clone() {
             Some(txn) => client.snapshot_from_txn(txn).await,
@@ -386,7 +385,7 @@ impl ZsetCommandCtx {
                     max = r_max;
                 }
 
-                let start_key = KeyEncoder::new().encode_txnkv_zset_score_key_start(key);
+                let start_key = KEY_ENCODER.encode_txnkv_zset_score_key_start(key);
                 let range = start_key..;
                 let from_range: BoundRange = range.into();
                 let iter = ss.scan(from_range, size.try_into().unwrap()).await?;
@@ -437,7 +436,7 @@ impl ZsetCommandCtx {
         reverse: bool,
     ) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
-        let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(key);
+        let meta_key = KEY_ENCODER.encode_txnkv_zset_meta_key(key);
 
         let mut ss = match self.txn.clone() {
             Some(txn) => client.snapshot_from_txn(txn).await,
@@ -467,8 +466,8 @@ impl ZsetCommandCtx {
                     max -= 1;
                 }
 
-                let start_key = KeyEncoder::new().encode_txnkv_zset_score_key_range_start(key, min);
-                let end_key = KeyEncoder::new().encode_txnkv_zset_score_key_range_end(key, max);
+                let start_key = KEY_ENCODER.encode_txnkv_zset_score_key_range_start(key, min);
+                let end_key = KEY_ENCODER.encode_txnkv_zset_score_key_range_end(key, max);
                 let range = start_key..=end_key;
                 let bound_range: BoundRange = range.into();
                 let iter = ss.scan(bound_range, size.try_into().unwrap()).await?;
@@ -508,7 +507,7 @@ impl ZsetCommandCtx {
     ) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
-        let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_zset_meta_key(&key);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -535,14 +534,14 @@ impl ZsetCommandCtx {
                             let mut poped_count = 0;
                             let mut resp = vec![];
                             if from_min {
-                                let start_key = KeyEncoder::new()
-                                    .encode_txnkv_zset_score_key_range_start(&key, 0);
+                                let start_key =
+                                    KEY_ENCODER.encode_txnkv_zset_score_key_range_start(&key, 0);
                                 let range = start_key..;
                                 let from_range: BoundRange = range.into();
                                 let iter = txn.scan(from_range, count.try_into().unwrap()).await?;
 
                                 for kv in iter {
-                                    let data_key = KeyEncoder::new().encode_txnkv_zset_data_key(
+                                    let data_key = KEY_ENCODER.encode_txnkv_zset_data_key(
                                         &key,
                                         &String::from_utf8_lossy(&kv.1),
                                     );
@@ -565,8 +564,8 @@ impl ZsetCommandCtx {
                             }
 
                             // update meta key
-                            let new_meta_value = KeyEncoder::new()
-                                .encode_txnkv_zset_meta_value(ttl, size - poped_count);
+                            let new_meta_value =
+                                KEY_ENCODER.encode_txnkv_zset_meta_value(ttl, size - poped_count);
                             txn.put(meta_key, new_meta_value).await?;
 
                             Ok(resp)
@@ -586,7 +585,7 @@ impl ZsetCommandCtx {
 
     pub async fn do_async_txnkv_zrank(self, key: &str, member: &str) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
-        let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(key);
+        let meta_key = KEY_ENCODER.encode_txnkv_zset_meta_key(key);
 
         let mut ss = match self.txn.clone() {
             Some(txn) => client.snapshot_from_txn(txn).await,
@@ -608,17 +607,16 @@ impl ZsetCommandCtx {
                     return Ok(resp_nil());
                 }
 
-                let data_key = KeyEncoder::new().encode_txnkv_zset_data_key(key, member);
+                let data_key = KEY_ENCODER.encode_txnkv_zset_data_key(key, member);
                 match ss.get(data_key).await? {
                     Some(data_value) => {
                         // calculate the score rank in score key index
                         let score = KeyDecoder::decode_key_zset_data_value(&data_value);
-                        let score_key =
-                            KeyEncoder::new().encode_txnkv_zset_score_key(key, score, member);
+                        let score_key = KEY_ENCODER.encode_txnkv_zset_score_key(key, score, member);
 
                         // scan from range start
                         let score_key_start =
-                            KeyEncoder::new().encode_txnkv_zset_score_key_range_start(key, 0);
+                            KEY_ENCODER.encode_txnkv_zset_score_key_range_start(key, 0);
                         let range = score_key_start..;
                         let from_range: BoundRange = range.into();
                         let iter = ss.scan_keys(from_range, size.try_into().unwrap()).await?;
@@ -647,7 +645,7 @@ impl ZsetCommandCtx {
         let key = key.to_owned();
         let members = members.to_owned();
 
-        let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_zset_meta_key(&key);
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
                 async move {
@@ -674,7 +672,7 @@ impl ZsetCommandCtx {
 
                             for member in members {
                                 let data_key =
-                                    KeyEncoder::new().encode_txnkv_zset_data_key(&key, &member);
+                                    KEY_ENCODER.encode_txnkv_zset_data_key(&key, &member);
                                 // get data key and decode value as score, to generate score key
                                 let score = txn.get(data_key.clone()).await?;
                                 if score.is_none() {
@@ -685,16 +683,16 @@ impl ZsetCommandCtx {
                                 let iscore =
                                     KeyDecoder::decode_key_zset_data_value(&score.unwrap());
                                 // remove member and score key
-                                let score_key = KeyEncoder::new()
-                                    .encode_txnkv_zset_score_key(&key, iscore, &member);
+                                let score_key =
+                                    KEY_ENCODER.encode_txnkv_zset_score_key(&key, iscore, &member);
                                 txn.delete(data_key).await?;
                                 txn.delete(score_key).await?;
                                 removed_count += 1;
                             }
 
                             // update meta key
-                            let new_meta_value = KeyEncoder::new()
-                                .encode_txnkv_zset_meta_value(ttl, size - removed_count);
+                            let new_meta_value =
+                                KEY_ENCODER.encode_txnkv_zset_meta_value(ttl, size - removed_count);
                             txn.put(meta_key, new_meta_value).await?;
                             Ok(removed_count)
                         }
@@ -724,7 +722,7 @@ impl ZsetCommandCtx {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
 
-        let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_zset_meta_key(&key);
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
                 async move {
@@ -749,10 +747,10 @@ impl ZsetCommandCtx {
                             }
 
                             // generate score key range to remove, inclusive
-                            let score_key_start = KeyEncoder::new()
-                                .encode_txnkv_zset_score_key_range_start(&key, min);
+                            let score_key_start =
+                                KEY_ENCODER.encode_txnkv_zset_score_key_range_start(&key, min);
                             let score_key_end =
-                                KeyEncoder::new().encode_txnkv_zset_score_key_range_end(&key, max);
+                                KEY_ENCODER.encode_txnkv_zset_score_key_range_end(&key, max);
 
                             // remove score key and data key
                             let range = score_key_start..=score_key_end;
@@ -765,7 +763,7 @@ impl ZsetCommandCtx {
                             for kv in iter {
                                 // fetch this score key member
                                 let score_value = kv.1;
-                                let data_key = KeyEncoder::new().encode_txnkv_zset_data_key(
+                                let data_key = KEY_ENCODER.encode_txnkv_zset_data_key(
                                     &key,
                                     &String::from_utf8_lossy(&score_value),
                                 );
@@ -775,8 +773,8 @@ impl ZsetCommandCtx {
                             }
 
                             // update meta key
-                            let new_meta_value = KeyEncoder::new()
-                                .encode_txnkv_zset_meta_value(ttl, size - removed_count);
+                            let new_meta_value =
+                                KEY_ENCODER.encode_txnkv_zset_meta_value(ttl, size - removed_count);
                             txn.put(meta_key, new_meta_value).await?;
 
                             Ok(removed_count)
@@ -797,7 +795,7 @@ impl ZsetCommandCtx {
     pub async fn do_async_txnk_zset_del(mut self, key: &str) -> AsyncResult<i64> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
-        let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_zset_meta_key(&key);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -811,8 +809,7 @@ impl ZsetCommandCtx {
                         Some(meta_value) => {
                             let size = KeyDecoder::decode_key_zset_size(&meta_value);
 
-                            let start_key =
-                                KeyEncoder::new().encode_txnkv_zset_data_key_start(&key);
+                            let start_key = KEY_ENCODER.encode_txnkv_zset_data_key_start(&key);
                             let range = start_key..;
                             let from_range: BoundRange = range.into();
                             let iter = txn.scan(from_range, size.try_into().unwrap()).await?;
@@ -831,8 +828,8 @@ impl ZsetCommandCtx {
                                 let member = String::from_utf8_lossy(&member_vec);
 
                                 // remove member and score key
-                                let score_key = KeyEncoder::new()
-                                    .encode_txnkv_zset_score_key(&key, score, &member);
+                                let score_key =
+                                    KEY_ENCODER.encode_txnkv_zset_score_key(&key, score, &member);
                                 txn.delete(kv.0).await?;
                                 txn.delete(score_key).await?;
                             }
@@ -851,7 +848,7 @@ impl ZsetCommandCtx {
     pub async fn do_async_txnkv_zset_expire_if_needed(mut self, key: &str) -> AsyncResult<i64> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
-        let meta_key = KeyEncoder::new().encode_txnkv_zset_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_zset_meta_key(&key);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -869,8 +866,7 @@ impl ZsetCommandCtx {
                             }
                             let size = KeyDecoder::decode_key_zset_size(&meta_value);
 
-                            let start_key =
-                                KeyEncoder::new().encode_txnkv_zset_data_key_start(&key);
+                            let start_key = KEY_ENCODER.encode_txnkv_zset_data_key_start(&key);
                             let range = start_key..;
                             let from_range: BoundRange = range.into();
                             let iter = txn.scan(from_range, size.try_into().unwrap()).await?;
@@ -889,8 +885,8 @@ impl ZsetCommandCtx {
                                 let member = String::from_utf8_lossy(&member_vec);
 
                                 // remove member and score key
-                                let score_key = KeyEncoder::new()
-                                    .encode_txnkv_zset_score_key(&key, score, &member);
+                                let score_key =
+                                    KEY_ENCODER.encode_txnkv_zset_score_key(&key, score, &member);
                                 txn.delete(kv.0).await?;
                                 txn.delete(score_key).await?;
                             }

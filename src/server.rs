@@ -3,8 +3,8 @@ use crate::metrics::{
     CURRENT_CONNECTION_COUNTER, REQUEST_CMD_COUNTER, REQUEST_CMD_FINISH_COUNTER,
     REQUEST_CMD_HANDLE_TIME, REQUEST_COUNTER,
 };
-use crate::tikv::encoding::{KeyDecoder, KeyEncoder};
-use crate::tikv::get_txn_client;
+use crate::tikv::encoding::KeyDecoder;
+use crate::tikv::{get_txn_client, KEY_ENCODER};
 use crate::utils::{self, resp_err, resp_ok, sleep};
 use crate::{
     config_cluster_broadcast_addr_or_default, config_cluster_topology_expire_or_default,
@@ -552,15 +552,15 @@ impl TopologyManager {
                     async move {
                         let mut txn = txn_rc.lock().await;
                         // refresh myself infomation to backend store
-                        let topo_key = KeyEncoder::new().encode_txnkv_cluster_topo(&address);
+                        let topo_key = KEY_ENCODER.encode_txnkv_cluster_topo(&address);
                         let ttl = utils::timestamp_from_ttl(expire);
-                        let topo_value = KeyEncoder::new().encode_txnkv_cluster_topo_value(ttl);
+                        let topo_value = KEY_ENCODER.encode_txnkv_cluster_topo_value(ttl);
                         txn.put(topo_key, topo_value).await?;
 
                         // expire stale entries
                         // expire should be configured as 3 times of interval at least
-                        let topo_start_key = KeyEncoder::new().encode_txnkv_cluster_topo_start();
-                        let topo_end_key = KeyEncoder::new().encode_txnkv_cluster_topo_end();
+                        let topo_start_key = KEY_ENCODER.encode_txnkv_cluster_topo_start();
+                        let topo_end_key = KEY_ENCODER.encode_txnkv_cluster_topo_end();
                         let range: Range<Key> = topo_start_key..topo_end_key;
                         let bound_range: BoundRange = range.into();
                         let iter = txn.scan(bound_range, u32::MAX).await?;

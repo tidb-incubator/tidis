@@ -139,6 +139,7 @@ impl SetCommandCtx {
         self,
         key: &str,
         members: &Vec<String>,
+        resp_in_arr: bool,
     ) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
         let member_len = members.len();
@@ -161,10 +162,14 @@ impl SetCommandCtx {
                     self.clone()
                         .do_async_txnkv_set_expire_if_needed(key)
                         .await?;
-                    return Ok(resp_int(0));
+                    if !resp_in_arr {
+                        return Ok(resp_int(0));
+                    } else {
+                        return Ok(resp_array(vec![resp_int(0); member_len]));
+                    }
                 }
 
-                if member_len == 1 {
+                if !resp_in_arr {
                     let data_key = KeyEncoder::new().encode_txnkv_set_data_key(key, &members[0]);
                     if ss.key_exists(data_key).await? {
                         Ok(resp_int(1))
@@ -185,7 +190,7 @@ impl SetCommandCtx {
                 }
             }
             None => {
-                if member_len == 1 {
+                if !resp_in_arr {
                     Ok(resp_int(0))
                 } else {
                     Ok(resp_array(vec![resp_int(0); member_len]))

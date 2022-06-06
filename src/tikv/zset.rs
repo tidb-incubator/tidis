@@ -69,8 +69,11 @@ impl ZsetCommandCtx {
                                 let data_key = KeyEncoder::new()
                                     .encode_txnkv_zset_data_key(&key, &members[idx]);
                                 let new_score = scores[idx];
-                                let score_key =
-                                    KeyEncoder::new().encode_txnkv_zset_score_key(&key, new_score);
+                                let score_key = KeyEncoder::new().encode_txnkv_zset_score_key(
+                                    &key,
+                                    new_score,
+                                    &members[idx],
+                                );
                                 let mut member_exists = false;
                                 let old_data_value = txn.get(data_key.clone()).await?;
                                 let mut old_data_value_data: Vec<u8> = vec![];
@@ -112,7 +115,11 @@ impl ZsetCommandCtx {
                                             );
                                             if old_score != new_score {
                                                 let old_score_key = KeyEncoder::new()
-                                                    .encode_txnkv_zset_score_key(&key, old_score);
+                                                    .encode_txnkv_zset_score_key(
+                                                        &key,
+                                                        old_score,
+                                                        &members[idx],
+                                                    );
                                                 txn.delete(old_score_key).await?;
                                             }
                                         }
@@ -150,7 +157,11 @@ impl ZsetCommandCtx {
                                         );
                                         if old_score != new_score {
                                             let old_score_key = KeyEncoder::new()
-                                                .encode_txnkv_zset_score_key(&key, old_score);
+                                                .encode_txnkv_zset_score_key(
+                                                    &key,
+                                                    old_score,
+                                                    &members[idx],
+                                                );
                                             txn.delete(old_score_key).await?;
                                         }
                                     }
@@ -183,9 +194,9 @@ impl ZsetCommandCtx {
                                 let data_key = KeyEncoder::new()
                                     .encode_txnkv_zset_data_key(&key, &members[idx]);
                                 let score = scores[idx];
-                                let score_key =
-                                    KeyEncoder::new().encode_txnkv_zset_score_key(&key, score);
                                 let member = members[idx].clone();
+                                let score_key = KeyEncoder::new()
+                                    .encode_txnkv_zset_score_key(&key, score, &member);
                                 // add data key and score key
                                 let data_value =
                                     KeyEncoder::new().encode_txnkv_zset_data_value(score);
@@ -317,8 +328,8 @@ impl ZsetCommandCtx {
                     max -= 1;
                 }
 
-                let start_key = KeyEncoder::new().encode_txnkv_zset_score_key(key, min);
-                let end_key = KeyEncoder::new().encode_txnkv_zset_score_key(key, max);
+                let start_key = KeyEncoder::new().encode_txnkv_zset_score_key_range_start(key, min);
+                let end_key = KeyEncoder::new().encode_txnkv_zset_score_key_range_end(key, max);
                 let range = start_key..=end_key;
                 let bound_range: BoundRange = range.into();
                 let iter = ss.scan(bound_range, size.try_into().unwrap()).await?;
@@ -456,8 +467,8 @@ impl ZsetCommandCtx {
                     max -= 1;
                 }
 
-                let start_key = KeyEncoder::new().encode_txnkv_zset_score_key(key, min);
-                let end_key = KeyEncoder::new().encode_txnkv_zset_score_key(key, max);
+                let start_key = KeyEncoder::new().encode_txnkv_zset_score_key_range_start(key, min);
+                let end_key = KeyEncoder::new().encode_txnkv_zset_score_key_range_end(key, max);
                 let range = start_key..=end_key;
                 let bound_range: BoundRange = range.into();
                 let iter = ss.scan(bound_range, size.try_into().unwrap()).await?;
@@ -524,8 +535,8 @@ impl ZsetCommandCtx {
                             let mut poped_count = 0;
                             let mut resp = vec![];
                             if from_min {
-                                let start_key =
-                                    KeyEncoder::new().encode_txnkv_zset_score_key(&key, 0);
+                                let start_key = KeyEncoder::new()
+                                    .encode_txnkv_zset_score_key_range_start(&key, 0);
                                 let range = start_key..;
                                 let from_range: BoundRange = range.into();
                                 let iter = txn.scan(from_range, count.try_into().unwrap()).await?;
@@ -602,10 +613,12 @@ impl ZsetCommandCtx {
                     Some(data_value) => {
                         // calculate the score rank in score key index
                         let score = KeyDecoder::decode_key_zset_data_value(&data_value);
-                        let score_key = KeyEncoder::new().encode_txnkv_zset_score_key(key, score);
+                        let score_key =
+                            KeyEncoder::new().encode_txnkv_zset_score_key(key, score, member);
 
                         // scan from range start
-                        let score_key_start = KeyEncoder::new().encode_txnkv_zset_score_key(key, 0);
+                        let score_key_start =
+                            KeyEncoder::new().encode_txnkv_zset_score_key_range_start(key, 0);
                         let range = score_key_start..;
                         let from_range: BoundRange = range.into();
                         let iter = ss.scan_keys(from_range, size.try_into().unwrap()).await?;
@@ -672,8 +685,8 @@ impl ZsetCommandCtx {
                                 let iscore =
                                     KeyDecoder::decode_key_zset_data_value(&score.unwrap());
                                 // remove member and score key
-                                let score_key =
-                                    KeyEncoder::new().encode_txnkv_zset_score_key(&key, iscore);
+                                let score_key = KeyEncoder::new()
+                                    .encode_txnkv_zset_score_key(&key, iscore, &member);
                                 txn.delete(data_key).await?;
                                 txn.delete(score_key).await?;
                                 removed_count += 1;
@@ -736,10 +749,10 @@ impl ZsetCommandCtx {
                             }
 
                             // generate score key range to remove, inclusive
-                            let score_key_start =
-                                KeyEncoder::new().encode_txnkv_zset_score_key(&key, min);
+                            let score_key_start = KeyEncoder::new()
+                                .encode_txnkv_zset_score_key_range_start(&key, min);
                             let score_key_end =
-                                KeyEncoder::new().encode_txnkv_zset_score_key(&key, max);
+                                KeyEncoder::new().encode_txnkv_zset_score_key_range_end(&key, max);
 
                             // remove score key and data key
                             let range = score_key_start..=score_key_end;
@@ -809,9 +822,17 @@ impl ZsetCommandCtx {
                                 // kv.1 is score
                                 // decode the score vec to i64
                                 let score = KeyDecoder::decode_key_zset_data_value(&kv.1);
+
+                                // decode member from data key
+                                let member_vec = KeyDecoder::decode_key_zset_member_from_datakey(
+                                    &key,
+                                    kv.0.clone(),
+                                );
+                                let member = String::from_utf8_lossy(&member_vec);
+
                                 // remove member and score key
-                                let score_key =
-                                    KeyEncoder::new().encode_txnkv_zset_score_key(&key, score);
+                                let score_key = KeyEncoder::new()
+                                    .encode_txnkv_zset_score_key(&key, score, &member);
                                 txn.delete(kv.0).await?;
                                 txn.delete(score_key).await?;
                             }
@@ -859,9 +880,17 @@ impl ZsetCommandCtx {
                                 // kv.1 is score
                                 // decode the score vec to i64
                                 let score = KeyDecoder::decode_key_zset_data_value(&kv.1);
+
+                                // decode member from data key
+                                let member_vec = KeyDecoder::decode_key_zset_member_from_datakey(
+                                    &key,
+                                    kv.0.clone(),
+                                );
+                                let member = String::from_utf8_lossy(&member_vec);
+
                                 // remove member and score key
-                                let score_key =
-                                    KeyEncoder::new().encode_txnkv_zset_score_key(&key, score);
+                                let score_key = KeyEncoder::new()
+                                    .encode_txnkv_zset_score_key(&key, score, &member);
                                 txn.delete(kv.0).await?;
                                 txn.delete(score_key).await?;
                             }

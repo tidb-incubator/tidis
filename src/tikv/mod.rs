@@ -9,6 +9,7 @@ use tokio::sync::Mutex;
 use tikv_client::{RawClient, Transaction, TransactionClient};
 
 use crate::config::LOGGER;
+use crate::tikv::encoding::KeyEncoder;
 use crate::tikv::errors::REDIS_BACKEND_NOT_CONNECTED_ERR;
 
 use self::client::RawClientWrapper;
@@ -32,6 +33,7 @@ lazy_static! {
         Arc::new(RwLock::new(HashMap::new()));
     pub static ref TIKV_TNX_CONN_POOL: Arc<Mutex<LinkedList<TransactionClient>>> =
         Arc::new(Mutex::new(LinkedList::new()));
+    pub static ref KEY_ENCODER: KeyEncoder = KeyEncoder::new();
 }
 
 pub static mut PROFILER_GUARD: Option<pprof::ProfilerGuard> = None;

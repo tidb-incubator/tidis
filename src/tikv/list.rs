@@ -1,7 +1,8 @@
 use super::errors::*;
 use super::get_txn_client;
+use super::KEY_ENCODER;
 use super::{
-    encoding::{DataType, KeyDecoder, KeyEncoder},
+    encoding::{DataType, KeyDecoder},
     errors::AsyncResult,
 };
 use crate::utils::{resp_array, resp_bulk, resp_err, resp_int, resp_nil, resp_ok};
@@ -36,7 +37,7 @@ impl<'a> ListCommandCtx {
         let key = key.to_owned();
         let values = values.to_owned();
 
-        let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_list_meta_key(&key);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -74,14 +75,13 @@ impl<'a> ListCommandCtx {
                                     right += 1;
                                 }
 
-                                let data_key =
-                                    KeyEncoder::new().encode_txnkv_list_data_key(&key, idx);
+                                let data_key = KEY_ENCODER.encode_txnkv_list_data_key(&key, idx);
                                 txn.put(data_key, value.to_vec()).await?;
                             }
 
                             // update meta key
                             let new_meta_value =
-                                KeyEncoder::new().encode_txnkv_list_meta_value(ttl, left, right);
+                                KEY_ENCODER.encode_txnkv_list_meta_value(ttl, left, right);
                             txn.put(meta_key, new_meta_value).await?;
 
                             Ok(right - left)
@@ -101,14 +101,13 @@ impl<'a> ListCommandCtx {
                                 }
 
                                 // add data key
-                                let data_key =
-                                    KeyEncoder::new().encode_txnkv_list_data_key(&key, idx);
+                                let data_key = KEY_ENCODER.encode_txnkv_list_data_key(&key, idx);
                                 txn.put(data_key, value.to_vec()).await?;
                             }
 
                             // add meta key
                             let meta_value =
-                                KeyEncoder::new().encode_txnkv_list_meta_value(0, left, right);
+                                KEY_ENCODER.encode_txnkv_list_meta_value(0, left, right);
                             txn.put(meta_key, meta_value).await?;
 
                             Ok(right - left)
@@ -134,7 +133,7 @@ impl<'a> ListCommandCtx {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
 
-        let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_list_meta_key(&key);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -171,8 +170,7 @@ impl<'a> ListCommandCtx {
                                     right -= 1;
                                     idx = right;
                                 }
-                                let data_key =
-                                    KeyEncoder::new().encode_txnkv_list_data_key(&key, idx);
+                                let data_key = KEY_ENCODER.encode_txnkv_list_data_key(&key, idx);
                                 // get data and delete
                                 let value = txn.get(data_key.clone()).await.unwrap().unwrap();
                                 values.push(resp_bulk(value));
@@ -184,8 +182,8 @@ impl<'a> ListCommandCtx {
                                     txn.delete(meta_key).await?;
                                 } else {
                                     // update meta key
-                                    let new_meta_value = KeyEncoder::new()
-                                        .encode_txnkv_list_meta_value(ttl, left, right);
+                                    let new_meta_value =
+                                        KEY_ENCODER.encode_txnkv_list_meta_value(ttl, left, right);
                                     txn.put(meta_key, new_meta_value).await?;
                                 }
                                 Ok(values)
@@ -204,7 +202,7 @@ impl<'a> ListCommandCtx {
                                         right -= 1;
                                     }
                                     let data_key =
-                                        KeyEncoder::new().encode_txnkv_list_data_key(&key, idx);
+                                        KEY_ENCODER.encode_txnkv_list_data_key(&key, idx);
                                     // get data and delete
                                     let value = txn.get(data_key.clone()).await.unwrap().unwrap();
                                     values.push(resp_bulk(value));
@@ -216,7 +214,7 @@ impl<'a> ListCommandCtx {
                                         txn.delete(meta_key.clone()).await?;
                                     } else {
                                         // update meta key
-                                        let new_meta_value = KeyEncoder::new()
+                                        let new_meta_value = KEY_ENCODER
                                             .encode_txnkv_list_meta_value(ttl, left, right);
                                         txn.put(meta_key.clone(), new_meta_value).await?;
                                     }
@@ -254,7 +252,7 @@ impl<'a> ListCommandCtx {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
 
-        let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_list_meta_key(&key);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -295,8 +293,7 @@ impl<'a> ListCommandCtx {
 
                             // trim left->start-1
                             for idx in left..start as u64 {
-                                let data_key =
-                                    KeyEncoder::new().encode_txnkv_list_data_key(&key, idx);
+                                let data_key = KEY_ENCODER.encode_txnkv_list_data_key(&key, idx);
                                 txn.delete(data_key).await?;
                             }
                             let left_trim = start - left as i64;
@@ -306,8 +303,7 @@ impl<'a> ListCommandCtx {
 
                             // trim end+1->right
                             for idx in (end + 1) as u64..right {
-                                let data_key =
-                                    KeyEncoder::new().encode_txnkv_list_data_key(&key, idx);
+                                let data_key = KEY_ENCODER.encode_txnkv_list_data_key(&key, idx);
                                 txn.delete(data_key).await?;
                             }
 
@@ -322,8 +318,8 @@ impl<'a> ListCommandCtx {
                                 txn.delete(meta_key).await?;
                             } else {
                                 // update meta key
-                                let new_meta_value = KeyEncoder::new()
-                                    .encode_txnkv_list_meta_value(ttl, left, right);
+                                let new_meta_value =
+                                    KEY_ENCODER.encode_txnkv_list_meta_value(ttl, left, right);
                                 txn.put(meta_key, new_meta_value).await?;
                             }
                             Ok(())
@@ -353,7 +349,7 @@ impl<'a> ListCommandCtx {
             None => client.newest_snapshot().await,
         };
 
-        let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(key);
+        let meta_key = KEY_ENCODER.encode_txnkv_list_meta_key(key);
 
         match ss.get(meta_key).await? {
             Some(meta_value) => {
@@ -388,8 +384,7 @@ impl<'a> ListCommandCtx {
                     real_length = llen;
                 }
 
-                let data_key_start =
-                    KeyEncoder::new().encode_txnkv_list_data_key(key, real_left as u64);
+                let data_key_start = KEY_ENCODER.encode_txnkv_list_data_key(key, real_left as u64);
                 let range: RangeFrom<Key> = data_key_start..;
                 let from_range: BoundRange = range.into();
                 let iter = ss.scan(from_range, real_length.try_into().unwrap()).await?;
@@ -408,7 +403,7 @@ impl<'a> ListCommandCtx {
             Some(txn) => client.snapshot_from_txn(txn).await,
             None => client.newest_snapshot().await,
         };
-        let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(key);
+        let meta_key = KEY_ENCODER.encode_txnkv_list_meta_key(key);
 
         match ss.get(meta_key).await? {
             Some(meta_value) => {
@@ -438,7 +433,7 @@ impl<'a> ListCommandCtx {
             Some(txn) => client.snapshot_from_txn(txn).await,
             None => client.newest_snapshot().await,
         };
-        let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(key);
+        let meta_key = KEY_ENCODER.encode_txnkv_list_meta_key(key);
 
         match ss.get(meta_key).await? {
             Some(meta_value) => {
@@ -463,7 +458,7 @@ impl<'a> ListCommandCtx {
                 let real_idx = left as i64 + idx;
 
                 // get value from data key
-                let data_key = KeyEncoder::new().encode_txnkv_list_data_key(key, real_idx as u64);
+                let data_key = KEY_ENCODER.encode_txnkv_list_data_key(key, real_idx as u64);
                 if let Some(value) = ss.get(data_key).await? {
                     Ok(resp_bulk(value))
                 } else {
@@ -484,7 +479,7 @@ impl<'a> ListCommandCtx {
         let key = key.to_owned();
         let ele = ele.to_owned();
 
-        let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_list_meta_key(&key);
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
                 async move {
@@ -518,7 +513,7 @@ impl<'a> ListCommandCtx {
                             }
 
                             let data_key =
-                                KeyEncoder::new().encode_txnkv_list_data_key(&key, uidx as u64);
+                                KEY_ENCODER.encode_txnkv_list_data_key(&key, uidx as u64);
                             // data keys exists, update it to new value
                             txn.put(data_key, ele.to_vec()).await?;
                             Ok(())
@@ -542,7 +537,7 @@ impl<'a> ListCommandCtx {
     pub async fn do_async_txnkv_list_del(mut self, key: &str) -> AsyncResult<i64> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
-        let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_list_meta_key(&key);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -555,8 +550,7 @@ impl<'a> ListCommandCtx {
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
                             let (_, left, right) = KeyDecoder::decode_key_list_meta(&meta_value);
-                            let data_key_start =
-                                KeyEncoder::new().encode_txnkv_list_data_key(&key, left);
+                            let data_key_start = KEY_ENCODER.encode_txnkv_list_data_key(&key, left);
                             let range: RangeFrom<Key> = data_key_start..;
                             let from_range: BoundRange = range.into();
                             let len = right - left;
@@ -581,7 +575,7 @@ impl<'a> ListCommandCtx {
     pub async fn do_async_txnkv_list_expire_if_needed(mut self, key: &str) -> AsyncResult<i64> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
-        let meta_key = KeyEncoder::new().encode_txnkv_list_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_list_meta_key(&key);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -597,8 +591,7 @@ impl<'a> ListCommandCtx {
                             if !key_is_expired(ttl) {
                                 return Ok(0);
                             }
-                            let data_key_start =
-                                KeyEncoder::new().encode_txnkv_list_data_key(&key, left);
+                            let data_key_start = KEY_ENCODER.encode_txnkv_list_data_key(&key, left);
                             let range: RangeFrom<Key> = data_key_start..;
                             let from_range: BoundRange = range.into();
                             let len = right - left;

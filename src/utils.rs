@@ -96,8 +96,8 @@ pub fn redis_resp_to_lua_resp(resp: Frame, lua: &Lua) -> LuaValue {
             let str = String::from_utf8_lossy(&v).to_string();
             LuaValue::String(lua.create_string(&str).unwrap())
         }
-        Frame::ErrorOwned(e) => LuaValue::String(lua.create_string(&e).unwrap()),
-        Frame::ErrorString(e) => LuaValue::String(lua.create_string(e).unwrap()),
+        Frame::ErrorOwned(e) => LuaValue::Error(mlua::Error::RuntimeError(e)),
+        Frame::ErrorString(e) => LuaValue::Error(mlua::Error::RuntimeError(e.to_string())),
         Frame::Integer(i) => LuaValue::Integer(i),
         Frame::Null => LuaValue::Nil,
         Frame::Array(arr) => {

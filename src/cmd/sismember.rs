@@ -75,7 +75,7 @@ impl Sismember {
             let mut members = vec![];
             members.push(self.member.clone());
             SetCommandCtx::new(txn)
-                .do_async_txnkv_sismember(&self.key, &members)
+                .do_async_txnkv_sismember(&self.key, &members, false)
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))

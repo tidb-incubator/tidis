@@ -1,7 +1,8 @@
 use super::{
-    encoding::{DataType, KeyDecoder, KeyEncoder},
+    encoding::{DataType, KeyDecoder},
     errors::AsyncResult,
     errors::RTError,
+    KEY_ENCODER,
 };
 use crate::{
     utils::{resp_bulk, resp_nil, resp_ok},
@@ -31,7 +32,7 @@ impl StringCommandCtx {
 
     pub async fn do_async_rawkv_get(&self, key: &str) -> AsyncResult<Frame> {
         let client = get_client()?;
-        let ekey = KeyEncoder::new().encode_rawkv_string(key);
+        let ekey = KEY_ENCODER.encode_rawkv_string(key);
         match client.get(ekey).await? {
             Some(val) => Ok(Frame::Bulk(val.into())),
             None => Ok(Frame::Null),
@@ -40,7 +41,7 @@ impl StringCommandCtx {
 
     pub async fn do_async_txnkv_get(self, key: &str) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
-        let ekey = KeyEncoder::new().encode_txnkv_string(key);
+        let ekey = KEY_ENCODER.encode_txnkv_string(key);
 
         let mut ss = match self.txn.clone() {
             Some(txn) => client.snapshot_from_txn(txn).await,
@@ -71,7 +72,7 @@ impl StringCommandCtx {
 
     pub async fn do_async_rawkv_put(self, key: &str, val: &Bytes) -> AsyncResult<Frame> {
         let client = get_client()?;
-        let ekey = KeyEncoder::new().encode_rawkv_string(key);
+        let ekey = KEY_ENCODER.encode_rawkv_string(key);
         let _ = client.put(ekey, val.to_vec()).await?;
         Ok(resp_ok())
     }
@@ -83,8 +84,8 @@ impl StringCommandCtx {
         timestamp: u64,
     ) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
-        let ekey = KeyEncoder::new().encode_txnkv_string(key);
-        let eval = KeyEncoder::new().encode_txnkv_string_value(&mut val.to_vec(), timestamp);
+        let ekey = KEY_ENCODER.encode_txnkv_string(key);
+        let eval = KEY_ENCODER.encode_txnkv_string_value(&mut val.to_vec(), timestamp);
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
                 async move {
@@ -103,7 +104,7 @@ impl StringCommandCtx {
 
     pub async fn do_async_rawkv_batch_get(self, keys: &[String]) -> AsyncResult<Frame> {
         let client = get_client()?;
-        let ekeys = KeyEncoder::new().encode_rawkv_strings(keys);
+        let ekeys = KEY_ENCODER.encode_rawkv_strings(keys);
         let result = client.batch_get(ekeys.clone()).await?;
         let ret: HashMap<Key, Value> = result.into_iter().map(|pair| (pair.0, pair.1)).collect();
 
@@ -122,7 +123,7 @@ impl StringCommandCtx {
 
     pub async fn do_async_txnkv_batch_get(self, keys: &[String]) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
-        let ekeys = KeyEncoder::new().encode_txnkv_strings(keys);
+        let ekeys = KEY_ENCODER.encode_txnkv_strings(keys);
 
         let mut ss = match self.txn {
             Some(txn) => client.snapshot_from_txn(txn).await,
@@ -186,7 +187,7 @@ impl StringCommandCtx {
         value: &Bytes,
     ) -> AsyncResult<Frame> {
         let client = get_client()?;
-        let ekey = KeyEncoder::new().encode_rawkv_string(key);
+        let ekey = KEY_ENCODER.encode_rawkv_string(key);
         let (_, swapped) = client.compare_and_swap(ekey, None, value.to_vec()).await?;
         if swapped {
             Ok(resp_ok())
@@ -203,8 +204,8 @@ impl StringCommandCtx {
     ) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
-        let ekey = KeyEncoder::new().encode_txnkv_string(&key);
-        let eval = KeyEncoder::new().encode_txnkv_string_value(&mut value.to_vec(), 0);
+        let ekey = KEY_ENCODER.encode_txnkv_string(&key);
+        let eval = KEY_ENCODER.encode_txnkv_string_value(&mut value.to_vec(), 0);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -248,7 +249,7 @@ impl StringCommandCtx {
 
     pub async fn do_async_rawkv_exists(self, keys: &[String]) -> AsyncResult<Frame> {
         let client = get_client()?;
-        let ekeys = KeyEncoder::new().encode_rawkv_strings(keys);
+        let ekeys = KEY_ENCODER.encode_rawkv_strings(keys);
         let result = client.batch_get(ekeys).await?;
         let num_items = result.len();
         Ok(resp_int(num_items as i64))
@@ -262,7 +263,7 @@ impl StringCommandCtx {
         };
         let mut cnt = 0;
         for key in keys {
-            let ekey = KeyEncoder::new().encode_txnkv_string(key);
+            let ekey = KEY_ENCODER.encode_txnkv_string(key);
             match ss.get(ekey).await? {
                 Some(v) => {
                     let ttl = KeyDecoder::decode_key_ttl(&v);
@@ -282,7 +283,7 @@ impl StringCommandCtx {
 
     pub async fn do_async_rawkv_incr(self, key: &str, inc: bool, step: i64) -> AsyncResult<Frame> {
         let client = get_client()?;
-        let ekey = KeyEncoder::new().encode_rawkv_string(key);
+        let ekey = KEY_ENCODER.encode_rawkv_string(key);
         let mut new_int: i64 = 0;
         let mut swapped = false;
         for i in 0..2000 {
@@ -327,7 +328,7 @@ impl StringCommandCtx {
         step: i64,
     ) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
-        let ekey = KeyEncoder::new().encode_txnkv_string(key);
+        let ekey = KEY_ENCODER.encode_txnkv_string(key);
         let key = key.to_owned();
 
         let resp = client
@@ -364,8 +365,8 @@ impl StringCommandCtx {
                         prev_int - step
                     };
                     let new_val = new_int.to_string();
-                    let eval = KeyEncoder::new()
-                        .encode_txnkv_string_value(&mut new_val.as_bytes().to_vec(), 0);
+                    let eval =
+                        KEY_ENCODER.encode_txnkv_string_value(&mut new_val.as_bytes().to_vec(), 0);
                     txn.put(ekey, eval).await?;
                     Ok(new_int)
                 }
@@ -390,7 +391,7 @@ impl StringCommandCtx {
                         self.txn = Some(txn_rc.clone());
                     }
                     let mut txn = txn_rc.lock().await;
-                    let ekey = KeyEncoder::new().encode_txnkv_string(&key);
+                    let ekey = KEY_ENCODER.encode_txnkv_string(&key);
                     if (txn.get(ekey.to_owned()).await?).is_some() {
                         txn.delete(ekey).await?;
                         return Ok(1);
@@ -415,7 +416,7 @@ impl StringCommandCtx {
                         self.txn = Some(txn_rc.clone());
                     }
                     let mut txn = txn_rc.lock().await;
-                    let ekey = KeyEncoder::new().encode_txnkv_string(&key);
+                    let ekey = KEY_ENCODER.encode_txnkv_string(&key);
                     if let Some(v) = txn.get(ekey.to_owned()).await? {
                         let ttl = KeyDecoder::decode_key_ttl(&v);
                         if key_is_expired(ttl) {
@@ -435,7 +436,7 @@ impl StringCommandCtx {
     pub async fn do_async_txnkv_expire(mut self, key: &str, timestamp: u64) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
-        let ekey = KeyEncoder::new().encode_txnkv_string(&key);
+        let ekey = KEY_ENCODER.encode_txnkv_string(&key);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -457,8 +458,8 @@ impl StringCommandCtx {
                                         return Ok(0);
                                     }
                                     let value = KeyDecoder::decode_key_string_slice(&meta_value);
-                                    let new_meta_value = KeyEncoder::new()
-                                        .encode_txnkv_string_slice(value, timestamp);
+                                    let new_meta_value =
+                                        KEY_ENCODER.encode_txnkv_string_slice(value, timestamp);
                                     txn.put(ekey, new_meta_value).await?;
                                     Ok(1)
                                 }
@@ -471,8 +472,8 @@ impl StringCommandCtx {
                                         return Ok(0);
                                     }
                                     let size = KeyDecoder::decode_key_hash_size(&meta_value);
-                                    let new_meta_value = KeyEncoder::new()
-                                        .encode_txnkv_hash_meta_value(timestamp, size);
+                                    let new_meta_value =
+                                        KEY_ENCODER.encode_txnkv_hash_meta_value(timestamp, size);
                                     txn.put(ekey, new_meta_value).await?;
                                     Ok(1)
                                 }
@@ -486,7 +487,7 @@ impl StringCommandCtx {
                                     }
                                     let (_, left, right) =
                                         KeyDecoder::decode_key_list_meta(&meta_value);
-                                    let new_meta_value = KeyEncoder::new()
+                                    let new_meta_value = KEY_ENCODER
                                         .encode_txnkv_list_meta_value(timestamp, left, right);
                                     txn.put(ekey, new_meta_value).await?;
                                     Ok(1)
@@ -500,8 +501,8 @@ impl StringCommandCtx {
                                         return Ok(0);
                                     }
                                     let size = KeyDecoder::decode_key_set_size(&meta_value);
-                                    let new_meta_value = KeyEncoder::new()
-                                        .encode_txnkv_set_meta_value(timestamp, size);
+                                    let new_meta_value =
+                                        KEY_ENCODER.encode_txnkv_set_meta_value(timestamp, size);
                                     txn.put(ekey, new_meta_value).await?;
                                     Ok(1)
                                 }
@@ -514,8 +515,8 @@ impl StringCommandCtx {
                                         return Ok(0);
                                     }
                                     let size = KeyDecoder::decode_key_zset_size(&meta_value);
-                                    let new_meta_value = KeyEncoder::new()
-                                        .encode_txnkv_zset_meta_value(timestamp, size);
+                                    let new_meta_value =
+                                        KEY_ENCODER.encode_txnkv_zset_meta_value(timestamp, size);
                                     txn.put(ekey, new_meta_value).await?;
                                     Ok(1)
                                 }
@@ -536,7 +537,7 @@ impl StringCommandCtx {
 
     pub async fn do_async_txnkv_ttl(self, key: &str, is_millis: bool) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
-        let ekey = KeyEncoder::new().encode_txnkv_string(key);
+        let ekey = KEY_ENCODER.encode_txnkv_string(key);
         let mut ss = match self.txn.clone() {
             Some(txn) => client.snapshot_from_txn(txn).await,
             None => client.newest_snapshot().await,
@@ -594,7 +595,7 @@ impl StringCommandCtx {
                     let mut txn = txn_rc.lock().await;
 
                     for key in &keys {
-                        let ekey = KeyEncoder::new().encode_txnkv_string(key);
+                        let ekey = KEY_ENCODER.encode_txnkv_string(key);
                         let meta_value = txn.get(ekey).await?;
                         if let Some(v) = meta_value {
                             let dt = KeyDecoder::decode_key_type(&v);

@@ -1,7 +1,8 @@
 use super::errors::*;
 use super::get_txn_client;
+use super::KEY_ENCODER;
 use super::{
-    encoding::{DataType, KeyDecoder, KeyEncoder},
+    encoding::{DataType, KeyDecoder},
     errors::AsyncResult,
 };
 use crate::utils::{key_is_expired, resp_array, resp_bulk, resp_err, resp_int, resp_nil};
@@ -31,7 +32,7 @@ impl SetCommandCtx {
 
         let key = key.to_owned();
         let members = members.to_owned();
-        let meta_key = KeyEncoder::new().encode_txnkv_set_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_set_meta_key(&key);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -60,7 +61,7 @@ impl SetCommandCtx {
 
                             for m in &members {
                                 // check member already exists
-                                let data_key = KeyEncoder::new().encode_txnkv_set_data_key(&key, m);
+                                let data_key = KEY_ENCODER.encode_txnkv_set_data_key(&key, m);
                                 let member_exists = txn.key_exists(data_key.clone()).await?;
                                 if !member_exists {
                                     added += 1;
@@ -69,7 +70,7 @@ impl SetCommandCtx {
                             }
                             // update meta key
                             let new_meta_value =
-                                KeyEncoder::new().encode_txnkv_set_meta_value(ttl, size + added);
+                                KEY_ENCODER.encode_txnkv_set_meta_value(ttl, size + added);
                             txn.put(meta_key, new_meta_value).await?;
                             Ok(added)
                         }
@@ -77,15 +78,15 @@ impl SetCommandCtx {
                             // create new meta key and meta value
                             for m in &members {
                                 // check member already exists
-                                let data_key = KeyEncoder::new().encode_txnkv_set_data_key(&key, m);
+                                let data_key = KEY_ENCODER.encode_txnkv_set_data_key(&key, m);
                                 let member_exists = txn.key_exists(data_key.clone()).await?;
                                 if !member_exists {
                                     txn.put(data_key, vec![]).await?;
                                 }
                             }
                             // create meta key
-                            let meta_value = KeyEncoder::new()
-                                .encode_txnkv_set_meta_value(0, members.len() as u64);
+                            let meta_value =
+                                KEY_ENCODER.encode_txnkv_set_meta_value(0, members.len() as u64);
                             txn.put(meta_key, meta_value).await?;
                             Ok(members.len() as u64)
                         }
@@ -109,7 +110,7 @@ impl SetCommandCtx {
             None => client.newest_snapshot().await,
         };
 
-        let meta_key = KeyEncoder::new().encode_txnkv_set_meta_key(key);
+        let meta_key = KEY_ENCODER.encode_txnkv_set_meta_key(key);
 
         match ss.get(meta_key).await? {
             Some(meta_value) => {
@@ -139,6 +140,7 @@ impl SetCommandCtx {
         self,
         key: &str,
         members: &Vec<String>,
+        resp_in_arr: bool,
     ) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
         let member_len = members.len();
@@ -148,7 +150,7 @@ impl SetCommandCtx {
             None => client.newest_snapshot().await,
         };
 
-        let meta_key = KeyEncoder::new().encode_txnkv_set_meta_key(key);
+        let meta_key = KEY_ENCODER.encode_txnkv_set_meta_key(key);
         match ss.get(meta_key).await? {
             Some(meta_value) => {
                 // check key type and ttl
@@ -161,11 +163,15 @@ impl SetCommandCtx {
                     self.clone()
                         .do_async_txnkv_set_expire_if_needed(key)
                         .await?;
-                    return Ok(resp_int(0));
+                    if !resp_in_arr {
+                        return Ok(resp_int(0));
+                    } else {
+                        return Ok(resp_array(vec![resp_int(0); member_len]));
+                    }
                 }
 
-                if member_len == 1 {
-                    let data_key = KeyEncoder::new().encode_txnkv_set_data_key(key, &members[0]);
+                if !resp_in_arr {
+                    let data_key = KEY_ENCODER.encode_txnkv_set_data_key(key, &members[0]);
                     if ss.key_exists(data_key).await? {
                         Ok(resp_int(1))
                     } else {
@@ -174,7 +180,7 @@ impl SetCommandCtx {
                 } else {
                     let mut resp = vec![];
                     for m in members {
-                        let data_key = KeyEncoder::new().encode_txnkv_set_data_key(key, m);
+                        let data_key = KEY_ENCODER.encode_txnkv_set_data_key(key, m);
                         if ss.key_exists(data_key).await? {
                             resp.push(resp_int(1));
                         } else {
@@ -185,7 +191,7 @@ impl SetCommandCtx {
                 }
             }
             None => {
-                if member_len == 1 {
+                if !resp_in_arr {
                     Ok(resp_int(0))
                 } else {
                     Ok(resp_array(vec![resp_int(0); member_len]))
@@ -197,7 +203,7 @@ impl SetCommandCtx {
     pub async fn do_async_txnkv_smembers(self, key: &str) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
 
-        let meta_key = KeyEncoder::new().encode_txnkv_set_meta_key(key);
+        let meta_key = KEY_ENCODER.encode_txnkv_set_meta_key(key);
 
         let mut ss = match self.txn.clone() {
             Some(txn) => client.snapshot_from_txn(txn).await,
@@ -219,7 +225,7 @@ impl SetCommandCtx {
                     return Ok(resp_array(vec![]));
                 }
 
-                let start_key = KeyEncoder::new().encode_txnkv_set_data_key_start(key);
+                let start_key = KEY_ENCODER.encode_txnkv_set_data_key_start(key);
                 let range = start_key..;
                 let from_range: BoundRange = range.into();
 
@@ -249,7 +255,7 @@ impl SetCommandCtx {
         let key = key.to_owned();
         let members = members.to_owned();
 
-        let meta_key = KeyEncoder::new().encode_txnkv_set_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_set_meta_key(&key);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -278,15 +284,14 @@ impl SetCommandCtx {
                             let mut removed: u64 = 0;
                             for member in &members {
                                 // check member exists
-                                let data_key =
-                                    KeyEncoder::new().encode_txnkv_set_data_key(&key, member);
+                                let data_key = KEY_ENCODER.encode_txnkv_set_data_key(&key, member);
                                 if txn.key_exists(data_key.clone()).await? {
                                     removed += 1;
                                     txn.delete(data_key).await?;
                                 }
                             }
                             // update meta
-                            let new_meta_value = KeyEncoder::new()
+                            let new_meta_value = KEY_ENCODER
                                 .encode_txnkv_set_meta_value(ttl, (size - removed) as u64);
                             txn.put(meta_key, new_meta_value).await?;
 
@@ -309,7 +314,7 @@ impl SetCommandCtx {
     pub async fn do_async_txnkv_spop(mut self, key: &str, count: u64) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
-        let meta_key = KeyEncoder::new().encode_txnkv_set_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_set_meta_key(&key);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -334,7 +339,7 @@ impl SetCommandCtx {
                                 return Ok(vec![]);
                             }
 
-                            let start_key = KeyEncoder::new().encode_txnkv_set_data_key_start(&key);
+                            let start_key = KEY_ENCODER.encode_txnkv_set_data_key_start(&key);
                             let range = start_key..;
                             let from_range: BoundRange = range.into();
                             let limit = if count < size { count } else { size };
@@ -363,7 +368,7 @@ impl SetCommandCtx {
                             } else {
                                 // update meta key
                                 let new_meta_value =
-                                    KeyEncoder::new().encode_txnkv_set_meta_value(ttl, size);
+                                    KEY_ENCODER.encode_txnkv_set_meta_value(ttl, size);
                                 txn.put(meta_key, new_meta_value).await?;
                             }
                             Ok(resp)
@@ -394,7 +399,7 @@ impl SetCommandCtx {
     pub async fn do_async_txnkv_set_del(mut self, key: &str) -> AsyncResult<i64> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
-        let meta_key = KeyEncoder::new().encode_txnkv_set_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_set_meta_key(&key);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -408,7 +413,7 @@ impl SetCommandCtx {
                         Some(meta_value) => {
                             let size = KeyDecoder::decode_key_set_size(&meta_value);
 
-                            let start_key = KeyEncoder::new().encode_txnkv_set_data_key_start(&key);
+                            let start_key = KEY_ENCODER.encode_txnkv_set_data_key_start(&key);
                             let range = start_key..;
                             let from_range: BoundRange = range.into();
                             let iter = txn.scan_keys(from_range, size.try_into().unwrap()).await?;
@@ -431,7 +436,7 @@ impl SetCommandCtx {
     pub async fn do_async_txnkv_set_expire_if_needed(mut self, key: &str) -> AsyncResult<i64> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
-        let meta_key = KeyEncoder::new().encode_txnkv_set_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_set_meta_key(&key);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -449,7 +454,7 @@ impl SetCommandCtx {
                             }
                             let size = KeyDecoder::decode_key_set_size(&meta_value);
 
-                            let start_key = KeyEncoder::new().encode_txnkv_set_data_key_start(&key);
+                            let start_key = KEY_ENCODER.encode_txnkv_set_data_key_start(&key);
                             let range = start_key..;
                             let from_range: BoundRange = range.into();
                             let iter = txn.scan_keys(from_range, size.try_into().unwrap()).await?;

@@ -89,7 +89,7 @@ impl Smismember {
         }
         if is_use_txn_api() {
             SetCommandCtx::new(txn)
-                .do_async_txnkv_sismember(&self.key, &self.members)
+                .do_async_txnkv_sismember(&self.key, &self.members, true)
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))

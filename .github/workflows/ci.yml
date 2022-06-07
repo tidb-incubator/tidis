@@ -67,3 +67,41 @@ jobs:
         working-directory: ./
         run: |
           cargo check
+  test:
+    name: Run E2E test
+    runs-on: self-hosted
+    needs: dev
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup tikv instance
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://tiup-mirrors.pingcap.com/install.sh | sh
+          /home/runner/.tiup/bin/tiup playground nightly --mode tikv-slim --without-monitor &
+      - run: cargo generate-lockfile
+      - name: Cache build dependencies
+        uses: actions/cache@v2
+        env:
+          cache-name: cache-dependencies
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Setup tikv-service
+        run: |
+          cargo build
+          ./target/debug/tikv-service-server --config="config.toml" &
+      - name: Setup test tool env
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.x'
+          cache: 'pip'
+      - name: Setup test tool dependency
+        working-directory: test
+        run: pip install -r requirements.txt
+      - name: Run E2E test
+        working-directory: test
+        run: python test_helper.py --port 6666

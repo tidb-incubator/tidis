@@ -61,9 +61,9 @@ class StringTest(unittest.TestCase):
         self.assertIsNone(self.r.get(self.k1))
 
     def test_setnx(self):
-        self.assertTrue(self.r.setnx(self.k1, self.v1))
+        self.assertEqual(self.r.setnx(self.k1, self.v1), 1)
         self.assertEqual(self.r.get(self.k1), self.v1)
-        self.assertFalse(self.r.setnx(self.k1, self.v2))
+        self.assertEqual(self.r.setnx(self.k1, self.v2), 0)
         self.assertEqual(self.r.get(self.k1), self.v1)
 
     def test_set_expire(self):

@@ -71,9 +71,9 @@ class LuaTest(unittest.TestCase):
         self.assertIsNone(self.execute_eval('get', self.k1))
 
     def test_setnx(self):
-        self.assertTrue(self.execute_eval('setnx', self.k1, self.v1))
+        self.assertEqual(self.execute_eval('setnx', self.k1, self.v1), 1)
         self.assertEqual(self.execute_eval('get', self.k1), self.v1)
-        self.assertFalse(self.execute_eval('setnx', self.k1, self.v2))
+        self.assertEqual(self.execute_eval('setnx', self.k1, self.v2), 0)
         self.assertEqual(self.execute_eval('get', self.k1), self.v1)
 
     def test_mget_mset(self):
@@ -156,14 +156,20 @@ class LuaTest(unittest.TestCase):
         self.assertTrue(self.execute_eval('hmset', self.k1, self.f1, self.v1, self.f2, self.v2, self.f3, self.v3))
         self.assertListEqual(self.execute_eval('hkeys', self.k1), [self.f1, self.f2, self.f3])
 
+        self.assertListEqual(self.execute_eval('hkeys', self.k2), [])
+
     def test_hvals(self):
         self.assertTrue(self.execute_eval('hmset', self.k1, self.f1, self.v1, self.f2, self.v2, self.f3, self.v3))
         self.assertListEqual(self.execute_eval('hvals', self.k1), [self.v1, self.v2, self.v3])
+
+        self.assertListEqual(self.execute_eval('hvals', self.k2), [])
 
     def test_hgetall(self):
         self.assertTrue(self.execute_eval('hmset', self.k1, self.f1, self.v1, self.f2, self.v2, self.f3, self.v3))
         self.assertListEqual(self.execute_eval('hgetall', self.k1),
                              [self.f1, self.v1, self.f2, self.v2, self.f3, self.v3])
+
+        self.assertListEqual(self.execute_eval('hgetall', self.k2), [])
 
     def test_hincrby(self):
         self.assertEqual(self.execute_eval('hincrby', self.k1, self.v1, 1), 1)
@@ -220,7 +226,13 @@ class LuaTest(unittest.TestCase):
             self.assertTrue(self.execute_eval('rpush', self.k1, str(i)))
         self.assertListEqual(self.execute_eval('lrange', self.k1, 10, 100), [str(i) for i in range(10, 101)])
 
+        self.assertListEqual(self.execute_eval('lrange', self.k2, 0, 100), [])
+
     def test_lset(self):
+        with self.assertRaises(Exception) as cm:
+            self.execute_eval('lset', self.k1, 0, self.v1)
+        err = cm.exception
+        self.assertEqual(str(err), 'runtime error: ERR no such key')
         for i in range(200):
             self.assertTrue(self.execute_eval('rpush', self.k1, str(i)))
         self.assertTrue(self.execute_eval('lset', self.k1, 100, 'hello'))
@@ -260,6 +272,9 @@ class LuaTest(unittest.TestCase):
             self.assertEqual(self.execute_eval('sismember', self.k1, str(i)), 0)
 
     def test_smismember(self):
+        for i in range(1, 100):
+            self.assertListEqual(self.execute_eval('smismember', self.k1, *(str(j) for j in range(i))), [0] * i)
+
         self.assertEqual(self.execute_eval('sadd', self.k1, self.v1), 1)
         self.assertEqual(self.execute_eval('sadd', self.k1, self.v2), 1)
         self.assertListEqual(self.execute_eval('smismember', self.k1, self.v1, self.v2, 'not_exist'), [1, 1, 0])
@@ -379,6 +394,7 @@ class LuaTest(unittest.TestCase):
         self.assertEqual(self.execute_eval('zcount', self.k1, 50, 100), 50)
 
     def test_zscore(self):
+        self.assertIsNone(self.execute_eval('zscore', self.k1, self.v1))
         for i in range(100):
             self.assertEqual(self.execute_eval('zadd', self.k1, i, str(i)), 1)
         for i in range(100):

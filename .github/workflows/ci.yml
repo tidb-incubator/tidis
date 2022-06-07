@@ -35,8 +35,10 @@ jobs:
         continue-on-error: false
         with:
           path: |
+            ~/.cargo/bin/
             ~/.cargo/registry
             ~/.cargo/git
+            target/
           key: cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
                         cargo-
@@ -67,3 +69,22 @@ jobs:
         working-directory: ./
         run: |
           cargo check
+      - name: Setup tikv instance
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://tiup-mirrors.pingcap.com/install.sh | sh
+          /home/runner/.tiup/bin/tiup playground nightly --mode tikv-slim --without-monitor &
+      - name: Setup tikv-service
+        run: |
+          cargo build
+          ./target/debug/tikv-service-server --config="config.toml" &
+      - name: Setup test tool env
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.x'
+          cache: 'pip'
+      - name: Setup test tool dependency
+        working-directory: test
+        run: pip install -r requirements.txt
+      - name: Run E2E test
+        working-directory: test
+        run: python test_helper.py --port 6666

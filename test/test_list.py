@@ -61,7 +61,13 @@ class ListTest(unittest.TestCase):
             self.assertTrue(self.r.rpush(self.k1, str(i)))
         self.assertListEqual(self.r.lrange(self.k1, 10, 100), [str(i) for i in range(10, 101)])
 
+        self.assertListEqual(self.r.lrange(self.k2, 0, 100), [])
+
     def test_lset(self):
+        with self.assertRaises(Exception) as cm:
+            self.r.lset(self.k1, 0, self.v1)
+        err = cm.exception
+        self.assertEqual(str(err), 'no such key')
         for i in range(200):
             self.assertTrue(self.r.rpush(self.k1, str(i)))
         self.assertTrue(self.r.lset(self.k1, 100, 'hello'))

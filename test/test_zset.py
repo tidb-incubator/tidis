@@ -198,3 +198,4 @@ class ZsetTest(unittest.TestCase):
         cls.r.execute_command('del', cls.k1)
         cls.r.execute_command('del', cls.k2)
         print('test data cleaned up')
+

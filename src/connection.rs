@@ -1,4 +1,5 @@
 use crate::frame::{self, Frame};
+use crate::metrics::{DATA_TRAFFIC_IN, DATA_TRAFFIC_OUT};
 
 use async_std::io::{BufReader, BufWriter, WriteExt};
 use async_std::net::TcpStream;
@@ -95,6 +96,7 @@ impl Connection {
         } else {
             self.w.as_mut().unwrap().write_all(buf).await?;
         }
+        DATA_TRAFFIC_OUT.inc_by(buf.len() as u64);
         Ok(())
     }
 
@@ -130,7 +132,8 @@ impl Connection {
         loop {
             // Attempt to parse a frame from the buffered data. If enough data
             // has been buffered, the frame is returned.
-            if let Some(frame) = self.parse_frame()? {
+            if let (Some(frame), len) = self.parse_frame()? {
+                DATA_TRAFFIC_IN.inc_by(len as u64);
                 return Ok(Some(frame));
             }
 
@@ -162,7 +165,7 @@ impl Connection {
     /// data, the frame is returned and the data removed from the buffer. If not
     /// enough data has been buffered yet, `Ok(None)` is returned. If the
     /// buffered data does not represent a valid frame, `Err` is returned.
-    fn parse_frame(&mut self) -> crate::Result<Option<Frame>> {
+    fn parse_frame(&mut self) -> crate::Result<(Option<Frame>, usize)> {
         use frame::Error::Incomplete;
 
         // Cursor is used to track the "current" location in the
@@ -206,7 +209,7 @@ impl Connection {
                 self.buffer.advance(len);
 
                 // Return the parsed frame to the caller.
-                Ok(Some(frame))
+                Ok((Some(frame), len))
             }
             // There is not enough data present in the read buffer to parse a
             // single frame. We must wait for more data to be received from the
@@ -215,7 +218,7 @@ impl Connection {
             //
             // We do not want to return `Err` from here as this "error" is an
             // expected runtime condition.
-            Err(Incomplete) => Ok(None),
+            Err(Incomplete) => Ok((None, 0)),
             // An error was encountered while parsing the frame. The connection
             // is now in an invalid state. Returning `Err` from here will result
             // in the connection being closed.

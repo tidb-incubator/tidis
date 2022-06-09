@@ -1,7 +1,8 @@
 use crate::cluster::Cluster;
 use crate::metrics::{
-    CURRENT_CONNECTION_COUNTER, REQUEST_CMD_COUNTER, REQUEST_CMD_FINISH_COUNTER,
-    REQUEST_CMD_HANDLE_TIME, REQUEST_COUNTER,
+    CURRENT_CONNECTION_COUNTER, CURRENT_TLS_CONNECTION_COUNTER, REQUEST_CMD_COUNTER,
+    REQUEST_CMD_FINISH_COUNTER, REQUEST_CMD_HANDLE_TIME, REQUEST_COUNTER,
+    TOTAL_CONNECTION_PROCESSED,
 };
 use crate::tikv::encoding::KeyDecoder;
 use crate::tikv::{get_txn_client, KEY_ENCODER};
@@ -435,9 +436,11 @@ impl Listener {
             local_pool.spawn_pinned(|| async move {
                 // Process the connection. If an error is encountered, log it.
                 CURRENT_CONNECTION_COUNTER.inc();
+                TOTAL_CONNECTION_PROCESSED.inc();
                 if let Err(err) = handler.run().await {
                     error!(LOGGER, "connection error {:?}", err);
                 }
+                CURRENT_CONNECTION_COUNTER.dec();
             });
         }
     }
@@ -520,10 +523,12 @@ impl TlsListener {
 
             local_pool.spawn_pinned(|| async move {
                 // Process the connection. If an error is encountered, log it.
-                CURRENT_CONNECTION_COUNTER.inc();
+                CURRENT_TLS_CONNECTION_COUNTER.inc();
+                TOTAL_CONNECTION_PROCESSED.inc();
                 if let Err(err) = handler.run().await {
                     error!(LOGGER, "tls connection error {:?}", err);
                 }
+                CURRENT_TLS_CONNECTION_COUNTER.dec();
             });
         }
 
@@ -751,6 +756,6 @@ impl Drop for Handler {
         // semaphore.
         // self.limit_connections.add_permits(1);
         // println!("Drop Handler")
-        CURRENT_CONNECTION_COUNTER.dec();
+        // CURRENT_CONNECTION_COUNTER.dec();
     }
 }

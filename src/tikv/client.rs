@@ -21,7 +21,7 @@ use futures::future::BoxFuture;
 
 use slog::{debug, error};
 
-use crate::metrics::TIKV_CLIENT_RETRIES;
+use crate::metrics::{SNAPSHOT_COUNTER, TIKV_CLIENT_RETRIES, TXN_COUNTER, TXN_RETRY_COUNTER};
 
 use super::sleep;
 
@@ -45,6 +45,7 @@ impl TxnClientWrapper<'static> {
     }
 
     pub fn snapshot(&self, timestamp: Timestamp, options: TransactionOptions) -> Snapshot {
+        SNAPSHOT_COUNTER.inc();
         self.client.snapshot(timestamp, options)
     }
 
@@ -135,6 +136,8 @@ impl TxnClientWrapper<'static> {
             txn_options
         };
 
+        TXN_COUNTER.inc();
+
         self.client.begin_with_options(txn_options).await
     }
 
@@ -179,6 +182,10 @@ impl TxnClientWrapper<'static> {
                 let mut retry_count = 0;
                 while self.retries > 0 {
                     self.retries -= 1;
+
+                    if retry_count > 0 {
+                        TXN_RETRY_COUNTER.inc();
+                    }
                     retry_count += 1;
 
                     let f = f.clone();

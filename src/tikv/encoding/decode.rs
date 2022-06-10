@@ -43,20 +43,25 @@ impl KeyDecoder {
         &value[9..]
     }
 
-    pub fn decode_key_hash_size(value: &[u8]) -> u64 {
-        u64::from_be_bytes(value[9..].try_into().unwrap())
+    pub fn decode_key_version(value: &[u8]) -> u16 {
+        u16::from_be_bytes(value[9..11].try_into().unwrap())
     }
 
-    pub fn decode_key_hash_meta(value: &[u8]) -> (u64, u64) {
+    pub fn decode_key_index_size(value: &[u8]) -> u16 {
+        u16::from_be_bytes(value[11..].try_into().unwrap())
+    }
+
+    pub fn decode_key_hash_meta(value: &[u8]) -> (u64, u16, u16) {
         (
             Self::decode_key_ttl(value),
-            Self::decode_key_hash_size(value),
+            Self::decode_key_version(value),
+            Self::decode_key_index_size(value),
         )
     }
 
     pub fn decode_key_hash_userkey_from_datakey(rkey: &str, key: Key) -> Vec<u8> {
         let key: Vec<u8> = key.into();
-        let idx = 6 + rkey.len();
+        let idx = 10 + rkey.len();
         key[idx..].to_vec()
     }
 

@@ -74,6 +74,7 @@ pub use config::config_cluster_topology_interval_or_default;
 pub use config::config_instance_id_or_default;
 pub use config::config_listen_or_default;
 pub use config::config_local_pool_number;
+pub use config::config_meta_key_number_or_default;
 pub use config::config_pd_addrs_or_default;
 pub use config::config_port_or_default;
 pub use config::config_prometheus_listen_or_default;

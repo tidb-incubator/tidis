@@ -1,12 +1,18 @@
 use super::DataType;
+use crate::config_meta_key_number_or_default;
 use crate::tikv::get_instance_id;
 use std::convert::TryFrom;
+use std::convert::TryInto;
+use std::ops::Range;
+use tikv_client::BoundRange;
 use tikv_client::Key;
 use tikv_client::Value;
 
 pub struct KeyEncoder {
     // instance_id will be encoded to 2 bytes vec
-    pub instance_id: [u8; 2],
+    instance_id: [u8; 2],
+    // meta_key_number is the number of sub meta key of a new key
+    meta_key_number: u16,
 }
 pub const RAW_KEY_PREFIX: u8 = b'r';
 pub const TXN_KEY_PREFIX: u8 = b'x';
@@ -27,6 +33,7 @@ impl KeyEncoder {
     pub fn new() -> Self {
         KeyEncoder {
             instance_id: u16::try_from(get_instance_id()).unwrap().to_be_bytes(),
+            meta_key_number: config_meta_key_number_or_default(),
         }
     }
 
@@ -137,44 +144,135 @@ impl KeyEncoder {
     }
 
     pub fn encode_txnkv_hash_meta_key(&self, ukey: &str) -> Key {
-        let mut key = Vec::with_capacity(4 + ukey.len());
+        let mut key = Vec::with_capacity(6 + ukey.len());
+        let key_len: u16 = key.len().try_into().unwrap();
+
         key.push(TXN_KEY_PREFIX);
         key.extend_from_slice(self.instance_id.as_slice());
         key.push(DATA_TYPE_META);
+        key.extend_from_slice(&key_len.to_be_bytes());
         key.extend_from_slice(ukey.as_bytes());
         key.into()
     }
 
-    pub fn encode_txnkv_hash_data_key(&self, ukey: &str, field: &str) -> Key {
-        let mut key = Vec::with_capacity(6 + ukey.len() + field.len());
+    pub fn encode_txnkv_hash_sub_meta_key(&self, ukey: &str, version: u16, idx: u16) -> Key {
+        let mut key = Vec::with_capacity(11 + ukey.len());
+        let key_len: u16 = key.len().try_into().unwrap();
+
+        key.push(TXN_KEY_PREFIX);
+        key.extend_from_slice(self.instance_id.as_slice());
+        key.push(DATA_TYPE_META);
+        key.extend_from_slice(&key_len.to_be_bytes());
+        key.extend_from_slice(ukey.as_bytes());
+        key.extend_from_slice(&version.to_be_bytes());
+        key.push(PLACE_HOLDER);
+        key.extend_from_slice(&idx.to_be_bytes());
+        key.into()
+    }
+
+    pub fn encode_txnkv_hash_sub_meta_key_start(&self, ukey: &str, version: u16) -> Key {
+        let mut key = Vec::with_capacity(9 + ukey.len());
+        let key_len: u16 = key.len().try_into().unwrap();
+
+        key.push(TXN_KEY_PREFIX);
+        key.extend_from_slice(self.instance_id.as_slice());
+        key.push(DATA_TYPE_META);
+        key.extend_from_slice(&key_len.to_be_bytes());
+        key.extend_from_slice(ukey.as_bytes());
+        key.extend_from_slice(&version.to_be_bytes());
+        key.push(PLACE_HOLDER);
+        key.into()
+    }
+
+    pub fn encode_txnkv_hash_sub_meta_key_end(&self, ukey: &str, version: u16) -> Key {
+        let mut key = Vec::with_capacity(9 + ukey.len());
+        let key_len: u16 = key.len().try_into().unwrap();
+
+        key.push(TXN_KEY_PREFIX);
+        key.extend_from_slice(self.instance_id.as_slice());
+        key.push(DATA_TYPE_META);
+        key.extend_from_slice(&key_len.to_be_bytes());
+        key.extend_from_slice(ukey.as_bytes());
+        key.extend_from_slice(&version.to_be_bytes());
+        key.push(PLACE_HOLDER + 1);
+        key.into()
+    }
+
+    pub fn encode_txnkv_hash_sub_meta_key_range(&self, key: &str, version: u16) -> BoundRange {
+        let sub_meta_key_start = self.encode_txnkv_hash_sub_meta_key_start(key, version);
+        let sub_meta_key_end = self.encode_txnkv_hash_sub_meta_key_end(key, version);
+        let range: Range<Key> = sub_meta_key_start..sub_meta_key_end;
+        range.into()
+    }
+
+    pub fn encode_txnkv_hash_data_key(&self, ukey: &str, field: &str, version: u16) -> Key {
+        let mut key = Vec::with_capacity(10 + ukey.len() + field.len());
+        let key_len: u16 = ukey.len().try_into().unwrap();
+
         key.push(TXN_KEY_PREFIX);
         key.extend_from_slice(self.instance_id.as_slice());
         key.push(DATA_TYPE_DATA);
         key.push(DATA_TYPE_HASH);
+        key.extend_from_slice(&key_len.to_be_bytes());
         key.extend_from_slice(ukey.as_bytes());
+        key.extend_from_slice(&version.to_be_bytes());
         key.push(PLACE_HOLDER);
         key.extend_from_slice(field.as_bytes());
         key.into()
     }
 
-    pub fn encode_txnkv_hash_data_key_start(&self, ukey: &str) -> Key {
-        let mut key = Vec::with_capacity(6 + ukey.len());
+    pub fn encode_txnkv_hash_data_key_start(&self, ukey: &str, version: u16) -> Key {
+        let mut key = Vec::with_capacity(10 + ukey.len());
+        let key_len: u16 = ukey.len().try_into().unwrap();
+
         key.push(TXN_KEY_PREFIX);
         key.extend_from_slice(self.instance_id.as_slice());
         key.push(DATA_TYPE_DATA);
         key.push(DATA_TYPE_HASH);
+        key.extend_from_slice(&key_len.to_be_bytes());
         key.extend_from_slice(ukey.as_bytes());
+        key.extend_from_slice(&version.to_be_bytes());
         key.push(PLACE_HOLDER);
         key.into()
     }
 
-    pub fn encode_txnkv_hash_meta_value(&self, ttl: u64, size: u64) -> Value {
-        let dt = self.get_type_bytes(DataType::Hash);
-        let mut val = Vec::new();
+    pub fn encode_txnkv_hash_data_key_end(&self, ukey: &str, version: u16) -> Key {
+        let mut key = Vec::with_capacity(10 + ukey.len());
+        let key_len: u16 = ukey.len().try_into().unwrap();
 
-        val.append(&mut dt.to_be_bytes().to_vec());
-        val.append(&mut ttl.to_be_bytes().to_vec());
-        val.append(&mut size.to_be_bytes().to_vec());
+        key.push(TXN_KEY_PREFIX);
+        key.extend_from_slice(self.instance_id.as_slice());
+        key.push(DATA_TYPE_DATA);
+        key.push(DATA_TYPE_HASH);
+        key.extend_from_slice(&key_len.to_be_bytes());
+        key.extend_from_slice(ukey.as_bytes());
+        key.extend_from_slice(&version.to_be_bytes());
+        key.push(PLACE_HOLDER + 1);
+        key.into()
+    }
+
+    pub fn encode_txnkv_hash_data_key_range(&self, key: &str, version: u16) -> BoundRange {
+        let data_key_start = self.encode_txnkv_hash_data_key_start(key, version);
+        let data_key_end = self.encode_txnkv_hash_data_key_end(key, version);
+        let range: Range<Key> = data_key_start..data_key_end;
+        range.into()
+    }
+
+    pub fn encode_txnkv_hash_meta_value(&self, ttl: u64, version: u16, index_size: u16) -> Value {
+        let dt = self.get_type_bytes(DataType::Hash);
+        let mut val = Vec::with_capacity(13);
+
+        val.push(dt);
+        val.extend_from_slice(&ttl.to_be_bytes());
+        val.extend_from_slice(&version.to_be_bytes());
+
+        // if index_size is 0 means this is a new created key, use the default config number
+        if index_size == 0 {
+            val.extend_from_slice(&self.meta_key_number.to_be_bytes());
+        } else {
+            val.extend_from_slice(&index_size.to_be_bytes());
+        }
+
         val
     }
 

@@ -49,6 +49,7 @@ struct Server {
     cluster_broadcast_addr: Option<String>,
     cluster_topology_interval: Option<u64>,
     cluster_topology_expire: Option<u64>,
+    meta_key_number: Option<u16>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -295,6 +296,19 @@ pub fn config_cluster_topology_expire_or_default() -> u64 {
 
     // default expire set to 30s, 3 times to update interval
     30000
+}
+
+pub fn config_meta_key_number_or_default() -> u16 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(s) = c.server.meta_key_number {
+                return s;
+            }
+        }
+    }
+
+    // default metakey split number
+    100
 }
 
 fn log_level_str() -> String {

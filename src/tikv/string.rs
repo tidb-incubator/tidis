@@ -471,9 +471,11 @@ impl StringCommandCtx {
                                             .await?;
                                         return Ok(0);
                                     }
-                                    let size = KeyDecoder::decode_key_hash_size(&meta_value);
-                                    let new_meta_value =
-                                        KEY_ENCODER.encode_txnkv_hash_meta_value(timestamp, size);
+                                    let version = KeyDecoder::decode_key_version(&meta_value);
+                                    let meta_size = KeyDecoder::decode_key_index_size(&meta_value);
+                                    let new_meta_value = KEY_ENCODER.encode_txnkv_hash_meta_value(
+                                        timestamp, version, meta_size,
+                                    );
                                     txn.put(ekey, new_meta_value).await?;
                                     Ok(1)
                                 }

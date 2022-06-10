@@ -1,8 +1,8 @@
 use crate::cluster::Cluster;
 use crate::metrics::{
     CURRENT_CONNECTION_COUNTER, CURRENT_TLS_CONNECTION_COUNTER, REQUEST_CMD_COUNTER,
-    REQUEST_CMD_FINISH_COUNTER, REQUEST_CMD_HANDLE_TIME, REQUEST_COUNTER,
-    TOTAL_CONNECTION_PROCESSED,
+    REQUEST_CMD_ERROR_COUNTER, REQUEST_CMD_FINISH_COUNTER, REQUEST_CMD_HANDLE_TIME,
+    REQUEST_COUNTER, TOTAL_CONNECTION_PROCESSED,
 };
 use crate::tikv::encoding::KeyDecoder;
 use crate::tikv::{get_txn_client, KEY_ENCODER};
@@ -711,14 +711,21 @@ impl Handler {
                         // command to write response frames directly to the connection. In
                         // the case of pub/sub, multiple frames may be send back to the
                         // peer.
-                        cmd.apply(
-                            &self.db,
-                            &self.topo,
-                            &mut self.connection,
-                            &mut self.lua,
-                            &mut self.shutdown,
-                        )
-                        .await?;
+                        if cmd
+                            .apply(
+                                &self.db,
+                                &self.topo,
+                                &mut self.connection,
+                                &mut self.lua,
+                                &mut self.shutdown,
+                            )
+                            .await
+                            .is_err()
+                        {
+                            REQUEST_CMD_ERROR_COUNTER
+                                .with_label_values(&[&cmd_name])
+                                .inc();
+                        };
                     }
                 }
             }

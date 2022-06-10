@@ -21,9 +21,14 @@ use futures::future::BoxFuture;
 
 use slog::{debug, error};
 
-use crate::metrics::{SNAPSHOT_COUNTER, TIKV_CLIENT_RETRIES, TXN_COUNTER, TXN_RETRY_COUNTER};
+use crate::metrics::{
+    ACQUIRE_LOCK_DURATION, RETRIEVE_TSO_DURATION, SNAPSHOT_COUNTER, TIKV_CLIENT_RETRIES,
+    TXN_COUNTER, TXN_DURATION, TXN_RETRY_COUNTER, TXN_RETRY_ERR,
+};
 
 use super::sleep;
+use crate::server::duration_to_sec;
+use tokio::time::Instant;
 
 const MAX_DELAY_MS: u64 = 500;
 
@@ -41,7 +46,11 @@ impl TxnClientWrapper<'static> {
     }
 
     pub async fn current_timestamp(&self) -> TiKVResult<Timestamp> {
-        self.client.current_timestamp().await
+        let start_at = Instant::now();
+        let tso = self.client.current_timestamp().await;
+        let duration = Instant::now() - start_at;
+        RETRIEVE_TSO_DURATION.observe(duration_to_sec(duration));
+        tso
     }
 
     pub fn snapshot(&self, timestamp: Timestamp, options: TransactionOptions) -> Snapshot {
@@ -172,7 +181,10 @@ impl TxnClientWrapper<'static> {
         match txn {
             Some(txn) => {
                 // call f
+                let start_at = Instant::now();
                 let result = f(txn).await;
+                let duration = Instant::now() - start_at;
+                TXN_DURATION.observe(duration_to_sec(duration));
                 match result {
                     Ok(res) => Ok(res),
                     Err(err) => Err(err),
@@ -205,8 +217,15 @@ impl TxnClientWrapper<'static> {
                     let txn_arc = Arc::new(Mutex::new(txn));
 
                     // call f
+                    let start_at = Instant::now();
                     let result = f(txn_arc.clone()).await;
+                    let duration = Instant::now() - start_at;
+                    TXN_DURATION.observe(duration_to_sec(duration));
+
+                    let start_at = Instant::now();
                     let mut txn = txn_arc.lock().await;
+                    let duration = Instant::now() - start_at;
+                    ACQUIRE_LOCK_DURATION.observe(duration_to_sec(duration));
                     match result {
                         Ok(res) => match txn.commit().await {
                             Ok(_) => {
@@ -222,6 +241,7 @@ impl TxnClientWrapper<'static> {
                                         LOGGER,
                                         "retry transaction in the caller caused by error {}", e
                                     );
+                                    TXN_RETRY_ERR.with_label_values(&["retry_error"]).inc();
                                     continue;
                                 }
                             }
@@ -239,6 +259,7 @@ impl TxnClientWrapper<'static> {
                                         "retry transaction in the caller caused by error {}",
                                         client_err
                                     );
+                                    TXN_RETRY_ERR.with_label_values(&["retry_error"]).inc();
                                     continue;
                                 } else {
                                     return Err(RTError::TikvClient(client_err));
@@ -253,6 +274,9 @@ impl TxnClientWrapper<'static> {
                     sleep(std::cmp::min(2 + retry_count * 10, 200)).await;
                 }
                 error!(LOGGER, "transaction retry count reached limit");
+                TXN_RETRY_ERR
+                    .with_label_values(&["retry_count_exceeded"])
+                    .inc();
                 Err(RTError::TikvClient(Box::new(StringError(
                     "retry count exceeded".to_string(),
                 ))))

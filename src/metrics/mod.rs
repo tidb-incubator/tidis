@@ -1,4 +1,6 @@
-use prometheus::{exponential_buckets, HistogramVec, IntCounter, IntCounterVec, IntGauge};
+use prometheus::{
+    exponential_buckets, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge,
+};
 
 mod http;
 
@@ -42,6 +44,12 @@ lazy_static! {
         &["cmd"]
     )
     .unwrap();
+    pub static ref REQUEST_CMD_ERROR_COUNTER: IntCounterVec = register_int_counter_vec!(
+        "tikv_redis_command_errors",
+        "Request command error counter",
+        &["cmd"]
+    )
+    .unwrap();
     pub static ref REQUEST_CMD_HANDLE_TIME: HistogramVec = register_histogram_vec!(
         "tikv_redis_command_handle_time",
         "Bucketed histogram of command handle duration",
@@ -49,9 +57,33 @@ lazy_static! {
         exponential_buckets(0.0005, 2.0, 20).unwrap()
     )
     .unwrap();
+    pub static ref RETRIEVE_TSO_DURATION: Histogram = register_histogram!(
+        "tikv_redis_retrieve_tso_duration",
+        "Bucketed histogram of retrieving TSO duration",
+        exponential_buckets(0.0005, 2.0, 20).unwrap()
+    )
+    .unwrap();
 
     // Trasactions
     pub static ref SNAPSHOT_COUNTER: IntCounter = register_int_counter!("tikv_redis_snapshot_count", "Snapshot count").unwrap();
     pub static ref TXN_COUNTER: IntCounter = register_int_counter!("tikv_redis_txn_count", "Transactions count").unwrap();
-    pub static ref TXN_RETRY_COUNTER: IntCounter = register_int_counter!("tikv_redis_txn_retey_count", "Transactions retry count").unwrap();
+    pub static ref TXN_RETRY_COUNTER: IntCounter = register_int_counter!("tikv_redis_txn_retry_count", "Transactions retry count").unwrap();
+    pub static ref TXN_RETRY_ERR: IntCounterVec = register_int_counter_vec!(
+        "tikv_redis_txn_retry_error",
+        "Transaction retry error",
+        &["kind"]
+    )
+    .unwrap();
+    pub static ref TXN_DURATION: Histogram = register_histogram!(
+        "tikv_redis_transaction_duration",
+        "Bucketed histogram of transaction duration",
+        exponential_buckets(0.0005, 2.0, 20).unwrap()
+    )
+    .unwrap();
+    pub static ref ACQUIRE_LOCK_DURATION: Histogram = register_histogram!(
+        "tikv_redis_acquire_pessimistic_lock_duration",
+        "Bucketed histogram of acquiring pessimistic lock duration",
+        exponential_buckets(0.0005, 2.0, 20).unwrap()
+    )
+    .unwrap();
 }

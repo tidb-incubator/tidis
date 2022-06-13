@@ -5,22 +5,57 @@ use super::{
     encoding::{DataType, KeyDecoder},
     errors::AsyncResult,
 };
+use crate::config_meta_key_number_or_default;
 use crate::utils::{key_is_expired, resp_array, resp_bulk, resp_err, resp_int, resp_nil};
 use crate::Frame;
 use ::futures::future::FutureExt;
+use rand::prelude::SmallRng;
+use rand::Rng;
+use rand::SeedableRng;
 use std::convert::TryInto;
 use std::sync::Arc;
-use tikv_client::{BoundRange, Transaction};
+use tikv_client::Key;
+use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
 #[derive(Clone)]
 pub struct SetCommandCtx {
     txn: Option<Arc<Mutex<Transaction>>>,
+    rng: SmallRng,
 }
 
 impl SetCommandCtx {
     pub fn new(txn: Option<Arc<Mutex<Transaction>>>) -> Self {
-        SetCommandCtx { txn }
+        SetCommandCtx {
+            txn,
+            rng: SmallRng::from_entropy(),
+        }
+    }
+
+    #[inline(always)]
+    fn gen_random_index(&mut self) -> u16 {
+        let max = config_meta_key_number_or_default();
+        self.rng.gen_range(0..max)
+    }
+
+    async fn txnkv_sum_key_size(self, key: &str, version: u16) -> AsyncResult<i64> {
+        let client = get_txn_client()?;
+
+        let mut ss = match self.txn {
+            Some(txn) => client.snapshot_from_txn(txn).await,
+            None => client.newest_snapshot().await,
+        };
+
+        let bound_range = KEY_ENCODER.encode_txnkv_sub_meta_key_range(key, version);
+
+        let iter = ss.scan(bound_range, u32::MAX).await?;
+
+        let sum = iter
+            .map(|kv| i64::from_be_bytes(kv.1.try_into().unwrap()))
+            .sum();
+
+        assert!(sum > 0);
+        Ok(sum)
     }
 
     pub async fn do_async_txnkv_sadd(
@@ -33,6 +68,7 @@ impl SetCommandCtx {
         let key = key.to_owned();
         let members = members.to_owned();
         let meta_key = KEY_ENCODER.encode_txnkv_set_meta_key(&key);
+        let rand_idx = self.gen_random_index();
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -41,54 +77,81 @@ impl SetCommandCtx {
                         self.txn = Some(txn_rc.clone());
                     }
                     let mut txn = txn_rc.lock().await;
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check key type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Set) {
                                 return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
-                            let (ttl, mut size) = KeyDecoder::decode_key_set_meta(&meta_value);
+                            let mut expired = false;
+                            let (ttl, version, _meta_size) =
+                                KeyDecoder::decode_key_set_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()
                                     .do_async_txnkv_set_expire_if_needed(&key)
                                     .await?;
-                                size = 0;
+                                expired = true;
                                 txn = txn_rc.lock().await;
                             }
-                            let mut added: u64 = 0;
+                            let mut added: i64 = 0;
 
                             for m in &members {
                                 // check member already exists
-                                let data_key = KEY_ENCODER.encode_txnkv_set_data_key(&key, m);
+                                let data_key =
+                                    KEY_ENCODER.encode_txnkv_set_data_key(&key, m, version);
                                 let member_exists = txn.key_exists(data_key.clone()).await?;
                                 if !member_exists {
                                     added += 1;
                                     txn.put(data_key, vec![]).await?;
                                 }
                             }
-                            // update meta key
-                            let new_meta_value =
-                                KEY_ENCODER.encode_txnkv_set_meta_value(ttl, size + added);
-                            txn.put(meta_key, new_meta_value).await?;
+                            // choose a random sub meta key for update, create if not exists
+                            let sub_meta_key =
+                                KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, rand_idx);
+                            let new_sub_meta_value =
+                                txn.get_for_update(sub_meta_key.clone()).await?.map_or_else(
+                                    || added,
+                                    |value| {
+                                        let old_sub_meta_value =
+                                            i64::from_be_bytes(value.try_into().unwrap());
+                                        old_sub_meta_value + added
+                                    },
+                                );
+                            txn.put(sub_meta_key, new_sub_meta_value.to_be_bytes().to_vec())
+                                .await?;
+
+                            // create a new meta key if key already expired above
+                            if expired {
+                                let new_meta_value =
+                                    KEY_ENCODER.encode_txnkv_set_meta_value(0, 0, 0);
+                                txn.put(meta_key, new_meta_value).await?;
+                            }
+
                             Ok(added)
                         }
                         None => {
+                            let mut added: i64 = 0;
                             // create new meta key and meta value
                             for m in &members {
                                 // check member already exists
-                                let data_key = KEY_ENCODER.encode_txnkv_set_data_key(&key, m);
+                                let data_key = KEY_ENCODER.encode_txnkv_set_data_key(&key, m, 0);
                                 let member_exists = txn.key_exists(data_key.clone()).await?;
                                 if !member_exists {
                                     txn.put(data_key, vec![]).await?;
+                                    added += 1;
                                 }
                             }
                             // create meta key
-                            let meta_value =
-                                KEY_ENCODER.encode_txnkv_set_meta_value(0, members.len() as u64);
+                            let meta_value = KEY_ENCODER.encode_txnkv_set_meta_value(0, 0, 0);
                             txn.put(meta_key, meta_value).await?;
-                            Ok(members.len() as u64)
+
+                            // create sub meta key with a random index
+                            let sub_meta_key =
+                                KEY_ENCODER.encode_txnkv_sub_meta_key(&key, 0, rand_idx);
+                            txn.put(sub_meta_key, added.to_be_bytes().to_vec()).await?;
+                            Ok(added)
                         }
                     }
                 }
@@ -97,7 +160,7 @@ impl SetCommandCtx {
             .await;
 
         match resp {
-            Ok(v) => Ok(resp_int(v as i64)),
+            Ok(v) => Ok(resp_int(v)),
             Err(e) => Ok(resp_err(e)),
         }
     }
@@ -119,8 +182,7 @@ impl SetCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                // TODO check ttl
-                let (ttl, size) = KeyDecoder::decode_key_set_meta(&meta_value);
+                let (ttl, version, _) = KeyDecoder::decode_key_set_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_set_expire_if_needed(key)
@@ -128,7 +190,8 @@ impl SetCommandCtx {
                     return Ok(resp_int(0));
                 }
 
-                Ok(resp_int(size as i64))
+                let size = self.txnkv_sum_key_size(key, version).await?;
+                Ok(resp_int(size))
             }
             None => Ok(resp_int(0)),
         }
@@ -158,7 +221,7 @@ impl SetCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let ttl = KeyDecoder::decode_key_ttl(&meta_value);
+                let (ttl, version, _) = KeyDecoder::decode_key_set_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_set_expire_if_needed(key)
@@ -171,7 +234,7 @@ impl SetCommandCtx {
                 }
 
                 if !resp_in_arr {
-                    let data_key = KEY_ENCODER.encode_txnkv_set_data_key(key, &members[0]);
+                    let data_key = KEY_ENCODER.encode_txnkv_set_data_key(key, &members[0], version);
                     if ss.key_exists(data_key).await? {
                         Ok(resp_int(1))
                     } else {
@@ -180,7 +243,7 @@ impl SetCommandCtx {
                 } else {
                     let mut resp = vec![];
                     for m in members {
-                        let data_key = KEY_ENCODER.encode_txnkv_set_data_key(key, m);
+                        let data_key = KEY_ENCODER.encode_txnkv_set_data_key(key, m, version);
                         if ss.key_exists(data_key).await? {
                             resp.push(resp_int(1));
                         } else {
@@ -217,7 +280,7 @@ impl SetCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, size) = KeyDecoder::decode_key_set_meta(&meta_value);
+                let (ttl, version, _) = KeyDecoder::decode_key_set_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_set_expire_if_needed(key)
@@ -225,11 +288,9 @@ impl SetCommandCtx {
                     return Ok(resp_array(vec![]));
                 }
 
-                let start_key = KEY_ENCODER.encode_txnkv_set_data_key_start(key);
-                let range = start_key..;
-                let from_range: BoundRange = range.into();
+                let bound_range = KEY_ENCODER.encode_txnkv_set_data_key_range(key, version);
 
-                let iter = ss.scan_keys(from_range, size.try_into().unwrap()).await?;
+                let iter = ss.scan_keys(bound_range, u32::MAX).await?;
 
                 let resp = iter
                     .map(|k| {
@@ -254,8 +315,8 @@ impl SetCommandCtx {
 
         let key = key.to_owned();
         let members = members.to_owned();
-
         let meta_key = KEY_ENCODER.encode_txnkv_set_meta_key(&key);
+        let rand_idx = self.gen_random_index();
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -265,14 +326,14 @@ impl SetCommandCtx {
                     }
 
                     let mut txn = txn_rc.lock().await;
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check key type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Set) {
                                 return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
-                            let (ttl, size) = KeyDecoder::decode_key_set_meta(&meta_value);
+                            let (ttl, version, _) = KeyDecoder::decode_key_set_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()
@@ -281,19 +342,45 @@ impl SetCommandCtx {
                                 return Ok(0);
                             }
 
-                            let mut removed: u64 = 0;
+                            drop(txn);
+                            let size = self.txnkv_sum_key_size(&key, version).await?;
+                            txn = txn_rc.lock().await;
+
+                            let mut removed: i64 = 0;
                             for member in &members {
                                 // check member exists
-                                let data_key = KEY_ENCODER.encode_txnkv_set_data_key(&key, member);
+                                let data_key =
+                                    KEY_ENCODER.encode_txnkv_set_data_key(&key, member, version);
                                 if txn.key_exists(data_key.clone()).await? {
                                     removed += 1;
                                     txn.delete(data_key).await?;
                                 }
                             }
-                            // update meta
-                            let new_meta_value = KEY_ENCODER
-                                .encode_txnkv_set_meta_value(ttl, (size - removed) as u64);
-                            txn.put(meta_key, new_meta_value).await?;
+                            // check if all items cleared, delete meta key and all sub meta keys if needed
+                            if removed >= size {
+                                txn.delete(meta_key).await?;
+                                let meta_bound_range =
+                                    KEY_ENCODER.encode_txnkv_sub_meta_key_range(&key, version);
+                                let iter = txn.scan_keys(meta_bound_range, u32::MAX).await?;
+                                for k in iter {
+                                    txn.delete(k).await?;
+                                }
+                            } else {
+                                // choose a random sub meta key, update it
+                                let sub_meta_key =
+                                    KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, rand_idx);
+                                let new_sub_meta_value =
+                                    txn.get_for_update(sub_meta_key.clone()).await?.map_or_else(
+                                        || -removed,
+                                        |v| {
+                                            let old_sub_meta_value =
+                                                i64::from_be_bytes(v.try_into().unwrap());
+                                            old_sub_meta_value - removed
+                                        },
+                                    );
+                                txn.put(sub_meta_key, new_sub_meta_value.to_be_bytes().to_vec())
+                                    .await?;
+                            }
 
                             Ok(removed)
                         }
@@ -315,6 +402,7 @@ impl SetCommandCtx {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
         let meta_key = KEY_ENCODER.encode_txnkv_set_meta_key(&key);
+        let rand_idx = self.gen_random_index();
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -330,7 +418,7 @@ impl SetCommandCtx {
                                 return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
-                            let (ttl, mut size) = KeyDecoder::decode_key_set_meta(&meta_value);
+                            let (ttl, version, _) = KeyDecoder::decode_key_set_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()
@@ -339,11 +427,11 @@ impl SetCommandCtx {
                                 return Ok(vec![]);
                             }
 
-                            let start_key = KEY_ENCODER.encode_txnkv_set_data_key_start(&key);
-                            let range = start_key..;
-                            let from_range: BoundRange = range.into();
-                            let limit = if count < size { count } else { size };
-                            let iter = txn.scan_keys(from_range, limit.try_into().unwrap()).await?;
+                            let bound_range =
+                                KEY_ENCODER.encode_txnkv_set_data_key_range(&key, version);
+                            let iter = txn
+                                .scan_keys(bound_range, count.try_into().unwrap())
+                                .await?;
 
                             let mut data_key_to_delete = vec![];
                             let resp = iter
@@ -356,20 +444,42 @@ impl SetCommandCtx {
                                 })
                                 .collect();
 
+                            let poped_count = data_key_to_delete.len() as i64;
                             for k in data_key_to_delete {
                                 txn.delete(k).await?;
                             }
 
-                            size -= limit;
+                            drop(txn);
+                            // txn will be lock inner txnkv_sum_key_size, so release it first
+                            let size = self.txnkv_sum_key_size(&key, version).await?;
+                            txn = txn_rc.lock().await;
+
                             // update or delete meta key
-                            if size == 0 {
+                            if poped_count >= size {
                                 // delete meta key
                                 txn.delete(meta_key).await?;
+                                // delete all sub meta keys
+                                let meta_bound_range =
+                                    KEY_ENCODER.encode_txnkv_sub_meta_key_range(&key, version);
+                                let iter = txn.scan(meta_bound_range, u32::MAX).await?;
+                                for k in iter {
+                                    txn.delete(k).await?;
+                                }
                             } else {
-                                // update meta key
-                                let new_meta_value =
-                                    KEY_ENCODER.encode_txnkv_set_meta_value(ttl, size);
-                                txn.put(meta_key, new_meta_value).await?;
+                                // update random meta key
+                                let sub_meta_key =
+                                    KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, rand_idx);
+                                let new_sub_meta_value =
+                                    txn.get_for_update(sub_meta_key.clone()).await?.map_or_else(
+                                        || -poped_count,
+                                        |v| {
+                                            let old_sub_meta_value =
+                                                i64::from_be_bytes(v.try_into().unwrap());
+                                            old_sub_meta_value - poped_count
+                                        },
+                                    );
+                                txn.put(sub_meta_key, new_sub_meta_value.to_be_bytes().to_vec())
+                                    .await?;
                             }
                             Ok(resp)
                         }
@@ -411,16 +521,22 @@ impl SetCommandCtx {
                     let mut txn = txn_rc.lock().await;
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
-                            let size = KeyDecoder::decode_key_set_size(&meta_value);
+                            let version = KeyDecoder::decode_key_version(&meta_value);
 
-                            let start_key = KEY_ENCODER.encode_txnkv_set_data_key_start(&key);
-                            let range = start_key..;
-                            let from_range: BoundRange = range.into();
-                            let iter = txn.scan_keys(from_range, size.try_into().unwrap()).await?;
-
+                            let sub_meta_range =
+                                KEY_ENCODER.encode_txnkv_sub_meta_key_range(&key, version);
+                            let iter = txn.scan_keys(sub_meta_range, u32::MAX).await?;
                             for k in iter {
                                 txn.delete(k).await?;
                             }
+
+                            let data_bound_range =
+                                KEY_ENCODER.encode_txnkv_set_data_key_range(&key, version);
+                            let iter = txn.scan_keys(data_bound_range, u32::MAX).await?;
+                            for k in iter {
+                                txn.delete(k).await?;
+                            }
+
                             txn.delete(meta_key).await?;
                             Ok(1)
                         }
@@ -448,21 +564,27 @@ impl SetCommandCtx {
                     let mut txn = txn_rc.lock().await;
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
-                            let ttl = KeyDecoder::decode_key_ttl(&meta_value);
+                            let (ttl, version, _) = KeyDecoder::decode_key_set_meta(&meta_value);
                             if !key_is_expired(ttl) {
                                 return Ok(0);
                             }
-                            let size = KeyDecoder::decode_key_set_size(&meta_value);
-
-                            let start_key = KEY_ENCODER.encode_txnkv_set_data_key_start(&key);
-                            let range = start_key..;
-                            let from_range: BoundRange = range.into();
-                            let iter = txn.scan_keys(from_range, size.try_into().unwrap()).await?;
+                            let data_bound_range =
+                                KEY_ENCODER.encode_txnkv_set_data_key_range(&key, version);
+                            let iter = txn.scan_keys(data_bound_range, u32::MAX).await?;
 
                             for k in iter {
                                 txn.delete(k).await?;
                             }
+
+                            let sub_meta_range =
+                                KEY_ENCODER.encode_txnkv_sub_meta_key_range(&key, version);
+                            let iter = txn.scan_keys(sub_meta_range, u32::MAX).await?;
+                            for k in iter {
+                                txn.delete(k).await?;
+                            }
+
                             txn.delete(meta_key).await?;
+
                             Ok(1)
                         }
                         None => Ok(0),

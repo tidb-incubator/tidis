@@ -449,6 +449,8 @@ impl StringCommandCtx {
                         Some(meta_value) => {
                             let ttl = KeyDecoder::decode_key_ttl(&meta_value);
                             let dt = KeyDecoder::decode_key_type(&meta_value);
+                            let version = KeyDecoder::decode_key_version(&meta_value);
+
                             match dt {
                                 DataType::String => {
                                     // check key expired
@@ -471,11 +473,8 @@ impl StringCommandCtx {
                                             .await?;
                                         return Ok(0);
                                     }
-                                    let version = KeyDecoder::decode_key_version(&meta_value);
-                                    let meta_size = KeyDecoder::decode_key_index_size(&meta_value);
-                                    let new_meta_value = KEY_ENCODER.encode_txnkv_hash_meta_value(
-                                        timestamp, version, meta_size,
-                                    );
+                                    let new_meta_value = KEY_ENCODER
+                                        .encode_txnkv_hash_meta_value(timestamp, version, 0);
                                     txn.put(ekey, new_meta_value).await?;
                                     Ok(1)
                                 }
@@ -502,9 +501,8 @@ impl StringCommandCtx {
                                             .await?;
                                         return Ok(0);
                                     }
-                                    let size = KeyDecoder::decode_key_set_size(&meta_value);
-                                    let new_meta_value =
-                                        KEY_ENCODER.encode_txnkv_set_meta_value(timestamp, size);
+                                    let new_meta_value = KEY_ENCODER
+                                        .encode_txnkv_set_meta_value(timestamp, version, 0);
                                     txn.put(ekey, new_meta_value).await?;
                                     Ok(1)
                                 }
@@ -599,8 +597,8 @@ impl StringCommandCtx {
                     for key in &keys {
                         let ekey = KEY_ENCODER.encode_txnkv_string(key);
                         let meta_value = txn.get(ekey).await?;
-                        if let Some(v) = meta_value {
-                            let dt = KeyDecoder::decode_key_type(&v);
+                        if let Some(v) = &meta_value {
+                            let dt = KeyDecoder::decode_key_type(v);
                             dts.push(dt);
                         } else {
                             dts.push(DataType::Null);

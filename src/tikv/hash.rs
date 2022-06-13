@@ -41,9 +41,8 @@ impl<'a> HashCommandCtx {
 
     async fn txnkv_sum_key_size(self, key: &str, version: u16) -> AsyncResult<i64> {
         let client = get_txn_client()?;
-        let _meta_key = KEY_ENCODER.encode_txnkv_hash_meta_key(key);
 
-        let mut ss = match self.txn.clone() {
+        let mut ss = match self.txn {
             Some(txn) => client.snapshot_from_txn(txn).await,
             None => client.newest_snapshot().await,
         };
@@ -81,7 +80,7 @@ impl<'a> HashCommandCtx {
                     }
                     let mut txn = txn_rc.lock().await;
                     // check if key already exists
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check key type is hash
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
@@ -447,7 +446,7 @@ impl<'a> HashCommandCtx {
                         self.txn = Some(txn_rc.clone());
                     }
                     let mut txn = txn_rc.lock().await;
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check key type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
@@ -466,10 +465,10 @@ impl<'a> HashCommandCtx {
 
                             let mut deleted: i64 = 0;
 
-                            for field in fields {
+                            for field in &fields {
                                 // check data key exists
                                 let data_key =
-                                    KEY_ENCODER.encode_txnkv_hash_data_key(&key, &field, version);
+                                    KEY_ENCODER.encode_txnkv_hash_data_key(&key, field, version);
                                 if txn.key_exists(data_key.clone()).await? {
                                     // delete in txn
                                     txn.delete(data_key).await?;
@@ -478,7 +477,12 @@ impl<'a> HashCommandCtx {
                             }
 
                             let idx = self.gen_random_index();
+
+                            drop(txn);
+                            // txn lock will be called in txnkv_sum_key_size, so release txn lock first
                             let old_size = self.txnkv_sum_key_size(&key, version).await?;
+                            // re-gain txn lock
+                            txn = txn_rc.lock().await;
 
                             // update sub meta key or clear all meta and sub meta key if needed
                             if old_size <= deleted {
@@ -492,7 +496,7 @@ impl<'a> HashCommandCtx {
                             } else {
                                 // set sub meta key with a random index
                                 let sub_meta_key =
-                                    KEY_ENCODER.encode_txnkv_hash_sub_meta_key(&key, 0, idx);
+                                    KEY_ENCODER.encode_txnkv_hash_sub_meta_key(&key, version, idx);
                                 // create it with negtive value if sub meta key not exists
                                 let new_size =
                                     txn.get_for_update(sub_meta_key.clone()).await?.map_or_else(
@@ -540,7 +544,7 @@ impl<'a> HashCommandCtx {
                     let prev_int;
                     let data_key;
                     let mut txn = txn_rc.lock().await;
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check key type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
@@ -581,8 +585,10 @@ impl<'a> HashCommandCtx {
                                     let sub_meta_key =
                                         KEY_ENCODER.encode_txnkv_hash_sub_meta_key(&key, 0, idx);
 
-                                    let sub_size =
-                                        txn.get(sub_meta_key.clone()).await?.map_or_else(
+                                    let sub_size = txn
+                                        .get_for_update(sub_meta_key.clone())
+                                        .await?
+                                        .map_or_else(
                                             || 1,
                                             |value| i64::from_be_bytes(value.try_into().unwrap()),
                                         );
@@ -613,8 +619,7 @@ impl<'a> HashCommandCtx {
                             // add a sub meta key with a random index
                             let sub_meta_key =
                                 KEY_ENCODER.encode_txnkv_hash_sub_meta_key(&key, 0, idx);
-                            txn.put(sub_meta_key, 1_i64.to_be_bytes().to_vec())
-                                .await?;
+                            txn.put(sub_meta_key, 1_i64.to_be_bytes().to_vec()).await?;
                             data_key = KEY_ENCODER.encode_txnkv_hash_data_key(&key, &field, 0);
                         }
                     }
@@ -649,8 +654,7 @@ impl<'a> HashCommandCtx {
                     let mut txn = txn_arc.lock().await;
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
-                            let (_, version, _meta_size) =
-                                KeyDecoder::decode_key_hash_meta(&meta_value);
+                            let (_, version, _) = KeyDecoder::decode_key_hash_meta(&meta_value);
                             let bound_range =
                                 KEY_ENCODER.encode_txnkv_hash_data_key_range(&key, version);
                             // scan return iterator
@@ -659,6 +663,15 @@ impl<'a> HashCommandCtx {
                             for k in iter {
                                 txn.delete(k).await?;
                             }
+
+                            let sub_meta_bound_range =
+                                KEY_ENCODER.encode_txnkv_hash_sub_meta_key_range(&key, version);
+                            let sub_meta_iter =
+                                txn.scan_keys(sub_meta_bound_range, u32::MAX).await?;
+                            for k in sub_meta_iter {
+                                txn.delete(k).await?;
+                            }
+
                             txn.delete(meta_key).await?;
                             Ok(1)
                         }
@@ -697,6 +710,15 @@ impl<'a> HashCommandCtx {
                             for k in iter {
                                 txn.delete(k).await?;
                             }
+
+                            let sub_meta_bound_range =
+                                KEY_ENCODER.encode_txnkv_hash_sub_meta_key_range(&key, version);
+                            let sub_meta_iter =
+                                txn.scan_keys(sub_meta_bound_range, u32::MAX).await?;
+                            for k in sub_meta_iter {
+                                txn.delete(k).await?;
+                            }
+
                             txn.delete(meta_key).await?;
                             Ok(1)
                         }

@@ -89,10 +89,13 @@ impl KeyEncoder {
     }
 
     pub fn encode_txnkv_string(&self, ukey: &str) -> Key {
-        let mut key = Vec::with_capacity(4 + ukey.len());
+        let mut key = Vec::with_capacity(6 + ukey.len());
+        let key_len: u16 = key.len().try_into().unwrap();
+
         key.push(TXN_KEY_PREFIX);
         key.extend_from_slice(self.instance_id.as_slice());
         key.push(DATA_TYPE_META);
+        key.extend_from_slice(&key_len.to_be_bytes());
         key.extend_from_slice(ukey.as_bytes());
         key.into()
     }
@@ -133,10 +136,12 @@ impl KeyEncoder {
     pub fn encode_txnkv_strings(&self, keys: &[String]) -> Vec<Key> {
         keys.iter()
             .map(|ukey| {
-                let mut key = Vec::with_capacity(4 + ukey.len());
+                let mut key = Vec::with_capacity(6 + ukey.len());
+                let key_len: u16 = key.len().try_into().unwrap();
                 key.push(TXN_KEY_PREFIX);
                 key.extend_from_slice(self.instance_id.as_slice());
                 key.push(DATA_TYPE_META);
+                key.extend_from_slice(&key_len.to_be_bytes());
                 key.extend_from_slice(ukey.as_bytes());
                 key.into()
             })

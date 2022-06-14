@@ -432,7 +432,6 @@ impl Listener {
                 // dropped.
                 _shutdown_complete: self.shutdown_complete_tx.clone(),
             };
-
             local_pool.spawn_pinned(|| async move {
                 // Process the connection. If an error is encountered, log it.
                 CURRENT_CONNECTION_COUNTER.inc();
@@ -711,7 +710,7 @@ impl Handler {
                         // command to write response frames directly to the connection. In
                         // the case of pub/sub, multiple frames may be send back to the
                         // peer.
-                        if cmd
+                        match cmd
                             .apply(
                                 &self.db,
                                 &self.topo,
@@ -720,11 +719,14 @@ impl Handler {
                                 &mut self.shutdown,
                             )
                             .await
-                            .is_err()
                         {
-                            REQUEST_CMD_ERROR_COUNTER
-                                .with_label_values(&[&cmd_name])
-                                .inc();
+                            Ok(_) => (),
+                            Err(e) => {
+                                REQUEST_CMD_ERROR_COUNTER
+                                    .with_label_values(&[&cmd_name])
+                                    .inc();
+                                return Err(e);
+                            }
                         };
                     }
                 }

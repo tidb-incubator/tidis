@@ -22,8 +22,9 @@ use futures::future::BoxFuture;
 use slog::{debug, error};
 
 use crate::metrics::{
-    ACQUIRE_LOCK_DURATION, RETRIEVE_TSO_DURATION, SNAPSHOT_COUNTER, TIKV_CLIENT_RETRIES,
-    TXN_COUNTER, TXN_DURATION, TXN_RETRY_COUNTER, TXN_RETRY_ERR,
+    ACQUIRE_LOCK_DURATION, HANDLE_SNAPSHOT_DURATION, PD_ERR_COUNTER, RETRIEVE_TSO_DURATION,
+    SNAPSHOT_COUNTER, TIKV_CLIENT_RETRIES, TIKV_ERR_COUNTER, TXN_COUNTER, TXN_DURATION,
+    TXN_MECHANISM_COUNTER, TXN_RETRY_COUNTER, TXN_RETRY_ERR, TXN_RETRY_KIND_COUNTER,
 };
 
 use super::sleep;
@@ -50,12 +51,21 @@ impl TxnClientWrapper<'static> {
         let tso = self.client.current_timestamp().await;
         let duration = Instant::now() - start_at;
         RETRIEVE_TSO_DURATION.observe(duration_to_sec(duration));
-        tso
+        tso.or_else(|err| {
+            PD_ERR_COUNTER
+                .with_label_values(&["retrieve current timestamp error"])
+                .inc();
+            Err(err)
+        })
     }
 
     pub fn snapshot(&self, timestamp: Timestamp, options: TransactionOptions) -> Snapshot {
         SNAPSHOT_COUNTER.inc();
-        self.client.snapshot(timestamp, options)
+        let start_at = Instant::now();
+        let snapshot = self.client.snapshot(timestamp, options);
+        let duration = Instant::now() - start_at;
+        HANDLE_SNAPSHOT_DURATION.observe(duration_to_sec(duration));
+        snapshot
     }
 
     pub async fn snapshot_from_txn(&self, txn: Arc<Mutex<Transaction>>) -> Snapshot {
@@ -77,7 +87,10 @@ impl TxnClientWrapper<'static> {
         } else {
             TransactionOptions::new_optimistic().retry_options(retry_options)
         };
+        let start_at = Instant::now();
         let txn = txn.lock().await;
+        let duration = Instant::now() - start_at;
+        ACQUIRE_LOCK_DURATION.observe(duration_to_sec(duration));
         let ts = txn.start_timestamp();
         self.snapshot(ts, options)
     }
@@ -134,20 +147,35 @@ impl TxnClientWrapper<'static> {
         } else {
             TransactionOptions::new_optimistic().retry_options(retry_options)
         };
-        txn_options = if is_use_async_commit() {
-            txn_options.use_async_commit()
+
+        let mut mechanism: (&str, &str) = ("two_pc", "sync");
+        txn_options = if is_try_one_pc_commit() {
+            mechanism.0 = "one_pc";
+            txn_options.try_one_pc()
         } else {
             txn_options
         };
-        txn_options = if is_try_one_pc_commit() {
-            txn_options.try_one_pc()
+        txn_options = if is_use_async_commit() {
+            mechanism.1 = "async";
+            txn_options.use_async_commit()
         } else {
             txn_options
         };
 
         TXN_COUNTER.inc();
+        TXN_MECHANISM_COUNTER
+            .with_label_values(&[mechanism.0, mechanism.1])
+            .inc();
 
-        self.client.begin_with_options(txn_options).await
+        self.client
+            .begin_with_options(txn_options)
+            .await
+            .or_else(|err| {
+                TIKV_ERR_COUNTER
+                    .with_label_values(&["start txn error"])
+                    .inc();
+                Err(err)
+            })
     }
 
     fn error_retryable(&self, err: &Error) -> bool {
@@ -197,6 +225,12 @@ impl TxnClientWrapper<'static> {
 
                     if retry_count > 0 {
                         TXN_RETRY_COUNTER.inc();
+                        let kind = if is_use_pessimistic_txn() {
+                            "pessimistic"
+                        } else {
+                            "optimistic"
+                        };
+                        TXN_RETRY_KIND_COUNTER.with_label_values(&[kind]).inc();
                     }
                     retry_count += 1;
 
@@ -259,7 +293,7 @@ impl TxnClientWrapper<'static> {
                                         "retry transaction in the caller caused by error {}",
                                         client_err
                                     );
-                                    TXN_RETRY_ERR.with_label_values(&["retry_error"]).inc();
+                                    TXN_RETRY_ERR.with_label_values(&["retry error"]).inc();
                                     continue;
                                 } else {
                                     return Err(RTError::TikvClient(client_err));
@@ -275,7 +309,7 @@ impl TxnClientWrapper<'static> {
                 }
                 error!(LOGGER, "transaction retry count reached limit");
                 TXN_RETRY_ERR
-                    .with_label_values(&["retry_count_exceeded"])
+                    .with_label_values(&["retry count exceeded"])
                     .inc();
                 Err(RTError::TikvClient(Box::new(StringError(
                     "retry count exceeded".to_string(),
@@ -326,6 +360,9 @@ impl RawClientWrapper {
                     return Ok(val);
                 }
                 Err(err) => {
+                    TIKV_ERR_COUNTER
+                        .with_label_values(&["raw client error"])
+                        .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
                         sleep(std::cmp::min(2 + i, 200)).await;
@@ -349,6 +386,9 @@ impl RawClientWrapper {
                     return Ok(());
                 }
                 Err(err) => {
+                    TIKV_ERR_COUNTER
+                        .with_label_values(&["raw client error"])
+                        .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
                         sleep(std::cmp::min(2 + i, 200)).await;
@@ -382,6 +422,9 @@ impl RawClientWrapper {
                     return Ok((val, swapped));
                 }
                 Err(err) => {
+                    TIKV_ERR_COUNTER
+                        .with_label_values(&["raw client error"])
+                        .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
                         sleep(std::cmp::min(2 + i, 200)).await;
@@ -406,6 +449,9 @@ impl RawClientWrapper {
                     return Ok(val);
                 }
                 Err(err) => {
+                    TIKV_ERR_COUNTER
+                        .with_label_values(&["raw client error"])
+                        .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
                         sleep(std::cmp::min(2 + i, 200)).await;
@@ -430,6 +476,9 @@ impl RawClientWrapper {
                     return Ok(val);
                 }
                 Err(err) => {
+                    TIKV_ERR_COUNTER
+                        .with_label_values(&["raw client error"])
+                        .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
                         sleep(std::cmp::min(2 + i, 200)).await;
@@ -453,6 +502,9 @@ impl RawClientWrapper {
                     return Ok(val);
                 }
                 Err(err) => {
+                    TIKV_ERR_COUNTER
+                        .with_label_values(&["raw client error"])
+                        .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
                         sleep(std::cmp::min(2 + i, 200)).await;
@@ -476,6 +528,9 @@ impl RawClientWrapper {
                     return Ok(val);
                 }
                 Err(err) => {
+                    TIKV_ERR_COUNTER
+                        .with_label_values(&["raw client error"])
+                        .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
                         sleep(std::cmp::min(2 + i, 200)).await;
@@ -500,6 +555,9 @@ impl RawClientWrapper {
                     return Ok(val);
                 }
                 Err(err) => {
+                    TIKV_ERR_COUNTER
+                        .with_label_values(&["raw client error"])
+                        .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
                         sleep(std::cmp::min(2 + i, 200)).await;

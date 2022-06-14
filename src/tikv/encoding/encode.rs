@@ -316,18 +316,6 @@ impl KeyEncoder {
         val
     }
 
-    pub fn encode_txnkv_set_meta_key(&self, ukey: &str) -> Key {
-        let mut key = Vec::with_capacity(6 + ukey.len());
-        let key_len: u16 = ukey.len().try_into().unwrap();
-
-        key.push(TXN_KEY_PREFIX);
-        key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_META);
-        key.extend_from_slice(&key_len.to_be_bytes());
-        key.extend_from_slice(ukey.as_bytes());
-        key.into()
-    }
-
     pub fn encode_txnkv_set_meta_value(&self, ttl: u64, version: u16, index_size: u16) -> Value {
         let dt = self.get_type_bytes(DataType::Set);
         let mut val = Vec::with_capacity(13);
@@ -397,46 +385,73 @@ impl KeyEncoder {
         range.into()
     }
 
-    pub fn encode_txnkv_zset_meta_key(&self, ukey: &str) -> Key {
-        let mut key = Vec::with_capacity(4 + ukey.len());
-        key.push(TXN_KEY_PREFIX);
-        key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_META);
-        key.extend_from_slice(ukey.as_bytes());
-        key.into()
-    }
-
-    pub fn encode_txnkv_zset_meta_value(&self, ttl: u64, size: u64) -> Value {
+    pub fn encode_txnkv_zset_meta_value(&self, ttl: u64, version: u16, index_size: u16) -> Value {
         let dt = self.get_type_bytes(DataType::Zset);
-        let mut val = Vec::with_capacity(17);
+        let mut val = Vec::with_capacity(13);
 
-        val.append(&mut dt.to_be_bytes().to_vec());
-        val.append(&mut ttl.to_be_bytes().to_vec());
-        val.append(&mut size.to_be_bytes().to_vec());
+        val.push(dt);
+        val.extend_from_slice(&ttl.to_be_bytes());
+        val.extend_from_slice(&version.to_be_bytes());
+        // if index_size is 0 means this is a new created key, use the default config number
+        if index_size == 0 {
+            val.extend_from_slice(&self.meta_key_number.to_be_bytes());
+        } else {
+            val.extend_from_slice(&index_size.to_be_bytes());
+        }
         val
     }
 
-    pub fn encode_txnkv_zset_data_key(&self, ukey: &str, member: &str) -> Key {
-        let mut key = Vec::with_capacity(6 + ukey.len() + member.len());
+    pub fn encode_txnkv_zset_data_key(&self, ukey: &str, member: &str, version: u16) -> Key {
+        let mut key = Vec::with_capacity(10 + ukey.len() + member.len());
+        let key_len: u16 = ukey.len().try_into().unwrap();
+
         key.push(TXN_KEY_PREFIX);
         key.extend_from_slice(self.instance_id.as_slice());
         key.push(DATA_TYPE_DATA);
         key.push(DATA_TYPE_ZSET);
+        key.extend_from_slice(&key_len.to_be_bytes());
         key.extend_from_slice(ukey.as_bytes());
+        key.extend_from_slice(&version.to_be_bytes());
         key.push(PLACE_HOLDER);
         key.extend_from_slice(member.as_bytes());
         key.into()
     }
 
-    pub fn encode_txnkv_zset_data_key_start(&self, ukey: &str) -> Key {
-        let mut key = Vec::with_capacity(6 + ukey.len());
+    pub fn encode_txnkv_zset_data_key_start(&self, ukey: &str, version: u16) -> Key {
+        let mut key = Vec::with_capacity(10 + ukey.len());
+        let key_len: u16 = ukey.len().try_into().unwrap();
+
         key.push(TXN_KEY_PREFIX);
         key.extend_from_slice(self.instance_id.as_slice());
         key.push(DATA_TYPE_DATA);
         key.push(DATA_TYPE_ZSET);
+        key.extend_from_slice(&key_len.to_be_bytes());
         key.extend_from_slice(ukey.as_bytes());
+        key.extend_from_slice(&version.to_be_bytes());
         key.push(PLACE_HOLDER);
         key.into()
+    }
+
+    pub fn encode_txnkv_zset_data_key_end(&self, ukey: &str, version: u16) -> Key {
+        let mut key = Vec::with_capacity(10 + ukey.len());
+        let key_len: u16 = ukey.len().try_into().unwrap();
+
+        key.push(TXN_KEY_PREFIX);
+        key.extend_from_slice(self.instance_id.as_slice());
+        key.push(DATA_TYPE_DATA);
+        key.push(DATA_TYPE_ZSET);
+        key.extend_from_slice(&key_len.to_be_bytes());
+        key.extend_from_slice(ukey.as_bytes());
+        key.extend_from_slice(&version.to_be_bytes());
+        key.push(PLACE_HOLDER + 1);
+        key.into()
+    }
+
+    pub fn encode_txnkv_zset_data_key_range(&self, ukey: &str, version: u16) -> BoundRange {
+        let data_key_start = self.encode_txnkv_zset_data_key_start(ukey, version);
+        let data_key_end = self.encode_txnkv_zset_data_key_end(ukey, version);
+        let range: Range<Key> = data_key_start..data_key_end;
+        range.into()
     }
 
     pub fn encode_txnkv_zset_data_value(&self, score: i64) -> Value {
@@ -444,13 +459,23 @@ impl KeyEncoder {
     }
 
     // encode the member to score key
-    pub fn encode_txnkv_zset_score_key(&self, ukey: &str, score: i64, member: &str) -> Key {
-        let mut key = Vec::with_capacity(15 + ukey.len() + member.len());
+    pub fn encode_txnkv_zset_score_key(
+        &self,
+        ukey: &str,
+        score: i64,
+        member: &str,
+        version: u16,
+    ) -> Key {
+        let mut key = Vec::with_capacity(19 + ukey.len() + member.len());
+        let key_len: u16 = ukey.len().try_into().unwrap();
+
         key.push(TXN_KEY_PREFIX);
         key.extend_from_slice(self.instance_id.as_slice());
         key.push(DATA_TYPE_SCORE);
         key.push(DATA_TYPE_ZSET);
+        key.extend_from_slice(&key_len.to_be_bytes());
         key.extend_from_slice(ukey.as_bytes());
+        key.extend_from_slice(&version.to_be_bytes());
         key.push(PLACE_HOLDER);
         key.extend_from_slice(&score.to_be_bytes());
         key.push(PLACE_HOLDER);
@@ -458,40 +483,97 @@ impl KeyEncoder {
         key.into()
     }
 
-    pub fn encode_txnkv_zset_score_key_start(&self, ukey: &str) -> Key {
+    pub fn encode_txnkv_zset_score_key_start(&self, ukey: &str, version: u16) -> Key {
         let mut key = Vec::with_capacity(5 + ukey.len());
+        let key_len: u16 = ukey.len().try_into().unwrap();
+
         key.push(TXN_KEY_PREFIX);
         key.extend_from_slice(self.instance_id.as_slice());
         key.push(DATA_TYPE_SCORE);
         key.push(DATA_TYPE_ZSET);
+        key.extend_from_slice(&key_len.to_be_bytes());
         key.extend_from_slice(ukey.as_bytes());
+        key.extend_from_slice(&version.to_be_bytes());
         key.push(PLACE_HOLDER);
         key.into()
     }
 
-    pub fn encode_txnkv_zset_score_key_range_start(&self, ukey: &str, score: i64) -> Key {
-        let mut key = Vec::with_capacity(15 + ukey.len());
+    pub fn encode_txnkv_zset_score_key_end(&self, ukey: &str, version: u16) -> Key {
+        let mut key = Vec::with_capacity(5 + ukey.len());
+        let key_len: u16 = ukey.len().try_into().unwrap();
+
         key.push(TXN_KEY_PREFIX);
         key.extend_from_slice(self.instance_id.as_slice());
         key.push(DATA_TYPE_SCORE);
         key.push(DATA_TYPE_ZSET);
+        key.extend_from_slice(&key_len.to_be_bytes());
         key.extend_from_slice(ukey.as_bytes());
+        key.extend_from_slice(&version.to_be_bytes());
+        key.push(PLACE_HOLDER + 1);
+        key.into()
+    }
+
+    pub fn encode_txnkv_zset_score_key_range(&self, ukey: &str, version: u16) -> BoundRange {
+        let range_start = self.encode_txnkv_zset_score_key_start(ukey, version);
+        let range_end = self.encode_txnkv_zset_score_key_end(ukey, version);
+        let range: Range<Key> = range_start..range_end;
+        range.into()
+    }
+
+    pub fn encode_txnkv_zset_score_key_score_start(
+        &self,
+        ukey: &str,
+        score: i64,
+        version: u16,
+    ) -> Key {
+        let mut key = Vec::with_capacity(15 + ukey.len());
+        let key_len: u16 = ukey.len().try_into().unwrap();
+
+        key.push(TXN_KEY_PREFIX);
+        key.extend_from_slice(self.instance_id.as_slice());
+        key.push(DATA_TYPE_SCORE);
+        key.push(DATA_TYPE_ZSET);
+        key.extend_from_slice(&key_len.to_be_bytes());
+        key.extend_from_slice(ukey.as_bytes());
+        key.extend_from_slice(&version.to_be_bytes());
         key.push(PLACE_HOLDER);
         key.extend_from_slice(&score.to_be_bytes());
         key.push(PLACE_HOLDER);
         key.into()
     }
 
-    pub fn encode_txnkv_zset_score_key_range_end(&self, ukey: &str, score: i64) -> Key {
+    pub fn encode_txnkv_zset_score_key_score_end(
+        &self,
+        ukey: &str,
+        score: i64,
+        version: u16,
+    ) -> Key {
         let mut key = Vec::with_capacity(15 + ukey.len());
+        let key_len: u16 = ukey.len().try_into().unwrap();
+
         key.push(TXN_KEY_PREFIX);
         key.extend_from_slice(self.instance_id.as_slice());
         key.push(DATA_TYPE_SCORE);
         key.push(DATA_TYPE_ZSET);
+        key.extend_from_slice(&key_len.to_be_bytes());
         key.extend_from_slice(ukey.as_bytes());
+        key.extend_from_slice(&version.to_be_bytes());
         key.push(PLACE_HOLDER);
         key.extend_from_slice(&score.to_be_bytes());
         key.push(PLACE_HOLDER + 1);
         key.into()
+    }
+
+    #[allow(dead_code)]
+    pub fn encode_txnkv_zset_score_key_score_range(
+        &self,
+        ukey: &str,
+        score: i64,
+        version: u16,
+    ) -> BoundRange {
+        let range_start = self.encode_txnkv_zset_score_key_score_start(ukey, score, version);
+        let range_end = self.encode_txnkv_zset_score_key_score_end(ukey, score, version);
+        let range: Range<Key> = range_start..range_end;
+        range.into()
     }
 }

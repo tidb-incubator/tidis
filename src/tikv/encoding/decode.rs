@@ -88,33 +88,30 @@ impl KeyDecoder {
         key[idx..].to_vec()
     }
 
-    pub fn decode_key_zset_size(value: &[u8]) -> u64 {
-        u64::from_be_bytes(value[9..].try_into().unwrap())
-    }
-
-    pub fn decode_key_zset_meta(value: &[u8]) -> (u64, u64) {
+    pub fn decode_key_zset_meta(value: &[u8]) -> (u64, u16, u16) {
         (
             Self::decode_key_ttl(value),
-            Self::decode_key_zset_size(value),
+            Self::decode_key_version(value),
+            Self::decode_key_index_size(value),
         )
     }
 
     #[allow(dead_code)]
     pub fn decode_key_zset_member_from_scorekey(rkey: &str, key: Key) -> Vec<u8> {
         let key: Vec<u8> = key.into();
-        let idx = 15 + rkey.len();
+        let idx = 19 + rkey.len();
         key[idx..].to_vec()
     }
 
     pub fn decode_key_zset_score_from_scorekey(rkey: &str, key: Key) -> i64 {
         let key: Vec<u8> = key.into();
-        let idx = 6 + rkey.len();
+        let idx = 10 + rkey.len();
         i64::from_be_bytes(key[idx..idx + 8].try_into().unwrap())
     }
 
     pub fn decode_key_zset_member_from_datakey(rkey: &str, key: Key) -> Vec<u8> {
         let key: Vec<u8> = key.into();
-        let idx = 6 + rkey.len();
+        let idx = 10 + rkey.len();
         key[idx..].to_vec()
     }
 

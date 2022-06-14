@@ -14,7 +14,6 @@ use rand::Rng;
 use rand::SeedableRng;
 use std::convert::TryInto;
 use std::sync::Arc;
-use tikv_client::Key;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
@@ -67,7 +66,7 @@ impl SetCommandCtx {
 
         let key = key.to_owned();
         let members = members.to_owned();
-        let meta_key = KEY_ENCODER.encode_txnkv_set_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
         let rand_idx = self.gen_random_index();
 
         let resp = client
@@ -173,7 +172,7 @@ impl SetCommandCtx {
             None => client.newest_snapshot().await,
         };
 
-        let meta_key = KEY_ENCODER.encode_txnkv_set_meta_key(key);
+        let meta_key = KEY_ENCODER.encode_txnkv_meta_key(key);
 
         match ss.get(meta_key).await? {
             Some(meta_value) => {
@@ -213,7 +212,7 @@ impl SetCommandCtx {
             None => client.newest_snapshot().await,
         };
 
-        let meta_key = KEY_ENCODER.encode_txnkv_set_meta_key(key);
+        let meta_key = KEY_ENCODER.encode_txnkv_meta_key(key);
         match ss.get(meta_key).await? {
             Some(meta_value) => {
                 // check key type and ttl
@@ -266,7 +265,7 @@ impl SetCommandCtx {
     pub async fn do_async_txnkv_smembers(self, key: &str) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
 
-        let meta_key = KEY_ENCODER.encode_txnkv_set_meta_key(key);
+        let meta_key = KEY_ENCODER.encode_txnkv_meta_key(key);
 
         let mut ss = match self.txn.clone() {
             Some(txn) => client.snapshot_from_txn(txn).await,
@@ -315,7 +314,7 @@ impl SetCommandCtx {
 
         let key = key.to_owned();
         let members = members.to_owned();
-        let meta_key = KEY_ENCODER.encode_txnkv_set_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
         let rand_idx = self.gen_random_index();
 
         let resp = client
@@ -401,7 +400,7 @@ impl SetCommandCtx {
     pub async fn do_async_txnkv_spop(mut self, key: &str, count: u64) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
-        let meta_key = KEY_ENCODER.encode_txnkv_set_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
         let rand_idx = self.gen_random_index();
 
         let resp = client
@@ -509,7 +508,7 @@ impl SetCommandCtx {
     pub async fn do_async_txnkv_set_del(mut self, key: &str) -> AsyncResult<i64> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
-        let meta_key = KEY_ENCODER.encode_txnkv_set_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -552,7 +551,7 @@ impl SetCommandCtx {
     pub async fn do_async_txnkv_set_expire_if_needed(mut self, key: &str) -> AsyncResult<i64> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
-        let meta_key = KEY_ENCODER.encode_txnkv_set_meta_key(&key);
+        let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {

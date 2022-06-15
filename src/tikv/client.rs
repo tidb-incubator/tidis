@@ -53,7 +53,7 @@ impl TxnClientWrapper<'static> {
         RETRIEVE_TSO_DURATION.observe(duration_to_sec(duration));
         tso.or_else(|err| {
             PD_ERR_COUNTER
-                .with_label_values(&["retrieve current timestamp error"])
+                .with_label_values(&["retrieve_current_timestamp_error"])
                 .inc();
             Err(err)
         })
@@ -172,7 +172,7 @@ impl TxnClientWrapper<'static> {
             .await
             .or_else(|err| {
                 TIKV_ERR_COUNTER
-                    .with_label_values(&["start txn error"])
+                    .with_label_values(&["start_txn_error"])
                     .inc();
                 Err(err)
             })
@@ -293,7 +293,7 @@ impl TxnClientWrapper<'static> {
                                         "retry transaction in the caller caused by error {}",
                                         client_err
                                     );
-                                    TXN_RETRY_ERR.with_label_values(&["retry error"]).inc();
+                                    TXN_RETRY_ERR.with_label_values(&["retry_error"]).inc();
                                     continue;
                                 } else {
                                     return Err(RTError::TikvClient(client_err));
@@ -309,7 +309,7 @@ impl TxnClientWrapper<'static> {
                 }
                 error!(LOGGER, "transaction retry count reached limit");
                 TXN_RETRY_ERR
-                    .with_label_values(&["retry count exceeded"])
+                    .with_label_values(&["retry_count_exceeded"])
                     .inc();
                 Err(RTError::TikvClient(Box::new(StringError(
                     "retry count exceeded".to_string(),
@@ -361,7 +361,7 @@ impl RawClientWrapper {
                 }
                 Err(err) => {
                     TIKV_ERR_COUNTER
-                        .with_label_values(&["raw client error"])
+                        .with_label_values(&["raw_client_error"])
                         .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
@@ -387,7 +387,7 @@ impl RawClientWrapper {
                 }
                 Err(err) => {
                     TIKV_ERR_COUNTER
-                        .with_label_values(&["raw client error"])
+                        .with_label_values(&["raw_client_error"])
                         .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
@@ -423,7 +423,7 @@ impl RawClientWrapper {
                 }
                 Err(err) => {
                     TIKV_ERR_COUNTER
-                        .with_label_values(&["raw client error"])
+                        .with_label_values(&["raw_client_error"])
                         .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
@@ -450,7 +450,7 @@ impl RawClientWrapper {
                 }
                 Err(err) => {
                     TIKV_ERR_COUNTER
-                        .with_label_values(&["raw client error"])
+                        .with_label_values(&["raw_client_error"])
                         .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
@@ -477,7 +477,7 @@ impl RawClientWrapper {
                 }
                 Err(err) => {
                     TIKV_ERR_COUNTER
-                        .with_label_values(&["raw client error"])
+                        .with_label_values(&["raw_client_error"])
                         .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
@@ -503,7 +503,7 @@ impl RawClientWrapper {
                 }
                 Err(err) => {
                     TIKV_ERR_COUNTER
-                        .with_label_values(&["raw client error"])
+                        .with_label_values(&["raw_client_error"])
                         .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
@@ -529,7 +529,7 @@ impl RawClientWrapper {
                 }
                 Err(err) => {
                     TIKV_ERR_COUNTER
-                        .with_label_values(&["raw client error"])
+                        .with_label_values(&["raw_client_error"])
                         .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
@@ -556,7 +556,7 @@ impl RawClientWrapper {
                 }
                 Err(err) => {
                     TIKV_ERR_COUNTER
-                        .with_label_values(&["raw client error"])
+                        .with_label_values(&["raw_client_error"])
                         .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);

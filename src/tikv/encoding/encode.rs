@@ -122,34 +122,17 @@ impl KeyEncoder {
 
     pub fn encode_rawkv_strings(&self, keys: &[String]) -> Vec<Key> {
         keys.iter()
-            .map(|ukey| {
-                let mut key = Vec::with_capacity(4 + ukey.len());
-                key.push(RAW_KEY_PREFIX);
-                key.extend_from_slice(self.instance_id.as_slice());
-                key.push(DATA_TYPE_META);
-                key.extend_from_slice(ukey.as_bytes());
-                key.into()
-            })
+            .map(|ukey| self.encode_rawkv_string(ukey))
             .collect()
     }
 
     pub fn encode_txnkv_strings(&self, keys: &[String]) -> Vec<Key> {
         keys.iter()
-            .map(|ukey| {
-                let mut key = Vec::with_capacity(6 + ukey.len());
-                let key_len: u16 = ukey.len().try_into().unwrap();
-                key.push(TXN_KEY_PREFIX);
-                key.extend_from_slice(self.instance_id.as_slice());
-                key.push(DATA_TYPE_META);
-                key.extend_from_slice(&key_len.to_be_bytes());
-                key.extend_from_slice(ukey.as_bytes());
-                key.into()
-            })
+            .map(|ukey| self.encode_txnkv_string(ukey))
             .collect()
     }
 
-    pub fn encode_txnkv_meta_key(&self, ukey: &str) -> Key {
-        let mut key = Vec::with_capacity(6 + ukey.len());
+    fn encode_txnkv_meta_common_prefix(&self, ukey: &str, key: &mut Vec<u8>) {
         let key_len: u16 = ukey.len().try_into().unwrap();
 
         key.push(TXN_KEY_PREFIX);
@@ -157,18 +140,20 @@ impl KeyEncoder {
         key.push(DATA_TYPE_META);
         key.extend_from_slice(&key_len.to_be_bytes());
         key.extend_from_slice(ukey.as_bytes());
+    }
+
+    pub fn encode_txnkv_meta_key(&self, ukey: &str) -> Key {
+        let mut key = Vec::with_capacity(6 + ukey.len());
+
+        self.encode_txnkv_meta_common_prefix(ukey, &mut key);
         key.into()
     }
 
     pub fn encode_txnkv_sub_meta_key(&self, ukey: &str, version: u16, idx: u16) -> Key {
         let mut key = Vec::with_capacity(11 + ukey.len());
-        let key_len: u16 = key.len().try_into().unwrap();
 
-        key.push(TXN_KEY_PREFIX);
-        key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_META);
-        key.extend_from_slice(&key_len.to_be_bytes());
-        key.extend_from_slice(ukey.as_bytes());
+        self.encode_txnkv_meta_common_prefix(ukey, &mut key);
+
         key.extend_from_slice(&version.to_be_bytes());
         key.push(PLACE_HOLDER);
         key.extend_from_slice(&idx.to_be_bytes());
@@ -177,13 +162,9 @@ impl KeyEncoder {
 
     pub fn encode_txnkv_sub_meta_key_start(&self, ukey: &str, version: u16) -> Key {
         let mut key = Vec::with_capacity(9 + ukey.len());
-        let key_len: u16 = key.len().try_into().unwrap();
 
-        key.push(TXN_KEY_PREFIX);
-        key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_META);
-        key.extend_from_slice(&key_len.to_be_bytes());
-        key.extend_from_slice(ukey.as_bytes());
+        self.encode_txnkv_meta_common_prefix(ukey, &mut key);
+
         key.extend_from_slice(&version.to_be_bytes());
         key.push(PLACE_HOLDER);
         key.into()
@@ -191,13 +172,9 @@ impl KeyEncoder {
 
     pub fn encode_txnkv_sub_meta_key_end(&self, ukey: &str, version: u16) -> Key {
         let mut key = Vec::with_capacity(9 + ukey.len());
-        let key_len: u16 = key.len().try_into().unwrap();
 
-        key.push(TXN_KEY_PREFIX);
-        key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_META);
-        key.extend_from_slice(&key_len.to_be_bytes());
-        key.extend_from_slice(ukey.as_bytes());
+        self.encode_txnkv_meta_common_prefix(ukey, &mut key);
+
         key.extend_from_slice(&version.to_be_bytes());
         key.push(PLACE_HOLDER + 1);
         key.into()
@@ -210,17 +187,34 @@ impl KeyEncoder {
         range.into()
     }
 
-    pub fn encode_txnkv_hash_data_key(&self, ukey: &str, field: &str, version: u16) -> Key {
-        let mut key = Vec::with_capacity(10 + ukey.len() + field.len());
+    fn encode_txnkv_type_data_key_prefix(
+        &self,
+        key_type: u8,
+        data_type: u8,
+        ukey: &str,
+        key: &mut Vec<u8>,
+        version: u16,
+    ) {
         let key_len: u16 = ukey.len().try_into().unwrap();
-
         key.push(TXN_KEY_PREFIX);
         key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_DATA);
-        key.push(DATA_TYPE_HASH);
+        key.push(key_type);
+        key.push(data_type);
         key.extend_from_slice(&key_len.to_be_bytes());
         key.extend_from_slice(ukey.as_bytes());
         key.extend_from_slice(&version.to_be_bytes());
+    }
+
+    pub fn encode_txnkv_hash_data_key(&self, ukey: &str, field: &str, version: u16) -> Key {
+        let mut key = Vec::with_capacity(10 + ukey.len() + field.len());
+
+        self.encode_txnkv_type_data_key_prefix(
+            DATA_TYPE_DATA,
+            DATA_TYPE_HASH,
+            ukey,
+            &mut key,
+            version,
+        );
         key.push(PLACE_HOLDER);
         key.extend_from_slice(field.as_bytes());
         key.into()
@@ -228,30 +222,27 @@ impl KeyEncoder {
 
     pub fn encode_txnkv_hash_data_key_start(&self, ukey: &str, version: u16) -> Key {
         let mut key = Vec::with_capacity(10 + ukey.len());
-        let key_len: u16 = ukey.len().try_into().unwrap();
 
-        key.push(TXN_KEY_PREFIX);
-        key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_DATA);
-        key.push(DATA_TYPE_HASH);
-        key.extend_from_slice(&key_len.to_be_bytes());
-        key.extend_from_slice(ukey.as_bytes());
-        key.extend_from_slice(&version.to_be_bytes());
+        self.encode_txnkv_type_data_key_prefix(
+            DATA_TYPE_DATA,
+            DATA_TYPE_HASH,
+            ukey,
+            &mut key,
+            version,
+        );
         key.push(PLACE_HOLDER);
         key.into()
     }
 
     pub fn encode_txnkv_hash_data_key_end(&self, ukey: &str, version: u16) -> Key {
         let mut key = Vec::with_capacity(10 + ukey.len());
-        let key_len: u16 = ukey.len().try_into().unwrap();
-
-        key.push(TXN_KEY_PREFIX);
-        key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_DATA);
-        key.push(DATA_TYPE_HASH);
-        key.extend_from_slice(&key_len.to_be_bytes());
-        key.extend_from_slice(ukey.as_bytes());
-        key.extend_from_slice(&version.to_be_bytes());
+        self.encode_txnkv_type_data_key_prefix(
+            DATA_TYPE_DATA,
+            DATA_TYPE_HASH,
+            ukey,
+            &mut key,
+            version,
+        );
         key.push(PLACE_HOLDER + 1);
         key.into()
     }
@@ -281,42 +272,37 @@ impl KeyEncoder {
         val
     }
 
-    pub fn encode_txnkv_list_meta_key(&self, ukey: &str) -> Key {
-        let mut key = Vec::with_capacity(6 + ukey.len());
-        let key_len: u16 = ukey.len().try_into().unwrap();
-
-        key.push(TXN_KEY_PREFIX);
-        key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_META);
-        key.extend_from_slice(&key_len.to_be_bytes());
-        key.extend_from_slice(ukey.as_bytes());
-        key.into()
-    }
-
     /// idx range [0, 1<<64]
     /// left initial value  1<<32, left is point to the left element
     /// right initial value 1<<32, right is point to the next right position of right element
     /// list is indicated as null if left index equal to right
-    pub fn encode_txnkv_list_data_key(&self, ukey: &str, idx: u64) -> Key {
+    pub fn encode_txnkv_list_data_key(&self, ukey: &str, idx: u64, version: u16) -> Key {
         let mut key = Vec::with_capacity(13 + ukey.len());
-        let key_len: u16 = ukey.len().try_into().unwrap();
 
-        key.push(TXN_KEY_PREFIX);
-        key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_DATA);
-        key.push(DATA_TYPE_LIST);
-        key.extend_from_slice(&key_len.to_be_bytes());
-        key.extend_from_slice(ukey.as_bytes());
+        self.encode_txnkv_type_data_key_prefix(
+            DATA_TYPE_DATA,
+            DATA_TYPE_LIST,
+            ukey,
+            &mut key,
+            version,
+        );
         key.extend_from_slice(&idx.to_be_bytes());
         key.into()
     }
 
-    pub fn encode_txnkv_list_meta_value(&self, ttl: u64, left: u64, right: u64) -> Value {
+    pub fn encode_txnkv_list_meta_value(
+        &self,
+        ttl: u64,
+        version: u16,
+        left: u64,
+        right: u64,
+    ) -> Value {
         let dt = self.get_type_bytes(DataType::List);
-        let mut val = Vec::with_capacity(25);
+        let mut val = Vec::with_capacity(27);
 
         val.push(dt);
         val.extend_from_slice(&ttl.to_be_bytes());
+        val.extend_from_slice(&version.to_be_bytes());
         val.extend_from_slice(&left.to_be_bytes());
         val.extend_from_slice(&right.to_be_bytes());
         val
@@ -340,15 +326,14 @@ impl KeyEncoder {
 
     pub fn encode_txnkv_set_data_key(&self, ukey: &str, member: &str, version: u16) -> Key {
         let mut key = Vec::with_capacity(10 + ukey.len() + member.len());
-        let key_len: u16 = ukey.len().try_into().unwrap();
 
-        key.push(TXN_KEY_PREFIX);
-        key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_DATA);
-        key.push(DATA_TYPE_SET);
-        key.extend_from_slice(&key_len.to_be_bytes());
-        key.extend_from_slice(ukey.as_bytes());
-        key.extend_from_slice(&version.to_be_bytes());
+        self.encode_txnkv_type_data_key_prefix(
+            DATA_TYPE_DATA,
+            DATA_TYPE_SET,
+            ukey,
+            &mut key,
+            version,
+        );
         key.push(PLACE_HOLDER);
         key.extend_from_slice(member.as_bytes());
         key.into()
@@ -356,30 +341,28 @@ impl KeyEncoder {
 
     pub fn encode_txnkv_set_data_key_start(&self, ukey: &str, version: u16) -> Key {
         let mut key = Vec::with_capacity(10 + ukey.len());
-        let key_len: u16 = ukey.len().try_into().unwrap();
 
-        key.push(TXN_KEY_PREFIX);
-        key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_DATA);
-        key.push(DATA_TYPE_SET);
-        key.extend_from_slice(&key_len.to_be_bytes());
-        key.extend_from_slice(ukey.as_bytes());
-        key.extend_from_slice(&version.to_be_bytes());
+        self.encode_txnkv_type_data_key_prefix(
+            DATA_TYPE_DATA,
+            DATA_TYPE_SET,
+            ukey,
+            &mut key,
+            version,
+        );
         key.push(PLACE_HOLDER);
         key.into()
     }
 
     pub fn encode_txnkv_set_data_key_end(&self, ukey: &str, version: u16) -> Key {
         let mut key = Vec::with_capacity(10 + ukey.len());
-        let key_len: u16 = ukey.len().try_into().unwrap();
 
-        key.push(TXN_KEY_PREFIX);
-        key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_DATA);
-        key.push(DATA_TYPE_SET);
-        key.extend_from_slice(&key_len.to_be_bytes());
-        key.extend_from_slice(ukey.as_bytes());
-        key.extend_from_slice(&version.to_be_bytes());
+        self.encode_txnkv_type_data_key_prefix(
+            DATA_TYPE_DATA,
+            DATA_TYPE_SET,
+            ukey,
+            &mut key,
+            version,
+        );
         key.push(PLACE_HOLDER + 1);
         key.into()
     }
@@ -409,15 +392,14 @@ impl KeyEncoder {
 
     pub fn encode_txnkv_zset_data_key(&self, ukey: &str, member: &str, version: u16) -> Key {
         let mut key = Vec::with_capacity(10 + ukey.len() + member.len());
-        let key_len: u16 = ukey.len().try_into().unwrap();
 
-        key.push(TXN_KEY_PREFIX);
-        key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_DATA);
-        key.push(DATA_TYPE_ZSET);
-        key.extend_from_slice(&key_len.to_be_bytes());
-        key.extend_from_slice(ukey.as_bytes());
-        key.extend_from_slice(&version.to_be_bytes());
+        self.encode_txnkv_type_data_key_prefix(
+            DATA_TYPE_DATA,
+            DATA_TYPE_ZSET,
+            ukey,
+            &mut key,
+            version,
+        );
         key.push(PLACE_HOLDER);
         key.extend_from_slice(member.as_bytes());
         key.into()
@@ -425,30 +407,28 @@ impl KeyEncoder {
 
     pub fn encode_txnkv_zset_data_key_start(&self, ukey: &str, version: u16) -> Key {
         let mut key = Vec::with_capacity(10 + ukey.len());
-        let key_len: u16 = ukey.len().try_into().unwrap();
 
-        key.push(TXN_KEY_PREFIX);
-        key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_DATA);
-        key.push(DATA_TYPE_ZSET);
-        key.extend_from_slice(&key_len.to_be_bytes());
-        key.extend_from_slice(ukey.as_bytes());
-        key.extend_from_slice(&version.to_be_bytes());
+        self.encode_txnkv_type_data_key_prefix(
+            DATA_TYPE_DATA,
+            DATA_TYPE_ZSET,
+            ukey,
+            &mut key,
+            version,
+        );
         key.push(PLACE_HOLDER);
         key.into()
     }
 
     pub fn encode_txnkv_zset_data_key_end(&self, ukey: &str, version: u16) -> Key {
         let mut key = Vec::with_capacity(10 + ukey.len());
-        let key_len: u16 = ukey.len().try_into().unwrap();
 
-        key.push(TXN_KEY_PREFIX);
-        key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_DATA);
-        key.push(DATA_TYPE_ZSET);
-        key.extend_from_slice(&key_len.to_be_bytes());
-        key.extend_from_slice(ukey.as_bytes());
-        key.extend_from_slice(&version.to_be_bytes());
+        self.encode_txnkv_type_data_key_prefix(
+            DATA_TYPE_DATA,
+            DATA_TYPE_ZSET,
+            ukey,
+            &mut key,
+            version,
+        );
         key.push(PLACE_HOLDER + 1);
         key.into()
     }
@@ -473,15 +453,14 @@ impl KeyEncoder {
         version: u16,
     ) -> Key {
         let mut key = Vec::with_capacity(19 + ukey.len() + member.len());
-        let key_len: u16 = ukey.len().try_into().unwrap();
 
-        key.push(TXN_KEY_PREFIX);
-        key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_SCORE);
-        key.push(DATA_TYPE_ZSET);
-        key.extend_from_slice(&key_len.to_be_bytes());
-        key.extend_from_slice(ukey.as_bytes());
-        key.extend_from_slice(&version.to_be_bytes());
+        self.encode_txnkv_type_data_key_prefix(
+            DATA_TYPE_SCORE,
+            DATA_TYPE_ZSET,
+            ukey,
+            &mut key,
+            version,
+        );
         key.push(PLACE_HOLDER);
         key.extend_from_slice(&score.to_be_bytes());
         key.push(PLACE_HOLDER);
@@ -491,30 +470,27 @@ impl KeyEncoder {
 
     pub fn encode_txnkv_zset_score_key_start(&self, ukey: &str, version: u16) -> Key {
         let mut key = Vec::with_capacity(5 + ukey.len());
-        let key_len: u16 = ukey.len().try_into().unwrap();
 
-        key.push(TXN_KEY_PREFIX);
-        key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_SCORE);
-        key.push(DATA_TYPE_ZSET);
-        key.extend_from_slice(&key_len.to_be_bytes());
-        key.extend_from_slice(ukey.as_bytes());
-        key.extend_from_slice(&version.to_be_bytes());
+        self.encode_txnkv_type_data_key_prefix(
+            DATA_TYPE_SCORE,
+            DATA_TYPE_ZSET,
+            ukey,
+            &mut key,
+            version,
+        );
         key.push(PLACE_HOLDER);
         key.into()
     }
 
     pub fn encode_txnkv_zset_score_key_end(&self, ukey: &str, version: u16) -> Key {
         let mut key = Vec::with_capacity(5 + ukey.len());
-        let key_len: u16 = ukey.len().try_into().unwrap();
-
-        key.push(TXN_KEY_PREFIX);
-        key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_SCORE);
-        key.push(DATA_TYPE_ZSET);
-        key.extend_from_slice(&key_len.to_be_bytes());
-        key.extend_from_slice(ukey.as_bytes());
-        key.extend_from_slice(&version.to_be_bytes());
+        self.encode_txnkv_type_data_key_prefix(
+            DATA_TYPE_SCORE,
+            DATA_TYPE_ZSET,
+            ukey,
+            &mut key,
+            version,
+        );
         key.push(PLACE_HOLDER + 1);
         key.into()
     }
@@ -533,15 +509,15 @@ impl KeyEncoder {
         version: u16,
     ) -> Key {
         let mut key = Vec::with_capacity(15 + ukey.len());
-        let key_len: u16 = ukey.len().try_into().unwrap();
 
-        key.push(TXN_KEY_PREFIX);
-        key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_SCORE);
-        key.push(DATA_TYPE_ZSET);
-        key.extend_from_slice(&key_len.to_be_bytes());
-        key.extend_from_slice(ukey.as_bytes());
-        key.extend_from_slice(&version.to_be_bytes());
+        self.encode_txnkv_type_data_key_prefix(
+            DATA_TYPE_SCORE,
+            DATA_TYPE_ZSET,
+            ukey,
+            &mut key,
+            version,
+        );
+
         key.push(PLACE_HOLDER);
         key.extend_from_slice(&score.to_be_bytes());
         key.push(PLACE_HOLDER);
@@ -555,15 +531,14 @@ impl KeyEncoder {
         version: u16,
     ) -> Key {
         let mut key = Vec::with_capacity(15 + ukey.len());
-        let key_len: u16 = ukey.len().try_into().unwrap();
 
-        key.push(TXN_KEY_PREFIX);
-        key.extend_from_slice(self.instance_id.as_slice());
-        key.push(DATA_TYPE_SCORE);
-        key.push(DATA_TYPE_ZSET);
-        key.extend_from_slice(&key_len.to_be_bytes());
-        key.extend_from_slice(ukey.as_bytes());
-        key.extend_from_slice(&version.to_be_bytes());
+        self.encode_txnkv_type_data_key_prefix(
+            DATA_TYPE_SCORE,
+            DATA_TYPE_ZSET,
+            ukey,
+            &mut key,
+            version,
+        );
         key.push(PLACE_HOLDER);
         key.extend_from_slice(&score.to_be_bytes());
         key.push(PLACE_HOLDER + 1);

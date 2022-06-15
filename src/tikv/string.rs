@@ -486,10 +486,11 @@ impl StringCommandCtx {
                                             .await?;
                                         return Ok(0);
                                     }
-                                    let (_, left, right) =
+                                    let (_, version, left, right) =
                                         KeyDecoder::decode_key_list_meta(&meta_value);
-                                    let new_meta_value = KEY_ENCODER
-                                        .encode_txnkv_list_meta_value(timestamp, left, right);
+                                    let new_meta_value = KEY_ENCODER.encode_txnkv_list_meta_value(
+                                        timestamp, version, left, right,
+                                    );
                                     txn.put(ekey, new_meta_value).await?;
                                     Ok(1)
                                 }

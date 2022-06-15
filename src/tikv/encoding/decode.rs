@@ -51,7 +51,7 @@ impl KeyDecoder {
         u16::from_be_bytes(value[11..].try_into().unwrap())
     }
 
-    pub fn decode_key_hash_meta(value: &[u8]) -> (u64, u16, u16) {
+    pub fn decode_key_meta(value: &[u8]) -> (u64, u16, u16) {
         (
             Self::decode_key_ttl(value),
             Self::decode_key_version(value),
@@ -65,20 +65,13 @@ impl KeyDecoder {
         key[idx..].to_vec()
     }
 
-    /// return (ttl, left, right)
-    pub fn decode_key_list_meta(value: &[u8]) -> (u64, u64, u64) {
+    /// return (ttl, version, left, right)
+    pub fn decode_key_list_meta(value: &[u8]) -> (u64, u16, u64, u64) {
         (
             u64::from_be_bytes(value[1..9].try_into().unwrap()),
-            u64::from_be_bytes(value[9..17].try_into().unwrap()),
-            u64::from_be_bytes(value[17..].try_into().unwrap()),
-        )
-    }
-
-    pub fn decode_key_set_meta(value: &[u8]) -> (u64, u16, u16) {
-        (
-            Self::decode_key_ttl(value),
-            Self::decode_key_version(value),
-            Self::decode_key_index_size(value),
+            u16::from_be_bytes(value[9..11].try_into().unwrap()),
+            u64::from_be_bytes(value[11..19].try_into().unwrap()),
+            u64::from_be_bytes(value[19..].try_into().unwrap()),
         )
     }
 
@@ -86,14 +79,6 @@ impl KeyDecoder {
         let key: Vec<u8> = key.into();
         let idx = 10 + rkey.len();
         key[idx..].to_vec()
-    }
-
-    pub fn decode_key_zset_meta(value: &[u8]) -> (u64, u16, u16) {
-        (
-            Self::decode_key_ttl(value),
-            Self::decode_key_version(value),
-            Self::decode_key_index_size(value),
-        )
     }
 
     #[allow(dead_code)]

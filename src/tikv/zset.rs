@@ -90,7 +90,7 @@ impl ZsetCommandCtx {
                                 return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
-                            let (ttl, version, _) = KeyDecoder::decode_key_zset_meta(&meta_value);
+                            let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
                             let mut expired = false;
                             if key_is_expired(ttl) {
                                 drop(txn);
@@ -303,7 +303,7 @@ impl ZsetCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, version, _) = KeyDecoder::decode_key_zset_meta(&meta_value);
+                let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_zset_expire_if_needed(key)
@@ -334,7 +334,7 @@ impl ZsetCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, version, _) = KeyDecoder::decode_key_zset_meta(&meta_value);
+                let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_zset_expire_if_needed(key)
@@ -378,7 +378,7 @@ impl ZsetCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, version, _) = KeyDecoder::decode_key_zset_meta(&meta_value);
+                let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_zset_expire_if_needed(key)
@@ -430,7 +430,7 @@ impl ZsetCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, version, _) = KeyDecoder::decode_key_zset_meta(&meta_value);
+                let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_zset_expire_if_needed(key)
@@ -517,7 +517,7 @@ impl ZsetCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, version, _) = KeyDecoder::decode_key_zset_meta(&meta_value);
+                let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_zset_expire_if_needed(key)
@@ -593,7 +593,7 @@ impl ZsetCommandCtx {
                                 return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
-                            let (ttl, version, _) = KeyDecoder::decode_key_zset_meta(&meta_value);
+                            let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()
@@ -700,7 +700,7 @@ impl ZsetCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, version, _) = KeyDecoder::decode_key_zset_meta(&meta_value);
+                let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_zset_expire_if_needed(key)
@@ -761,7 +761,7 @@ impl ZsetCommandCtx {
                                 return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
-                            let (ttl, version, _) = KeyDecoder::decode_key_zset_meta(&meta_value);
+                            let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()
@@ -863,7 +863,7 @@ impl ZsetCommandCtx {
                                 return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
-                            let (ttl, version, _) = KeyDecoder::decode_key_zset_meta(&meta_value);
+                            let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()

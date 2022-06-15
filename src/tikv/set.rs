@@ -85,7 +85,7 @@ impl SetCommandCtx {
 
                             let mut expired = false;
                             let (ttl, version, _meta_size) =
-                                KeyDecoder::decode_key_set_meta(&meta_value);
+                                KeyDecoder::decode_key_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()
@@ -181,7 +181,7 @@ impl SetCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, version, _) = KeyDecoder::decode_key_set_meta(&meta_value);
+                let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_set_expire_if_needed(key)
@@ -220,7 +220,7 @@ impl SetCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, version, _) = KeyDecoder::decode_key_set_meta(&meta_value);
+                let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_set_expire_if_needed(key)
@@ -279,7 +279,7 @@ impl SetCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, version, _) = KeyDecoder::decode_key_set_meta(&meta_value);
+                let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_set_expire_if_needed(key)
@@ -332,7 +332,7 @@ impl SetCommandCtx {
                                 return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
-                            let (ttl, version, _) = KeyDecoder::decode_key_set_meta(&meta_value);
+                            let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()
@@ -417,7 +417,7 @@ impl SetCommandCtx {
                                 return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
-                            let (ttl, version, _) = KeyDecoder::decode_key_set_meta(&meta_value);
+                            let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()
@@ -563,7 +563,7 @@ impl SetCommandCtx {
                     let mut txn = txn_rc.lock().await;
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
-                            let (ttl, version, _) = KeyDecoder::decode_key_set_meta(&meta_value);
+                            let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
                             if !key_is_expired(ttl) {
                                 return Ok(0);
                             }

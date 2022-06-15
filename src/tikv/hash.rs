@@ -88,7 +88,7 @@ impl<'a> HashCommandCtx {
                             }
                             // already exists
                             let (ttl, version, _meta_size) =
-                                KeyDecoder::decode_key_hash_meta(&meta_value);
+                                KeyDecoder::decode_key_meta(&meta_value);
 
                             let mut expired = false;
 
@@ -206,7 +206,7 @@ impl<'a> HashCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, version, _meta_size) = KeyDecoder::decode_key_hash_meta(&meta_value);
+                let (ttl, version, _meta_size) = KeyDecoder::decode_key_meta(&meta_value);
 
                 if key_is_expired(ttl) {
                     self.clone()
@@ -242,7 +242,7 @@ impl<'a> HashCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, version, _meta_size) = KeyDecoder::decode_key_hash_meta(&meta_value);
+                let (ttl, version, _meta_size) = KeyDecoder::decode_key_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_hash_expire_if_needed(&key)
@@ -277,7 +277,7 @@ impl<'a> HashCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, version, _meta_size) = KeyDecoder::decode_key_hash_meta(&meta_value);
+                let (ttl, version, _meta_size) = KeyDecoder::decode_key_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_hash_expire_if_needed(&key)
@@ -313,7 +313,7 @@ impl<'a> HashCommandCtx {
                 if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
-                let (ttl, version, _meta_size) = KeyDecoder::decode_key_hash_meta(&meta_value);
+                let (ttl, version, _meta_size) = KeyDecoder::decode_key_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_hash_expire_if_needed(key)
@@ -357,7 +357,7 @@ impl<'a> HashCommandCtx {
                     return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
                 }
 
-                let (ttl, version, _meta_size) = KeyDecoder::decode_key_hash_meta(&meta_value);
+                let (ttl, version, _meta_size) = KeyDecoder::decode_key_meta(&meta_value);
                 if key_is_expired(ttl) {
                     self.clone()
                         .do_async_txnkv_hash_expire_if_needed(key)
@@ -391,7 +391,7 @@ impl<'a> HashCommandCtx {
                 return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
             }
 
-            let (ttl, version, _meta_size) = KeyDecoder::decode_key_hash_meta(&meta_value);
+            let (ttl, version, _meta_size) = KeyDecoder::decode_key_meta(&meta_value);
             if key_is_expired(ttl) {
                 self.clone()
                     .do_async_txnkv_hash_expire_if_needed(key)
@@ -452,7 +452,7 @@ impl<'a> HashCommandCtx {
                                 return Err(REDIS_WRONG_TYPE_ERR);
                             }
                             let (ttl, version, _meta_size) =
-                                KeyDecoder::decode_key_hash_meta(&meta_value);
+                                KeyDecoder::decode_key_meta(&meta_value);
 
                             if key_is_expired(ttl) {
                                 drop(txn);
@@ -553,7 +553,7 @@ impl<'a> HashCommandCtx {
                             let mut expired = false;
 
                             let (ttl, version, _meta_size) =
-                                KeyDecoder::decode_key_hash_meta(&meta_value);
+                                KeyDecoder::decode_key_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.do_async_txnkv_hash_expire_if_needed(&key).await?;
@@ -652,7 +652,7 @@ impl<'a> HashCommandCtx {
                     let mut txn = txn_arc.lock().await;
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
-                            let (_, version, _) = KeyDecoder::decode_key_hash_meta(&meta_value);
+                            let (_, version, _) = KeyDecoder::decode_key_meta(&meta_value);
                             let bound_range =
                                 KEY_ENCODER.encode_txnkv_hash_data_key_range(&key, version);
                             // scan return iterator
@@ -697,7 +697,7 @@ impl<'a> HashCommandCtx {
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
                             let (ttl, version, _meta_size) =
-                                KeyDecoder::decode_key_hash_meta(&meta_value);
+                                KeyDecoder::decode_key_meta(&meta_value);
                             if !key_is_expired(ttl) {
                                 return Ok(0);
                             }

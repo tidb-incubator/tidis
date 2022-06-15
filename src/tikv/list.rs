@@ -5,6 +5,7 @@ use super::{
     encoding::{DataType, KeyDecoder},
     errors::AsyncResult,
 };
+use crate::metrics::REMOVED_EXPIRED_KEY_COUNTER;
 use crate::utils::{resp_array, resp_bulk, resp_err, resp_int, resp_nil, resp_ok};
 use crate::{utils::key_is_expired, Frame};
 use bytes::Bytes;
@@ -601,6 +602,9 @@ impl<'a> ListCommandCtx {
                                 txn.delete(k).await?;
                             }
                             txn.delete(meta_key).await?;
+                            REMOVED_EXPIRED_KEY_COUNTER
+                                .with_label_values(&["list"])
+                                .inc();
                             Ok(1)
                         }
                         None => Ok(0),

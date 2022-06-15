@@ -16,6 +16,8 @@ use tokio::sync::Mutex;
 use super::errors::*;
 use crate::utils::{resp_array, resp_bulk, resp_err, resp_int, resp_nil};
 
+use crate::metrics::REMOVED_EXPIRED_KEY_COUNTER;
+
 #[derive(Clone)]
 pub struct HashCommandCtx {
     txn: Option<Arc<Mutex<Transaction>>>,
@@ -578,6 +580,9 @@ impl<'a> HashCommandCtx {
                                 txn.delete(k).await?;
                             }
                             txn.delete(meta_key).await?;
+                            REMOVED_EXPIRED_KEY_COUNTER
+                                .with_label_values(&["hash"])
+                                .inc();
                             Ok(1)
                         }
                         None => Ok(0),

@@ -20,6 +20,9 @@ use super::{get_client, get_txn_client};
 use super::{hash::HashCommandCtx, list::ListCommandCtx, set::SetCommandCtx, zset::ZsetCommandCtx};
 use crate::utils::{key_is_expired, resp_err, resp_int, resp_ok_ignore, sleep, ttl_from_timestamp};
 use bytes::Bytes;
+
+use crate::metrics::REMOVED_EXPIRED_KEY_COUNTER;
+
 #[derive(Clone)]
 pub struct StringCommandCtx {
     txn: Option<Arc<Mutex<Transaction>>>,
@@ -421,6 +424,9 @@ impl StringCommandCtx {
                         let ttl = KeyDecoder::decode_key_ttl(&v);
                         if key_is_expired(ttl) {
                             txn.delete(ekey).await?;
+                            REMOVED_EXPIRED_KEY_COUNTER
+                                .with_label_values(&["string"])
+                                .inc();
                             return Ok(1);
                         }
                     }

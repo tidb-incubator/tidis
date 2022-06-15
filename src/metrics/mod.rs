@@ -57,10 +57,10 @@ lazy_static! {
         exponential_buckets(0.0005, 2.0, 20).unwrap()
     )
     .unwrap();
-    pub static ref RETRIEVE_TSO_DURATION: Histogram = register_histogram!(
-        "tikv_redis_retrieve_tso_duration_seconds",
-        "Bucketed histogram of retrieving TSO duration",
-        exponential_buckets(0.0005, 2.0, 20).unwrap()
+    pub static ref REMOVED_EXPIRED_KEY_COUNTER: IntCounterVec = register_int_counter_vec!(
+        "tikv_redis_removed_expired_keys_count_total",
+        "The number of expired keys that have been removed",
+        &["kind"]
     )
     .unwrap();
 
@@ -95,6 +95,12 @@ lazy_static! {
     pub static ref ACQUIRE_LOCK_DURATION: Histogram = register_histogram!(
         "tikv_redis_acquire_pessimistic_lock_duration_seconds",
         "Bucketed histogram of acquiring pessimistic lock duration",
+        exponential_buckets(0.0005, 2.0, 20).unwrap()
+    )
+    .unwrap();
+    pub static ref RETRIEVE_TSO_DURATION: Histogram = register_histogram!(
+        "tikv_redis_retrieve_tso_duration_seconds",
+        "Bucketed histogram of retrieving TSO duration",
         exponential_buckets(0.0005, 2.0, 20).unwrap()
     )
     .unwrap();

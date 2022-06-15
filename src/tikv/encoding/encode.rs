@@ -137,7 +137,7 @@ impl KeyEncoder {
         keys.iter()
             .map(|ukey| {
                 let mut key = Vec::with_capacity(6 + ukey.len());
-                let key_len: u16 = key.len().try_into().unwrap();
+                let key_len: u16 = ukey.len().try_into().unwrap();
                 key.push(TXN_KEY_PREFIX);
                 key.extend_from_slice(self.instance_id.as_slice());
                 key.push(DATA_TYPE_META);
@@ -282,10 +282,13 @@ impl KeyEncoder {
     }
 
     pub fn encode_txnkv_list_meta_key(&self, ukey: &str) -> Key {
-        let mut key = Vec::with_capacity(4 + ukey.len());
+        let mut key = Vec::with_capacity(6 + ukey.len());
+        let key_len: u16 = ukey.len().try_into().unwrap();
+
         key.push(TXN_KEY_PREFIX);
         key.extend_from_slice(self.instance_id.as_slice());
         key.push(DATA_TYPE_META);
+        key.extend_from_slice(&key_len.to_be_bytes());
         key.extend_from_slice(ukey.as_bytes());
         key.into()
     }
@@ -296,10 +299,13 @@ impl KeyEncoder {
     /// list is indicated as null if left index equal to right
     pub fn encode_txnkv_list_data_key(&self, ukey: &str, idx: u64) -> Key {
         let mut key = Vec::with_capacity(13 + ukey.len());
+        let key_len: u16 = ukey.len().try_into().unwrap();
+
         key.push(TXN_KEY_PREFIX);
         key.extend_from_slice(self.instance_id.as_slice());
         key.push(DATA_TYPE_DATA);
         key.push(DATA_TYPE_LIST);
+        key.extend_from_slice(&key_len.to_be_bytes());
         key.extend_from_slice(ukey.as_bytes());
         key.extend_from_slice(&idx.to_be_bytes());
         key.into()
@@ -309,10 +315,10 @@ impl KeyEncoder {
         let dt = self.get_type_bytes(DataType::List);
         let mut val = Vec::with_capacity(25);
 
-        val.append(&mut dt.to_be_bytes().to_vec());
-        val.append(&mut ttl.to_be_bytes().to_vec());
-        val.append(&mut left.to_be_bytes().to_vec());
-        val.append(&mut right.to_be_bytes().to_vec());
+        val.push(dt);
+        val.extend_from_slice(&ttl.to_be_bytes());
+        val.extend_from_slice(&left.to_be_bytes());
+        val.extend_from_slice(&right.to_be_bytes());
         val
     }
 

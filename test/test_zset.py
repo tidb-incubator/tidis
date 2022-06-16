@@ -105,6 +105,7 @@ class ZsetTest(unittest.TestCase):
         self.assertEqual(self.r.zcount(self.k1, 50, 100), 50)
 
     def test_zscore(self):
+        self.assertIsNone(self.r.zscore(self.k1, self.v1))
         for i in range(100):
             self.assertEqual(self.r.zadd(self.k1, {str(i): i}), 1)
         for i in range(100):
@@ -197,3 +198,4 @@ class ZsetTest(unittest.TestCase):
         cls.r.execute_command('del', cls.k1)
         cls.r.execute_command('del', cls.k2)
         print('test data cleaned up')
+

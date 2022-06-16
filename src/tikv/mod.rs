@@ -11,6 +11,7 @@ use tikv_client::{RawClient, Transaction, TransactionClient};
 use crate::config::LOGGER;
 use crate::tikv::encoding::KeyEncoder;
 use crate::tikv::errors::REDIS_BACKEND_NOT_CONNECTED_ERR;
+use crate::{config_meta_key_number_or_default, fetch_idx_and_add};
 
 use self::client::RawClientWrapper;
 use self::client::TxnClientWrapper;
@@ -129,4 +130,8 @@ pub async fn do_async_connect(addrs: Vec<String>) -> AsyncResult<()> {
     do_async_txn_connect(addrs.clone()).await?;
     do_async_raw_connect(addrs).await?;
     Ok(())
+}
+
+pub fn gen_next_meta_index() -> u16 {
+    fetch_idx_and_add() % config_meta_key_number_or_default()
 }

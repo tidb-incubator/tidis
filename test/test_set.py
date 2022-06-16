@@ -50,6 +50,9 @@ class SetTest(unittest.TestCase):
             self.assertEqual(self.r.sismember(self.k1, str(i)), 0)
 
     def test_smismember(self):
+        for i in range(1, 100):
+            self.assertListEqual(self.r.execute_command('smismember', self.k1, *(str(j) for j in range(i))), [0] * i)
+
         self.assertEqual(self.r.sadd(self.k1, self.v1), 1)
         self.assertEqual(self.r.sadd(self.k1, self.v2), 1)
         self.assertListEqual(self.r.execute_command('smismember', self.k1, self.v1, self.v2, 'not_exist'), [1, 1, 0])

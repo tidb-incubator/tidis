@@ -73,13 +73,19 @@ class HashTest(unittest.TestCase):
         self.assertTrue(self.r.hmset(self.k1, {self.f1: self.v1, self.f2: self.v2, self.f3: self.v3}))
         self.assertListEqual(self.r.hkeys(self.k1), [self.f1, self.f2, self.f3])
 
+        self.assertListEqual(self.r.hkeys(self.k2), [])
+
     def test_hvals(self):
         self.assertTrue(self.r.hmset(self.k1, {self.f1: self.v1, self.f2: self.v2, self.f3: self.v3}))
         self.assertListEqual(self.r.hvals(self.k1), [self.v1, self.v2, self.v3])
 
+        self.assertListEqual(self.r.hvals(self.k2), [])
+
     def test_hgetall(self):
         self.assertTrue(self.r.hmset(self.k1, {self.f1: self.v1, self.f2: self.v2, self.f3: self.v3}))
         self.assertDictEqual(self.r.hgetall(self.k1), {self.f1: self.v1, self.f2: self.v2, self.f3: self.v3})
+
+        self.assertDictEqual(self.r.hgetall(self.k2), {})
 
     def test_hincrby(self):
         self.assertEqual(self.r.hincrby(self.k1, self.f1), 1)

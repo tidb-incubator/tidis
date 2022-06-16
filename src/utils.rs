@@ -71,8 +71,10 @@ pub fn lua_resp_to_redis_resp(resp: LuaValue) -> Frame {
         }
         LuaValue::Number(r) => resp_bulk(r.to_string().as_bytes().to_vec()),
         LuaValue::Table(r) => {
-            let len: i64 = r.raw_get("__self_length__").unwrap();
-            //let len: usize = r.len().unwrap().try_into().unwrap();
+            // check meta length exists __self_length__, this meta will be setted only in redis call function
+            let len: i64 = r
+                .raw_get::<&str, i64>("__self_length__")
+                .map_or(r.len().unwrap(), |v| v);
             let mut arr = Vec::with_capacity(len.try_into().unwrap());
             for idx in 0..len {
                 // key is start from 1

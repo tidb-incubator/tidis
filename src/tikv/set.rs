@@ -1,17 +1,14 @@
 use super::errors::*;
+use super::gen_next_meta_index;
 use super::get_txn_client;
 use super::KEY_ENCODER;
 use super::{
     encoding::{DataType, KeyDecoder},
     errors::AsyncResult,
 };
-use crate::config_meta_key_number_or_default;
 use crate::utils::{key_is_expired, resp_array, resp_bulk, resp_err, resp_int, resp_nil};
 use crate::Frame;
 use ::futures::future::FutureExt;
-use rand::prelude::SmallRng;
-use rand::Rng;
-use rand::SeedableRng;
 use std::convert::TryInto;
 use std::sync::Arc;
 use tikv_client::Transaction;
@@ -20,21 +17,11 @@ use tokio::sync::Mutex;
 #[derive(Clone)]
 pub struct SetCommandCtx {
     txn: Option<Arc<Mutex<Transaction>>>,
-    rng: SmallRng,
 }
 
 impl SetCommandCtx {
     pub fn new(txn: Option<Arc<Mutex<Transaction>>>) -> Self {
-        SetCommandCtx {
-            txn,
-            rng: SmallRng::from_entropy(),
-        }
-    }
-
-    #[inline(always)]
-    fn gen_random_index(&mut self) -> u16 {
-        let max = config_meta_key_number_or_default();
-        self.rng.gen_range(0..max)
+        SetCommandCtx { txn }
     }
 
     async fn txnkv_sum_key_size(self, key: &str, version: u16) -> AsyncResult<i64> {
@@ -67,7 +54,7 @@ impl SetCommandCtx {
         let key = key.to_owned();
         let members = members.to_owned();
         let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
-        let rand_idx = self.gen_random_index();
+        let rand_idx = gen_next_meta_index();
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -315,7 +302,7 @@ impl SetCommandCtx {
         let key = key.to_owned();
         let members = members.to_owned();
         let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
-        let rand_idx = self.gen_random_index();
+        let rand_idx = gen_next_meta_index();
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -401,7 +388,7 @@ impl SetCommandCtx {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
         let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
-        let rand_idx = self.gen_random_index();
+        let rand_idx = gen_next_meta_index();
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {

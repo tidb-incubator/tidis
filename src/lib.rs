@@ -34,6 +34,9 @@ extern crate hyper;
 extern crate thiserror;
 
 pub mod cmd;
+use std::sync::atomic::AtomicU16;
+use std::sync::atomic::Ordering;
+
 pub use cmd::Command;
 
 mod connection;
@@ -100,6 +103,8 @@ pub use config::txn_region_backoff_delay_ms;
 pub use config::txn_retry_count;
 pub use config::Config;
 
+use rand::{rngs::SmallRng, Rng, SeedableRng};
+
 /// Default port that a redis server listens on.
 ///
 /// Used if no port is specified.
@@ -121,3 +126,13 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 
 /// This is defined as a convenience.
 pub type Result<T> = std::result::Result<T, Error>;
+
+lazy_static! {
+    pub static ref INDEX_COUNT: AtomicU16 =
+        AtomicU16::new(SmallRng::from_entropy().gen_range(0..u16::MAX));
+}
+
+pub fn fetch_idx_and_add() -> u16 {
+    // fetch_add wraps around on overflow, see https://github.com/rust-lang/rust/issues/34618
+    INDEX_COUNT.fetch_add(1, Ordering::Relaxed)
+}

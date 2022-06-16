@@ -1,6 +1,7 @@
 use super::{
     encoding::{DataType, KeyDecoder},
     errors::AsyncResult,
+    gen_next_meta_index,
 };
 use super::{get_txn_client, KEY_ENCODER};
 use crate::{
@@ -10,8 +11,6 @@ use crate::{
 };
 
 use futures::future::FutureExt;
-use rand::Rng;
-use rand::{rngs::SmallRng, SeedableRng};
 use std::{convert::TryInto, ops::Range, sync::Arc};
 use tikv_client::{BoundRange, Key, KvPair, Transaction};
 use tokio::sync::Mutex;
@@ -22,21 +21,11 @@ use crate::utils::{resp_array, resp_bulk, resp_err, resp_int, resp_nil};
 #[derive(Clone)]
 pub struct HashCommandCtx {
     txn: Option<Arc<Mutex<Transaction>>>,
-    rng: SmallRng,
 }
 
 impl<'a> HashCommandCtx {
     pub fn new(txn: Option<Arc<Mutex<Transaction>>>) -> Self {
-        HashCommandCtx {
-            txn,
-            rng: SmallRng::from_entropy(),
-        }
-    }
-
-    #[inline(always)]
-    fn gen_random_index(&mut self) -> u16 {
-        let max = config_meta_key_number_or_default();
-        self.rng.gen_range(0..max)
+        HashCommandCtx { txn }
     }
 
     async fn txnkv_sum_key_size(self, key: &str, version: u16) -> AsyncResult<i64> {
@@ -70,7 +59,7 @@ impl<'a> HashCommandCtx {
         let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
         let fvs_copy = fvs.to_vec();
         let fvs_len = fvs_copy.len();
-        let idx = self.gen_random_index();
+        let idx = gen_next_meta_index();
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -475,7 +464,7 @@ impl<'a> HashCommandCtx {
                                 }
                             }
 
-                            let idx = self.gen_random_index();
+                            let idx = gen_next_meta_index();
 
                             drop(txn);
                             // txn lock will be called in txnkv_sum_key_size, so release txn lock first
@@ -526,7 +515,7 @@ impl<'a> HashCommandCtx {
     }
 
     pub async fn do_async_txnkv_hincrby(
-        mut self,
+        self,
         key: &str,
         field: &str,
         step: i64,
@@ -535,7 +524,7 @@ impl<'a> HashCommandCtx {
         let key = key.to_owned();
         let field = field.to_owned();
         let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
-        let idx = self.gen_random_index();
+        let idx = gen_next_meta_index();
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {

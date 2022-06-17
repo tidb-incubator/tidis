@@ -85,14 +85,14 @@ class ZsetTest(unittest.TestCase):
     def test_zrangebyscore(self):
         for i in range(100):
             self.assertEqual(self.r.zadd(self.k1, {str(i): 100 - i}), 1)
-        # self.assertListEqual(self.r.zrangebyscore(self.k1, '-inf', '+inf'), [str(i) for i in range(100)])
-        self.assertListEqual(self.r.zrangebyscore(self.k1, '0', '-1'), list(reversed([str(i) for i in range(100)])))
+        self.assertListEqual(self.r.zrangebyscore(self.k1, '-inf', '+inf'), list(reversed([str(i) for i in range(100)])))
+        self.assertListEqual(self.r.zrangebyscore(self.k1, '0', '-1'), [])
 
     def test_zrevrangebyscore(self):
         for i in range(100):
             self.assertEqual(self.r.zadd(self.k1, {str(i): 100 - i}), 1)
-        # self.assertListEqual(self.r.zrangebyscore(self.k1, '-inf', '+inf'), [str(i) for i in range(100)])
-        self.assertListEqual(self.r.zrevrangebyscore(self.k1, '0', '-1'), [str(i) for i in range(100)])
+        self.assertListEqual(self.r.zrevrangebyscore(self.k1, '-inf', '+inf'), [str(i) for i in range(100)])
+        self.assertListEqual(self.r.zrevrangebyscore(self.k1, '0', '-1'), [])
 
     def test_zremrangebyscore(self):
         for i in range(100):

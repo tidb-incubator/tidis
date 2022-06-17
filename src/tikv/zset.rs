@@ -50,7 +50,7 @@ impl ZsetCommandCtx {
         mut self,
         key: &str,
         members: &Vec<String>,
-        scores: &Vec<i64>,
+        scores: &Vec<f64>,
         exists: Option<bool>,
         changed_only: bool,
         _incr: bool,
@@ -328,7 +328,7 @@ impl ZsetCommandCtx {
                     self.clone()
                         .do_async_txnkv_zset_expire_if_needed(key)
                         .await?;
-                    return Ok(resp_int(0));
+                    return Ok(resp_nil());
                 }
 
                 let data_key = KEY_ENCODER.encode_txnkv_zset_data_key(key, member, version);
@@ -347,9 +347,9 @@ impl ZsetCommandCtx {
     pub async fn do_async_txnkv_zcount(
         self,
         key: &str,
-        mut min: i64,
+        min: f64,
         min_inclusive: bool,
-        mut max: i64,
+        max: f64,
         max_inclusive: bool,
     ) -> AsyncResult<Frame> {
         let client = get_txn_client()?;
@@ -374,17 +374,19 @@ impl ZsetCommandCtx {
                         .await?;
                     return Ok(resp_array(vec![]));
                 }
-                // update index bound
-                if !min_inclusive {
-                    min += 1;
-                }
-                if !max_inclusive {
-                    max -= 1;
-                }
 
-                let start_key =
-                    KEY_ENCODER.encode_txnkv_zset_score_key_score_start(key, min, version);
-                let end_key = KEY_ENCODER.encode_txnkv_zset_score_key_score_end(key, max, version);
+                let start_key = KEY_ENCODER.encode_txnkv_zset_score_key_score_start(
+                    key,
+                    min,
+                    min_inclusive,
+                    version,
+                );
+                let end_key = KEY_ENCODER.encode_txnkv_zset_score_key_score_end(
+                    key,
+                    max,
+                    max_inclusive,
+                    version,
+                );
                 let range = start_key..=end_key;
                 let bound_range: BoundRange = range.into();
                 let iter = ss.scan(bound_range, u32::MAX).await?;
@@ -464,7 +466,7 @@ impl ZsetCommandCtx {
                         resp.push(resp_bulk(member));
                     }
                     if with_scores {
-                        // decode vec[u8] to i64
+                        // decode vec[u8] to f64
                         let score = KeyDecoder::decode_key_zset_score_from_scorekey(key, kv.0);
                         if reverse {
                             resp.insert(1, resp_bulk(score.to_string().as_bytes().to_vec()));
@@ -483,9 +485,9 @@ impl ZsetCommandCtx {
     pub async fn do_async_txnkv_zrange_by_score(
         self,
         key: &str,
-        mut min: i64,
+        min: f64,
         min_inclusive: bool,
-        mut max: i64,
+        max: f64,
         max_inclusive: bool,
         with_scores: bool,
         reverse: bool,
@@ -513,20 +515,26 @@ impl ZsetCommandCtx {
                         .await?;
                     return Ok(resp_array(vec![]));
                 }
-                // update index bound
-                if !min_inclusive {
-                    min += 1;
-                }
-                if !max_inclusive {
-                    max -= 1;
+
+                if min > max {
+                    return Ok(resp_array(vec![]));
                 }
 
                 let size = self.txnkv_sum_key_size(key, version).await?;
 
-                let start_key =
-                    KEY_ENCODER.encode_txnkv_zset_score_key_score_start(key, min, version);
-                let end_key = KEY_ENCODER.encode_txnkv_zset_score_key_score_end(key, max, version);
-                let range = start_key..=end_key;
+                let start_key = KEY_ENCODER.encode_txnkv_zset_score_key_score_start(
+                    key,
+                    min,
+                    min_inclusive,
+                    version,
+                );
+                let end_key = KEY_ENCODER.encode_txnkv_zset_score_key_score_end(
+                    key,
+                    max,
+                    max_inclusive,
+                    version,
+                );
+                let range = start_key..end_key;
                 let bound_range: BoundRange = range.into();
                 let iter = ss.scan(bound_range, size.try_into().unwrap()).await?;
 
@@ -830,8 +838,8 @@ impl ZsetCommandCtx {
     pub async fn do_async_txnkv_zremrange_by_score(
         mut self,
         key: &str,
-        min: i64,
-        max: i64,
+        min: f64,
+        max: f64,
     ) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
@@ -863,9 +871,9 @@ impl ZsetCommandCtx {
 
                             // generate score key range to remove, inclusive
                             let score_key_start = KEY_ENCODER
-                                .encode_txnkv_zset_score_key_score_start(&key, min, version);
+                                .encode_txnkv_zset_score_key_score_start(&key, min, true, version);
                             let score_key_end = KEY_ENCODER
-                                .encode_txnkv_zset_score_key_score_end(&key, max, version);
+                                .encode_txnkv_zset_score_key_score_end(&key, max, true, version);
 
                             // remove score key and data key
                             let range = score_key_start..=score_key_end;

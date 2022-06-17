@@ -11,13 +11,13 @@ from test_zset import ZsetTest
 
 if __name__ == '__main__':
     suite = unittest.TestSuite()
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(GenericTest))
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(StringTest))
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(HashTest))
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(ListTest))
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(SetTest))
+    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(GenericTest))
+    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(StringTest))
+    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(HashTest))
+    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(ListTest))
+    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(SetTest))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(ZsetTest))
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(LuaTest))
+    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(LuaTest))
 
     runner = unittest.TextTestRunner(verbosity=2)
     errors = runner.run(suite).errors

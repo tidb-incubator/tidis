@@ -1,4 +1,5 @@
 use super::DataType;
+use super::SIGN_MASK;
 use crate::config_meta_key_number_or_default;
 use crate::tikv::get_instance_id;
 use std::convert::TryFrom;
@@ -440,19 +441,31 @@ impl KeyEncoder {
         range.into()
     }
 
-    pub fn encode_txnkv_zset_data_value(&self, score: i64) -> Value {
-        score.to_be_bytes().to_vec()
+    pub fn encode_txnkv_zset_data_value(&self, score: f64) -> Value {
+        self.encode_f64_to_cmp_uint64(score).to_be_bytes().to_vec()
+    }
+
+    fn encode_f64_to_cmp_uint64(&self, score: f64) -> u64 {
+        let mut b = score.to_bits();
+        if score >= 0f64 {
+            b |= SIGN_MASK;
+        } else {
+            b = !b;
+        }
+
+        b
     }
 
     // encode the member to score key
     pub fn encode_txnkv_zset_score_key(
         &self,
         ukey: &str,
-        score: i64,
+        score: f64,
         member: &str,
         version: u16,
     ) -> Key {
         let mut key = Vec::with_capacity(19 + ukey.len() + member.len());
+        let score = self.encode_f64_to_cmp_uint64(score);
 
         self.encode_txnkv_type_data_key_prefix(
             DATA_TYPE_SCORE,
@@ -505,10 +518,15 @@ impl KeyEncoder {
     pub fn encode_txnkv_zset_score_key_score_start(
         &self,
         ukey: &str,
-        score: i64,
+        score: f64,
+        with_frontier: bool,
         version: u16,
     ) -> Key {
         let mut key = Vec::with_capacity(15 + ukey.len());
+        let mut score = self.encode_f64_to_cmp_uint64(score);
+        if !with_frontier {
+            score += 1;
+        }
 
         self.encode_txnkv_type_data_key_prefix(
             DATA_TYPE_SCORE,
@@ -527,10 +545,15 @@ impl KeyEncoder {
     pub fn encode_txnkv_zset_score_key_score_end(
         &self,
         ukey: &str,
-        score: i64,
+        score: f64,
+        with_frontier: bool,
         version: u16,
     ) -> Key {
         let mut key = Vec::with_capacity(15 + ukey.len());
+        let mut score = self.encode_f64_to_cmp_uint64(score);
+        if !with_frontier {
+            score -= 1;
+        }
 
         self.encode_txnkv_type_data_key_prefix(
             DATA_TYPE_SCORE,
@@ -543,18 +566,5 @@ impl KeyEncoder {
         key.extend_from_slice(&score.to_be_bytes());
         key.push(PLACE_HOLDER + 1);
         key.into()
-    }
-
-    #[allow(dead_code)]
-    pub fn encode_txnkv_zset_score_key_score_range(
-        &self,
-        ukey: &str,
-        score: i64,
-        version: u16,
-    ) -> BoundRange {
-        let range_start = self.encode_txnkv_zset_score_key_score_start(ukey, score, version);
-        let range_end = self.encode_txnkv_zset_score_key_score_end(ukey, score, version);
-        let range: Range<Key> = range_start..range_end;
-        range.into()
     }
 }

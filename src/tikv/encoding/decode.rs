@@ -1,6 +1,6 @@
 use std::convert::TryInto;
 
-use super::DataType;
+use super::{DataType, SIGN_MASK};
 use tikv_client::{Key, Value};
 
 pub struct KeyDecoder {}
@@ -81,6 +81,18 @@ impl KeyDecoder {
         key[idx..].to_vec()
     }
 
+    pub fn decode_cmp_uint64_to_f64(u: u64) -> f64 {
+        let mut score = u;
+
+        if score & SIGN_MASK > 0 {
+            score &= !SIGN_MASK;
+        } else {
+            score = !score;
+        }
+
+        f64::from_bits(score)
+    }
+
     #[allow(dead_code)]
     pub fn decode_key_zset_member_from_scorekey(rkey: &str, key: Key) -> Vec<u8> {
         let key: Vec<u8> = key.into();
@@ -88,10 +100,10 @@ impl KeyDecoder {
         key[idx..].to_vec()
     }
 
-    pub fn decode_key_zset_score_from_scorekey(rkey: &str, key: Key) -> i64 {
+    pub fn decode_key_zset_score_from_scorekey(rkey: &str, key: Key) -> f64 {
         let key: Vec<u8> = key.into();
         let idx = 10 + rkey.len();
-        i64::from_be_bytes(key[idx..idx + 8].try_into().unwrap())
+        Self::decode_cmp_uint64_to_f64(u64::from_be_bytes(key[idx..idx + 8].try_into().unwrap()))
     }
 
     pub fn decode_key_zset_member_from_datakey(rkey: &str, key: Key) -> Vec<u8> {
@@ -100,7 +112,7 @@ impl KeyDecoder {
         key[idx..].to_vec()
     }
 
-    pub fn decode_key_zset_data_value(value: &[u8]) -> i64 {
-        i64::from_be_bytes(value[..].try_into().unwrap())
+    pub fn decode_key_zset_data_value(value: &[u8]) -> f64 {
+        Self::decode_cmp_uint64_to_f64(u64::from_be_bytes(value[..].try_into().unwrap()))
     }
 }

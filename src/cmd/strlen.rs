@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::config::{is_use_txn_api, LOGGER};
+use crate::config::LOGGER;
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::string::StringCommandCtx;
 use crate::utils::resp_invalid_arguments;
@@ -9,48 +9,49 @@ use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
+use crate::config::is_use_txn_api;
+
 #[derive(Debug)]
-pub struct Decr {
+pub struct Strlen {
     key: String,
     valid: bool,
 }
 
-impl Decr {
-    pub fn new(key: impl ToString) -> Decr {
-        Decr {
+impl Strlen {
+    pub fn new(key: impl ToString) -> Strlen {
+        Strlen {
             key: key.to_string(),
             valid: true,
         }
     }
 
-    pub fn new_invalid() -> Decr {
-        Decr {
+    pub fn new_invalid() -> Strlen {
+        Strlen {
             key: "".to_owned(),
-            valid: true,
+            valid: false,
         }
     }
 
-    /// Get the key
     pub fn key(&self) -> &str {
         &self.key
     }
 
-    pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Decr> {
+    pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Strlen> {
         let key = parse.next_string()?;
 
-        Ok(Decr::new(key))
+        Ok(Strlen { key, valid: true })
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Decr> {
+    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Strlen> {
         if argv.len() != 1 {
-            return Ok(Decr::new_invalid());
+            return Ok(Strlen::new_invalid());
         }
         let key = &argv[0];
-        Ok(Decr::new(key))
+        Ok(Strlen::new(key))
     }
 
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        let response = self.decr(None).await.unwrap_or_else(Into::into);
+        let response = self.strlen(None).await.unwrap_or_else(Into::into);
 
         debug!(
             LOGGER,
@@ -65,19 +66,18 @@ impl Decr {
         Ok(())
     }
 
-    pub async fn decr(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
-        // check argument parse validation
+    pub async fn strlen(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
         if !self.valid {
             return Ok(resp_invalid_arguments());
         }
 
         if is_use_txn_api() {
             StringCommandCtx::new(txn)
-                .do_async_txnkv_incr(&self.key, true, -1)
+                .do_async_txnkv_strlen(&self.key)
                 .await
         } else {
             StringCommandCtx::new(None)
-                .do_async_rawkv_incr(&self.key, false, -1)
+                .do_async_rawkv_strlen(&self.key)
                 .await
         }
     }

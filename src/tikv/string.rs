@@ -73,6 +73,46 @@ impl StringCommandCtx {
         }
     }
 
+    pub async fn do_async_rawkv_strlen(&self, key: &str) -> AsyncResult<Frame> {
+        let client = get_client()?;
+        let ekey = KEY_ENCODER.encode_rawkv_string(key);
+        match client.get(ekey).await? {
+            Some(val) => Ok(Frame::Integer(val.len() as i64)),
+            None => Ok(Frame::Integer(0)),
+        }
+    }
+
+    pub async fn do_async_txnkv_strlen(self, key: &str) -> AsyncResult<Frame> {
+        let client = get_txn_client()?;
+        let ekey = KEY_ENCODER.encode_txnkv_string(key);
+
+        let mut ss = match self.txn.clone() {
+            Some(txn) => client.snapshot_from_txn(txn).await,
+            None => client.newest_snapshot().await,
+        };
+
+        match ss.get(ekey).await? {
+            Some(val) => {
+                let dt = KeyDecoder::decode_key_type(&val);
+                if !matches!(dt, DataType::String) {
+                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                }
+
+                // ttl saved in milliseconds
+                let ttl = KeyDecoder::decode_key_ttl(&val);
+                if key_is_expired(ttl) {
+                    // delete key
+                    self.do_async_txnkv_string_expire_if_needed(key).await?;
+                    return Ok(resp_int(0));
+                }
+
+                let data = KeyDecoder::decode_key_string_value(&val);
+                Ok(resp_int(data.len() as i64))
+            }
+            None => Ok(resp_int(0)),
+        }
+    }
+
     pub async fn do_async_rawkv_put(self, key: &str, val: &Bytes) -> AsyncResult<Frame> {
         let client = get_client()?;
         let ekey = KEY_ENCODER.encode_rawkv_string(key);

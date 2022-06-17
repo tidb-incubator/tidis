@@ -105,6 +105,19 @@ class StringTest(unittest.TestCase):
         err = cm.exception
         self.assertEqual(str(err), 'value is not an integer or out of range')
 
+    def test_incrby(self):
+        self.assertEqual(self.r.incrby(self.k1, 1), 1)
+        self.assertEqual(self.r.incrby(self.k1, 9), 10)
+        self.assertEqual(self.r.incrby(self.k1, -15), -5)
+
+        # incr a invalid number
+        self.assertTrue(self.r.set(self.k2, self.v2))
+
+        with self.assertRaises(Exception) as cm:
+            self.assertEqual(self.r.incrby(self.k2, 1), 1)
+        err = cm.exception
+        self.assertEqual(str(err), 'value is not an integer or out of range')
+
     def test_decr(self):
         # decr a new key
         self.assertEqual(self.r.execute_command("DECR", self.k1), -1)
@@ -118,6 +131,24 @@ class StringTest(unittest.TestCase):
             self.r.execute_command("DECR", self.k2)
         err = cm.exception
         self.assertEqual(str(err), 'value is not an integer or out of range')
+
+    def test_decrby(self):
+        self.assertEqual(self.r.decrby(self.k1, 1), -1)
+        self.assertEqual(self.r.decrby(self.k1, 9), -10)
+        self.assertEqual(self.r.decrby(self.k1, -15), 5)
+
+        # incr a invalid number
+        self.assertTrue(self.r.set(self.k2, self.v2))
+
+        with self.assertRaises(Exception) as cm:
+            self.assertEqual(self.r.decrby(self.k2, 1), 1)
+        err = cm.exception
+        self.assertEqual(str(err), 'value is not an integer or out of range')
+
+    def test_strlen(self):
+        self.assertEqual(self.r.strlen(self.k1), 0)
+        self.assertTrue(self.r.set(self.k1, self.v1))
+        self.assertEqual(self.r.strlen(self.k1), len(self.v1))
 
     def test_del(self):
         self.assertTrue(self.r.set(self.k1, self.v1))

@@ -14,6 +14,8 @@ use std::sync::Arc;
 use tikv_client::{BoundRange, Transaction};
 use tokio::sync::Mutex;
 
+use crate::metrics::REMOVED_EXPIRED_KEY_COUNTER;
+
 #[derive(Clone)]
 pub struct ZsetCommandCtx {
     txn: Option<Arc<Mutex<Transaction>>>,
@@ -1042,6 +1044,9 @@ impl ZsetCommandCtx {
                                 txn.delete(k).await?;
                             }
                             txn.delete(meta_key).await?;
+                            REMOVED_EXPIRED_KEY_COUNTER
+                                .with_label_values(&["zset"])
+                                .inc();
                             Ok(1)
                         }
                         None => Ok(0),

@@ -21,9 +21,15 @@ use futures::future::BoxFuture;
 
 use slog::{debug, error};
 
-use crate::metrics::TIKV_CLIENT_RETRIES;
+use crate::metrics::{
+    ACQUIRE_LOCK_DURATION, HANDLE_SNAPSHOT_DURATION, PD_ERR_COUNTER, RETRIEVE_TSO_DURATION,
+    SNAPSHOT_COUNTER, TIKV_CLIENT_RETRIES, TIKV_ERR_COUNTER, TXN_COUNTER, TXN_DURATION,
+    TXN_MECHANISM_COUNTER, TXN_RETRY_COUNTER, TXN_RETRY_ERR, TXN_RETRY_KIND_COUNTER,
+};
 
 use super::sleep;
+use crate::server::duration_to_sec;
+use tokio::time::Instant;
 
 const MAX_DELAY_MS: u64 = 500;
 
@@ -41,11 +47,25 @@ impl TxnClientWrapper<'static> {
     }
 
     pub async fn current_timestamp(&self) -> TiKVResult<Timestamp> {
-        self.client.current_timestamp().await
+        let start_at = Instant::now();
+        let tso = self.client.current_timestamp().await;
+        let duration = Instant::now() - start_at;
+        RETRIEVE_TSO_DURATION.observe(duration_to_sec(duration));
+        tso.or_else(|err| {
+            PD_ERR_COUNTER
+                .with_label_values(&["retrieve_current_timestamp_error"])
+                .inc();
+            Err(err)
+        })
     }
 
     pub fn snapshot(&self, timestamp: Timestamp, options: TransactionOptions) -> Snapshot {
-        self.client.snapshot(timestamp, options)
+        SNAPSHOT_COUNTER.inc();
+        let start_at = Instant::now();
+        let snapshot = self.client.snapshot(timestamp, options);
+        let duration = Instant::now() - start_at;
+        HANDLE_SNAPSHOT_DURATION.observe(duration_to_sec(duration));
+        snapshot
     }
 
     pub async fn snapshot_from_txn(&self, txn: Arc<Mutex<Transaction>>) -> Snapshot {
@@ -67,7 +87,10 @@ impl TxnClientWrapper<'static> {
         } else {
             TransactionOptions::new_optimistic().retry_options(retry_options)
         };
+        let start_at = Instant::now();
         let txn = txn.lock().await;
+        let duration = Instant::now() - start_at;
+        ACQUIRE_LOCK_DURATION.observe(duration_to_sec(duration));
         let ts = txn.start_timestamp();
         self.snapshot(ts, options)
     }
@@ -124,18 +147,35 @@ impl TxnClientWrapper<'static> {
         } else {
             TransactionOptions::new_optimistic().retry_options(retry_options)
         };
-        txn_options = if is_use_async_commit() {
-            txn_options.use_async_commit()
-        } else {
-            txn_options
-        };
+
+        let mut mechanism: (&str, &str) = ("two_pc", "sync");
         txn_options = if is_try_one_pc_commit() {
+            mechanism.0 = "one_pc";
             txn_options.try_one_pc()
         } else {
             txn_options
         };
+        txn_options = if is_use_async_commit() {
+            mechanism.1 = "async";
+            txn_options.use_async_commit()
+        } else {
+            txn_options
+        };
 
-        self.client.begin_with_options(txn_options).await
+        TXN_COUNTER.inc();
+        TXN_MECHANISM_COUNTER
+            .with_label_values(&[mechanism.0, mechanism.1])
+            .inc();
+
+        self.client
+            .begin_with_options(txn_options)
+            .await
+            .or_else(|err| {
+                TIKV_ERR_COUNTER
+                    .with_label_values(&["start_txn_error"])
+                    .inc();
+                Err(err)
+            })
     }
 
     fn error_retryable(&self, err: &Error) -> bool {
@@ -169,7 +209,10 @@ impl TxnClientWrapper<'static> {
         match txn {
             Some(txn) => {
                 // call f
+                let start_at = Instant::now();
                 let result = f(txn).await;
+                let duration = Instant::now() - start_at;
+                TXN_DURATION.observe(duration_to_sec(duration));
                 match result {
                     Ok(res) => Ok(res),
                     Err(err) => Err(err),
@@ -179,6 +222,16 @@ impl TxnClientWrapper<'static> {
                 let mut retry_count = 0;
                 while self.retries > 0 {
                     self.retries -= 1;
+
+                    if retry_count > 0 {
+                        TXN_RETRY_COUNTER.inc();
+                        let kind = if is_use_pessimistic_txn() {
+                            "pessimistic"
+                        } else {
+                            "optimistic"
+                        };
+                        TXN_RETRY_KIND_COUNTER.with_label_values(&[kind]).inc();
+                    }
                     retry_count += 1;
 
                     let f = f.clone();
@@ -198,8 +251,15 @@ impl TxnClientWrapper<'static> {
                     let txn_arc = Arc::new(Mutex::new(txn));
 
                     // call f
+                    let start_at = Instant::now();
                     let result = f(txn_arc.clone()).await;
+                    let duration = Instant::now() - start_at;
+                    TXN_DURATION.observe(duration_to_sec(duration));
+
+                    let start_at = Instant::now();
                     let mut txn = txn_arc.lock().await;
+                    let duration = Instant::now() - start_at;
+                    ACQUIRE_LOCK_DURATION.observe(duration_to_sec(duration));
                     match result {
                         Ok(res) => match txn.commit().await {
                             Ok(_) => {
@@ -215,6 +275,7 @@ impl TxnClientWrapper<'static> {
                                         LOGGER,
                                         "retry transaction in the caller caused by error {}", e
                                     );
+                                    TXN_RETRY_ERR.with_label_values(&["retry_error"]).inc();
                                     continue;
                                 }
                             }
@@ -232,6 +293,7 @@ impl TxnClientWrapper<'static> {
                                         "retry transaction in the caller caused by error {}",
                                         client_err
                                     );
+                                    TXN_RETRY_ERR.with_label_values(&["retry_error"]).inc();
                                     continue;
                                 } else {
                                     return Err(RTError::TikvClient(client_err));
@@ -246,6 +308,9 @@ impl TxnClientWrapper<'static> {
                     sleep(std::cmp::min(2 + retry_count * 10, 200)).await;
                 }
                 error!(LOGGER, "transaction retry count reached limit");
+                TXN_RETRY_ERR
+                    .with_label_values(&["retry_count_exceeded"])
+                    .inc();
                 Err(RTError::TikvClient(Box::new(StringError(
                     "retry count exceeded".to_string(),
                 ))))
@@ -295,6 +360,9 @@ impl RawClientWrapper {
                     return Ok(val);
                 }
                 Err(err) => {
+                    TIKV_ERR_COUNTER
+                        .with_label_values(&["raw_client_error"])
+                        .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
                         sleep(std::cmp::min(2 + i, 200)).await;
@@ -318,6 +386,9 @@ impl RawClientWrapper {
                     return Ok(());
                 }
                 Err(err) => {
+                    TIKV_ERR_COUNTER
+                        .with_label_values(&["raw_client_error"])
+                        .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
                         sleep(std::cmp::min(2 + i, 200)).await;
@@ -351,6 +422,9 @@ impl RawClientWrapper {
                     return Ok((val, swapped));
                 }
                 Err(err) => {
+                    TIKV_ERR_COUNTER
+                        .with_label_values(&["raw_client_error"])
+                        .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
                         sleep(std::cmp::min(2 + i, 200)).await;
@@ -375,6 +449,9 @@ impl RawClientWrapper {
                     return Ok(val);
                 }
                 Err(err) => {
+                    TIKV_ERR_COUNTER
+                        .with_label_values(&["raw_client_error"])
+                        .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
                         sleep(std::cmp::min(2 + i, 200)).await;
@@ -399,6 +476,9 @@ impl RawClientWrapper {
                     return Ok(val);
                 }
                 Err(err) => {
+                    TIKV_ERR_COUNTER
+                        .with_label_values(&["raw_client_error"])
+                        .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
                         sleep(std::cmp::min(2 + i, 200)).await;
@@ -422,6 +502,9 @@ impl RawClientWrapper {
                     return Ok(val);
                 }
                 Err(err) => {
+                    TIKV_ERR_COUNTER
+                        .with_label_values(&["raw_client_error"])
+                        .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
                         sleep(std::cmp::min(2 + i, 200)).await;
@@ -445,6 +528,9 @@ impl RawClientWrapper {
                     return Ok(val);
                 }
                 Err(err) => {
+                    TIKV_ERR_COUNTER
+                        .with_label_values(&["raw_client_error"])
+                        .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
                         sleep(std::cmp::min(2 + i, 200)).await;
@@ -469,6 +555,9 @@ impl RawClientWrapper {
                     return Ok(val);
                 }
                 Err(err) => {
+                    TIKV_ERR_COUNTER
+                        .with_label_values(&["raw_client_error"])
+                        .inc();
                     if self.error_retryable(&err) {
                         last_err.replace(err);
                         sleep(std::cmp::min(2 + i, 200)).await;

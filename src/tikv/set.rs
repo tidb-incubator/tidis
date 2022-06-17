@@ -14,6 +14,8 @@ use std::sync::Arc;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
+use crate::metrics::REMOVED_EXPIRED_KEY_COUNTER;
+
 #[derive(Clone)]
 pub struct SetCommandCtx {
     txn: Option<Arc<Mutex<Transaction>>>,
@@ -570,6 +572,9 @@ impl SetCommandCtx {
                             }
 
                             txn.delete(meta_key).await?;
+                            REMOVED_EXPIRED_KEY_COUNTER
+                                .with_label_values(&["set"])
+                                .inc();
 
                             Ok(1)
                         }

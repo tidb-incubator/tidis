@@ -292,6 +292,11 @@ impl<'a> ListCommandCtx {
                                 end += len;
                             }
 
+                            if start < 0 || end < 0 {
+                                // invalid index, no need to trim op
+                                return Ok(());
+                            }
+
                             // convert to relative position
                             start += left as i64;
                             end += left as i64;

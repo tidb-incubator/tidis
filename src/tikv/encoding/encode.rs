@@ -101,22 +101,23 @@ impl KeyEncoder {
         key.into()
     }
 
-    fn encode_txnkv_string_internal(&self, vsize: usize, ttl: u64) -> Value {
+    fn encode_txnkv_string_internal(&self, vsize: usize, ttl: u64, version: u16) -> Value {
         let dt = self.get_type_bytes(DataType::String);
-        let mut val = Vec::with_capacity(5 + vsize);
-        val.append(&mut dt.to_be_bytes().to_vec());
-        val.append(&mut ttl.to_be_bytes().to_vec());
+        let mut val = Vec::with_capacity(11 + vsize);
+        val.push(dt);
+        val.extend_from_slice(&ttl.to_be_bytes());
+        val.extend_from_slice(&version.to_be_bytes());
         val
     }
 
     pub fn encode_txnkv_string_slice(&self, value: &[u8], ttl: u64) -> Value {
-        let mut val = self.encode_txnkv_string_internal(value.len(), ttl);
+        let mut val = self.encode_txnkv_string_internal(value.len(), ttl, 0);
         val.extend_from_slice(value);
         val
     }
 
     pub fn encode_txnkv_string_value(&self, value: &mut Value, ttl: u64) -> Value {
-        let mut val = self.encode_txnkv_string_internal(value.len(), ttl);
+        let mut val = self.encode_txnkv_string_internal(value.len(), ttl, 0);
         val.append(value);
         val
     }

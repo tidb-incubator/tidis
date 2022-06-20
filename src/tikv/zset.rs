@@ -596,6 +596,7 @@ impl ZsetCommandCtx {
                         Some(meta_value) => {
                             // check key type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Zset) {
+                                return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
                             let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);

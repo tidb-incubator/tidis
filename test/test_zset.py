@@ -98,6 +98,7 @@ class ZsetTest(unittest.TestCase):
         for i in range(100):
             self.assertEqual(self.r.zadd(self.k1, {str(i): i}), 1)
         self.assertEqual(self.r.zremrangebyscore(self.k1, 21, 30), 10)
+        self.assertEqual(self.r.zremrangebyscore(self.k1, 30, 21), 0)
 
     def test_zcount(self):
         for i in range(100):

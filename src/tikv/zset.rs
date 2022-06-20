@@ -375,6 +375,10 @@ impl ZsetCommandCtx {
                     return Ok(resp_array(vec![]));
                 }
 
+                if min > max {
+                    return Ok(resp_int(0));
+                }
+
                 let start_key = KEY_ENCODER.encode_txnkv_zset_score_key_score_start(
                     key,
                     min,
@@ -554,7 +558,7 @@ impl ZsetCommandCtx {
                         // decode score from score key
                         let score = KeyDecoder::decode_key_zset_score_from_scorekey(key, kv.0);
                         if reverse {
-                            resp.insert(0, resp_bulk(score.to_string().as_bytes().to_vec()));
+                            resp.insert(1, resp_bulk(score.to_string().as_bytes().to_vec()));
                         } else {
                             resp.push(resp_bulk(score.to_string().as_bytes().to_vec()));
                         }
@@ -592,7 +596,6 @@ impl ZsetCommandCtx {
                         Some(meta_value) => {
                             // check key type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Zset) {
-                                return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
                             let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
@@ -871,6 +874,10 @@ impl ZsetCommandCtx {
                                 self.clone()
                                     .do_async_txnkv_zset_expire_if_needed(&key)
                                     .await?;
+                                return Ok(0);
+                            }
+
+                            if min > max {
                                 return Ok(0);
                             }
 

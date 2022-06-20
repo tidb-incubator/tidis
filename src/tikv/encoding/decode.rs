@@ -36,11 +36,11 @@ impl KeyDecoder {
     }
 
     pub fn decode_key_string_value(value: &[u8]) -> Value {
-        value[9..].to_vec()
+        value[11..].to_vec()
     }
 
     pub fn decode_key_string_slice(value: &[u8]) -> &[u8] {
-        &value[9..]
+        &value[11..]
     }
 
     pub fn decode_key_version(value: &[u8]) -> u16 {

@@ -481,6 +481,7 @@ impl ZsetCommandCtx {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn do_async_txnkv_zrange_by_score(
         self,
         key: &str,

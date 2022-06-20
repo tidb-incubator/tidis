@@ -71,9 +71,9 @@ impl Zrangebyscore {
             // drain the first byte
             bmin.advance(1);
             min_inclusive = false;
-        } else if bmin == Bytes::from("-inf") {
+        } else if bmin == *"-inf" {
             min = f64::MIN;
-        } else if bmin == Bytes::from("+inf") {
+        } else if bmin == *"+inf" {
             min = f64::MAX;
         }
 
@@ -87,9 +87,9 @@ impl Zrangebyscore {
         if bmax[0] == b'(' {
             bmax.advance(1);
             max_inclusive = false;
-        } else if bmax == Bytes::from("+inf") {
+        } else if bmax == *"+inf" {
             max = f64::MAX;
-        } else if bmax == Bytes::from("-inf") {
+        } else if bmax == *"-inf" {
             max = f64::MIN;
         }
 
@@ -133,9 +133,9 @@ impl Zrangebyscore {
             // drain the first byte
             bmin.advance(1);
             min_inclusive = false;
-        } else if bmin == Bytes::from("-inf") {
+        } else if bmin == *"-inf" {
             min = f64::MIN;
-        } else if bmin == Bytes::from("+inf") {
+        } else if bmin == *"+inf" {
             min = f64::MAX;
         }
 
@@ -149,9 +149,9 @@ impl Zrangebyscore {
         if bmax[0] == b'(' {
             bmax.advance(1);
             max_inclusive = false;
-        } else if bmax == Bytes::from("+inf") {
+        } else if bmax == *"+inf" {
             max = f64::MAX;
-        } else if bmax == Bytes::from("-inf") {
+        } else if bmax == *"-inf" {
             max = f64::MIN;
         }
 

@@ -481,14 +481,13 @@ impl ZsetCommandCtx {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub async fn do_async_txnkv_zrange_by_score(
         self,
         key: &str,
-        min: f64,
-        min_inclusive: bool,
-        max: f64,
-        max_inclusive: bool,
+        mut min: f64,
+        mut min_inclusive: bool,
+        mut max: f64,
+        mut max_inclusive: bool,
         with_scores: bool,
         reverse: bool,
     ) -> AsyncResult<Frame> {
@@ -516,6 +515,11 @@ impl ZsetCommandCtx {
                     return Ok(resp_array(vec![]));
                 }
 
+                // if reverse is set, min and max means opposite, exchange them
+                if reverse {
+                    (min, max) = (max, min);
+                    (min_inclusive, max_inclusive) = (max_inclusive, min_inclusive);
+                }
                 if min > max {
                     return Ok(resp_array(vec![]));
                 }

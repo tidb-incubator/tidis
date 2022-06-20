@@ -73,7 +73,10 @@ impl Zrangebyscore {
             min_inclusive = false;
         } else if bmin == Bytes::from("-inf") {
             min = f64::MIN;
+        } else if bmin == Bytes::from("+inf") {
+            min = f64::MAX;
         }
+
         if min == 0f64 {
             min = String::from_utf8_lossy(&bmin.to_vec())
                 .parse::<f64>()
@@ -84,9 +87,12 @@ impl Zrangebyscore {
         if bmax[0] == b'(' {
             bmax.advance(1);
             max_inclusive = false;
-        } else if bmin == Bytes::from("+inf") {
+        } else if bmax == Bytes::from("+inf") {
             max = f64::MAX;
+        } else if bmax == Bytes::from("-inf") {
+            max = f64::MIN;
         }
+
         if max == 0f64 {
             max = String::from_utf8_lossy(&bmax.to_vec())
                 .parse::<f64>()
@@ -117,6 +123,8 @@ impl Zrangebyscore {
         }
         let mut min_inclusive = true;
         let mut max_inclusive = true;
+        let mut min = 0f64;
+        let mut max: f64 = 0f64;
 
         // parse score range as bytes, to handle exclusive bounder
         let mut bmin = Bytes::from(argv[1].clone());
@@ -125,19 +133,33 @@ impl Zrangebyscore {
             // drain the first byte
             bmin.advance(1);
             min_inclusive = false;
+        } else if bmin == Bytes::from("-inf") {
+            min = f64::MIN;
+        } else if bmin == Bytes::from("+inf") {
+            min = f64::MAX;
         }
-        let min = String::from_utf8_lossy(&bmin.to_vec())
-            .parse::<f64>()
-            .unwrap();
+
+        if min == 0f64 {
+            min = String::from_utf8_lossy(&bmin.to_vec())
+                .parse::<f64>()
+                .unwrap();
+        }
 
         let mut bmax = Bytes::from(argv[2].clone());
         if bmax[0] == b'(' {
             bmax.advance(1);
             max_inclusive = false;
+        } else if bmax == Bytes::from("+inf") {
+            max = f64::MAX;
+        } else if bmax == Bytes::from("-inf") {
+            max = f64::MIN;
         }
-        let max = String::from_utf8_lossy(&bmax.to_vec())
-            .parse::<f64>()
-            .unwrap();
+
+        if max == 0f64 {
+            max = String::from_utf8_lossy(&bmax.to_vec())
+                .parse::<f64>()
+                .unwrap();
+        }
 
         let mut withscores = false;
 

@@ -51,11 +51,11 @@ impl TxnClientWrapper<'static> {
         let tso = self.client.current_timestamp().await;
         let duration = Instant::now() - start_at;
         RETRIEVE_TSO_DURATION.observe(duration_to_sec(duration));
-        tso.or_else(|err| {
+        tso.map_err(|err| {
             PD_ERR_COUNTER
                 .with_label_values(&["retrieve_current_timestamp_error"])
                 .inc();
-            Err(err)
+            err
         })
     }
 
@@ -170,11 +170,11 @@ impl TxnClientWrapper<'static> {
         self.client
             .begin_with_options(txn_options)
             .await
-            .or_else(|err| {
+            .map_err(|err| {
                 TIKV_ERR_COUNTER
                     .with_label_values(&["start_txn_error"])
                     .inc();
-                Err(err)
+                err
             })
     }
 

@@ -292,11 +292,25 @@ impl<'a> ListCommandCtx {
                                 end += len;
                             }
 
+                            // ensure the op index valid
+                            if start < 0 {
+                                start = 0;
+                            }
+                            if start > len - 1 {
+                                start = len - 1;
+                            }
+
+                            if end < 0 {
+                                end = 0;
+                            }
+                            if end > len - 1 {
+                                end = len - 1;
+                            }
+
                             // convert to relative position
                             start += left as i64;
                             end += left as i64;
 
-                            // trim left->start-1
                             for idx in left..start as u64 {
                                 let data_key =
                                     KEY_ENCODER.encode_txnkv_list_data_key(&key, idx, version);

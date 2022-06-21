@@ -11,3 +11,5 @@ pub enum DataType {
 }
 
 pub use {decode::KeyDecoder, encode::KeyEncoder};
+
+const SIGN_MASK: u64 = 0x8000000000000000;

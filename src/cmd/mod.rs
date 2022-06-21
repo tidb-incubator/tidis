@@ -42,11 +42,8 @@ pub use expire::Expire;
 mod exists;
 pub use exists::Exists;
 
-mod incrby;
-pub use incrby::IncrBy;
-
-mod decrby;
-pub use decrby::DecrBy;
+mod incrdecr;
+pub use incrdecr::IncrDecr;
 
 mod hset;
 pub use hset::Hset;
@@ -202,10 +199,10 @@ pub enum Command {
     Pexpire(Expire),
     PexpireAt(Expire),
     Exists(Exists),
-    Incr(IncrBy),
-    Decr(DecrBy),
-    IncrBy(IncrBy),
-    DecrBy(DecrBy),
+    Incr(IncrDecr),
+    Decr(IncrDecr),
+    IncrBy(IncrDecr),
+    DecrBy(IncrDecr),
     Strlen(Strlen),
 
     // hash
@@ -312,10 +309,10 @@ impl Command {
             "pexpire" => Command::Pexpire(Expire::parse_frames(&mut parse)?),
             "pexpireat" => Command::PexpireAt(Expire::parse_frames(&mut parse)?),
             "exists" => Command::Exists(Exists::parse_frames(&mut parse)?),
-            "incr" => Command::Incr(IncrBy::parse_frames(&mut parse, true)?),
-            "decr" => Command::Decr(DecrBy::parse_frames(&mut parse, true)?),
-            "incrby" => Command::IncrBy(IncrBy::parse_frames(&mut parse, false)?),
-            "decrby" => Command::DecrBy(DecrBy::parse_frames(&mut parse, false)?),
+            "incr" => Command::Incr(IncrDecr::parse_frames(&mut parse, true)?),
+            "decr" => Command::Decr(IncrDecr::parse_frames(&mut parse, true)?),
+            "incrby" => Command::IncrBy(IncrDecr::parse_frames(&mut parse, false)?),
+            "decrby" => Command::DecrBy(IncrDecr::parse_frames(&mut parse, false)?),
             "strlen" => Command::Strlen(Strlen::parse_frames(&mut parse)?),
             "hset" => Command::Hset(Hset::parse_frames(&mut parse)?),
             "hmset" => Command::Hmset(Hset::parse_frames(&mut parse)?),
@@ -396,10 +393,10 @@ impl Command {
         // Match the command name, delegating the rest of the parsing to the
         // specific command.
         let command = match &command_name[..] {
-            "decr" => Command::Decr(DecrBy::parse_argv(argv, true)?),
-            "incr" => Command::Incr(IncrBy::parse_argv(argv, true)?),
-            "incrby" => Command::IncrBy(IncrBy::parse_argv(argv, false)?),
-            "decrby" => Command::DecrBy(DecrBy::parse_argv(argv, false)?),
+            "decr" => Command::Decr(IncrDecr::parse_argv(argv, true)?),
+            "incr" => Command::Incr(IncrDecr::parse_argv(argv, true)?),
+            "incrby" => Command::IncrBy(IncrDecr::parse_argv(argv, false)?),
+            "decrby" => Command::DecrBy(IncrDecr::parse_argv(argv, false)?),
             "strlen" => Command::Strlen(Strlen::parse_argv(argv)?),
             "del" => Command::Del(Del::parse_argv(argv)?),
             "exists" => Command::Exists(Exists::parse_argv(argv)?),
@@ -498,10 +495,10 @@ impl Command {
             Pexpire(cmd) => cmd.apply(dst, true, false).await,
             PexpireAt(cmd) => cmd.apply(dst, true, true).await,
             Exists(cmd) => cmd.apply(dst).await,
-            Incr(cmd) => cmd.apply(dst).await,
-            Decr(cmd) => cmd.apply(dst).await,
-            IncrBy(cmd) => cmd.apply(dst).await,
-            DecrBy(cmd) => cmd.apply(dst).await,
+            Incr(cmd) => cmd.apply(dst, true).await,
+            Decr(cmd) => cmd.apply(dst, false).await,
+            IncrBy(cmd) => cmd.apply(dst, true).await,
+            DecrBy(cmd) => cmd.apply(dst, false).await,
             Strlen(cmd) => cmd.apply(dst).await,
             Hset(cmd) => cmd.apply(dst, false).await,
             Hmset(cmd) => cmd.apply(dst, true).await,

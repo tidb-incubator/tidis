@@ -324,7 +324,7 @@ impl StringCommandCtx {
         Ok(resp_int(cnt as i64))
     }
 
-    pub async fn do_async_rawkv_incr(self, key: &str, inc: bool, step: i64) -> AsyncResult<Frame> {
+    pub async fn do_async_rawkv_incr(self, key: &str, step: i64) -> AsyncResult<Frame> {
         let client = get_client()?;
         let ekey = KEY_ENCODER.encode_rawkv_string(key);
         let mut new_int: i64 = 0;
@@ -342,11 +342,8 @@ impl StringCommandCtx {
                     prev_int = 0;
                 }
             }
-            if inc {
-                new_int = prev_int + step;
-            } else {
-                new_int = prev_int - step;
-            }
+
+            new_int = prev_int + step;
             let new_val = new_int.to_string();
             let (_, ret) = client
                 .compare_and_swap(ekey.clone(), prev, new_val.into())
@@ -364,12 +361,7 @@ impl StringCommandCtx {
         }
     }
 
-    pub async fn do_async_txnkv_incr(
-        mut self,
-        key: &str,
-        inc: bool,
-        step: i64,
-    ) -> AsyncResult<Frame> {
+    pub async fn do_async_txnkv_incr(mut self, key: &str, step: i64) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let ekey = KEY_ENCODER.encode_txnkv_string(key);
         let key = key.to_owned();
@@ -402,11 +394,7 @@ impl StringCommandCtx {
                         }
                     }
 
-                    let new_int = if inc {
-                        prev_int + step
-                    } else {
-                        prev_int - step
-                    };
+                    let new_int = prev_int + step;
                     let new_val = new_int.to_string();
                     let eval =
                         KEY_ENCODER.encode_txnkv_string_value(&mut new_val.as_bytes().to_vec(), 0);

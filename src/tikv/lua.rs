@@ -74,10 +74,10 @@ impl<'a> LuaCommandCtx<'a> {
                 let cmd = Command::from_argv(cmd_name, &argv).unwrap();
                 debug!(LOGGER, "command call from lua {:?}", cmd);
                 let result = match cmd {
-                    Command::Decr(cmd) => cmd.decr_by(txn_rc.clone()).await,
-                    Command::Incr(cmd) => cmd.incr_by(txn_rc.clone()).await,
-                    Command::DecrBy(cmd) => cmd.decr_by(txn_rc.clone()).await,
-                    Command::IncrBy(cmd) => cmd.incr_by(txn_rc.clone()).await,
+                    Command::Incr(mut cmd) => cmd.incr_by(txn_rc.clone(), true).await,
+                    Command::IncrBy(mut cmd) => cmd.incr_by(txn_rc.clone(), true).await,
+                    Command::Decr(mut cmd) => cmd.incr_by(txn_rc.clone(), false).await,
+                    Command::DecrBy(mut cmd) => cmd.incr_by(txn_rc.clone(), false).await,
                     Command::Strlen(cmd) => cmd.strlen(txn_rc.clone()).await,
                     Command::Del(cmd) => cmd.del(txn_rc.clone()).await,
                     Command::Exists(cmd) => cmd.exists(txn_rc.clone()).await,

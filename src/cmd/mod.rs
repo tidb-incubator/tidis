@@ -39,6 +39,9 @@ pub use ping::Ping;
 mod expire;
 pub use expire::Expire;
 
+mod persist;
+pub use persist::Persist;
+
 mod exists;
 pub use exists::Exists;
 
@@ -116,6 +119,9 @@ pub use smismember::Smismember;
 
 mod smembers;
 pub use smembers::Smembers;
+
+mod srandmember;
+pub use srandmember::Srandmember;
 
 mod spop;
 pub use spop::Spop;
@@ -198,6 +204,7 @@ pub enum Command {
     ExpireAt(Expire),
     Pexpire(Expire),
     PexpireAt(Expire),
+    Persist(Persist),
     Exists(Exists),
     Incr(IncrDecr),
     Decr(IncrDecr),
@@ -234,6 +241,7 @@ pub enum Command {
     Sismember(Sismember),
     Smismember(Smismember),
     Smembers(Smembers),
+    Srandmember(Srandmember),
     Spop(Spop),
     Srem(Srem),
     // sorted set
@@ -308,6 +316,7 @@ impl Command {
             "expireat" => Command::ExpireAt(Expire::parse_frames(&mut parse)?),
             "pexpire" => Command::Pexpire(Expire::parse_frames(&mut parse)?),
             "pexpireat" => Command::PexpireAt(Expire::parse_frames(&mut parse)?),
+            "persist" => Command::Persist(Persist::parse_frames(&mut parse)?),
             "exists" => Command::Exists(Exists::parse_frames(&mut parse)?),
             "incr" => Command::Incr(IncrDecr::parse_frames(&mut parse, true)?),
             "decr" => Command::Decr(IncrDecr::parse_frames(&mut parse, true)?),
@@ -343,6 +352,7 @@ impl Command {
             "sismember" => Command::Sismember(Sismember::parse_frames(&mut parse)?),
             "smismember" => Command::Smismember(Smismember::parse_frames(&mut parse)?),
             "smembers" => Command::Smembers(Smembers::parse_frames(&mut parse)?),
+            "srandmember" => Command::Srandmember(Srandmember::parse_frames(&mut parse)?),
             "spop" => Command::Spop(Spop::parse_frames(&mut parse)?),
             "srem" => Command::Srem(Srem::parse_frames(&mut parse)?),
             "zadd" => Command::Zadd(Zadd::parse_frames(&mut parse)?),
@@ -412,6 +422,7 @@ impl Command {
             "expireat" => Command::ExpireAt(Expire::parse_argv(argv)?),
             "pexpire" => Command::Pexpire(Expire::parse_argv(argv)?),
             "pexpireat" => Command::PexpireAt(Expire::parse_argv(argv)?),
+            "persist" => Command::Persist(Persist::parse_argv(argv)?),
             "hset" => Command::Hset(Hset::parse_argv(argv)?),
             "hmset" => Command::Hmset(Hset::parse_argv(argv)?),
             "hget" => Command::Hget(Hget::parse_argv(argv)?),
@@ -438,6 +449,7 @@ impl Command {
             "sismember" => Command::Sismember(Sismember::parse_argv(argv)?),
             "smismember" => Command::Smismember(Smismember::parse_argv(argv)?),
             "smembers" => Command::Smembers(Smembers::parse_argv(argv)?),
+            "srandmember" => Command::Srandmember(Srandmember::parse_argv(argv)?),
             "spop" => Command::Spop(Spop::parse_argv(argv)?),
             "srem" => Command::Srem(Srem::parse_argv(argv)?),
             "zadd" => Command::Zadd(Zadd::parse_argv(argv)?),
@@ -494,6 +506,7 @@ impl Command {
             ExpireAt(cmd) => cmd.apply(dst, false, true).await,
             Pexpire(cmd) => cmd.apply(dst, true, false).await,
             PexpireAt(cmd) => cmd.apply(dst, true, true).await,
+            Persist(cmd) => cmd.apply(dst).await,
             Exists(cmd) => cmd.apply(dst).await,
             Incr(cmd) => cmd.apply(dst, true).await,
             Decr(cmd) => cmd.apply(dst, false).await,
@@ -529,6 +542,7 @@ impl Command {
             Sismember(cmd) => cmd.apply(dst).await,
             Smismember(cmd) => cmd.apply(dst).await,
             Smembers(cmd) => cmd.apply(dst).await,
+            Srandmember(cmd) => cmd.apply(dst).await,
             Spop(cmd) => cmd.apply(dst).await,
             Srem(cmd) => cmd.apply(dst).await,
             Zadd(cmd) => cmd.apply(dst).await,
@@ -581,6 +595,7 @@ impl Command {
             Command::ExpireAt(_) => "expireat",
             Command::Pexpire(_) => "pexpire",
             Command::PexpireAt(_) => "pexpireat",
+            Command::Persist(_) => "persist",
             Command::Exists(_) => "exists",
             Command::Incr(_) => "incr",
             Command::Decr(_) => "decr",
@@ -616,6 +631,7 @@ impl Command {
             Command::Sismember(_) => "sismember",
             Command::Smismember(_) => "smismember",
             Command::Smembers(_) => "smembers",
+            Command::Srandmember(_) => "srandmember",
             Command::Spop(_) => "spop",
             Command::Srem(_) => "srem",
             Command::Zadd(_) => "zadd",

@@ -168,6 +168,19 @@ class StringTest(unittest.TestCase):
         self.assertIsNone(self.r.get(self.k1))
         self.assertIsNone(self.r.get(self.k2))
 
+    def test_persist(self):
+        self.assertTrue(self.r.set(self.k1, self.v1))
+        # set expire in 5s
+        self.assertTrue(self.r.pexpire(self.k1, 5000))
+        pttl = self.r.execute_command('pttl', self.k1)
+        self.assertLessEqual(pttl, 5000)
+        self.assertGreater(pttl, 0)
+        self.assertEqual(self.r.get(self.k1), self.v1)
+        # persis the key
+        self.assertEqual(self.r.persist(self.k1), 1)
+        self.assertEqual(self.r.execute_command('pttl', self.k1), -1)
+
+
     def test_pexpire(self):
         self.assertTrue(self.r.set(self.k1, self.v1))
         # expire in 5s

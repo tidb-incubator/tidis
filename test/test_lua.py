@@ -315,6 +315,15 @@ class LuaTest(unittest.TestCase):
             self.assertEqual(self.execute_eval('sadd', self.k1, str(i)), 1)
         self.assertSetEqual(set(self.execute_eval('smembers', self.k1)), set([str(i) for i in range(200)]))
 
+    def test_srandmember(self):
+        for i in range(200):
+            self.assertEqual(self.execute_eval('sadd', self.k1, str(i)), 1)
+        self.assertIn(self.execute_eval('srandmember', self.k1), set([str(i) for i in range(200)]))
+        self.assertEqual(len(self.execute_eval('srandmember', self.k1, 10)), 10)
+        self.assertEqual(len(self.execute_eval('srandmember', self.k1, -10)), 10)
+        self.assertEqual(len(self.execute_eval('srandmember', self.k1, 300)), 200)
+        self.assertEqual(len(self.execute_eval('srandmember', self.k1, -300)), 300)
+
     def test_srem(self):
         for i in range(200):
             self.assertEqual(self.execute_eval('sadd', self.k1, str(i)), 1)
@@ -456,6 +465,19 @@ class LuaTest(unittest.TestCase):
         self.assertListEqual(self.execute_eval('zpopmin', self.k1), [self.v1, '1'])
 
     # ================ generic ================
+
+    def test_persist(self):
+        self.assertTrue(self.execute_eval('set', self.k1, self.v1))
+        # expire in 5s
+        self.assertTrue(self.execute_eval('pexpire', self.k1, 5000))
+        pttl = self.execute_eval('pttl', self.k1)
+        self.assertLessEqual(pttl, 5000)
+        self.assertGreater(pttl, 0)
+        self.assertEqual(self.execute_eval('get', self.k1), self.v1)
+        # persis the key
+        self.assertEqual(self.execute_eval('persist', self.k1), 1)
+        self.assertEqual(self.execute_eval('pttl', self.k1), -1)
+
     def test_pexpire(self):
         self.assertTrue(self.execute_eval('set', self.k1, self.v1))
         # expire in 5s

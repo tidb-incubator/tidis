@@ -454,6 +454,11 @@ impl StringCommandCtx {
                     match txn.get_for_update(ekey.clone()).await? {
                         Some(meta_value) => {
                             let ttl = KeyDecoder::decode_key_ttl(&meta_value);
+                            if timestamp == 0 && ttl == 0 {
+                                // this is a persist command
+                                // check old ttl first, no need to perform op
+                                return Ok(0);
+                            }
                             let dt = KeyDecoder::decode_key_type(&meta_value);
                             let version = KeyDecoder::decode_key_version(&meta_value);
 

@@ -146,6 +146,18 @@ class ZsetTest(unittest.TestCase):
         self.assertEqual(self.r.execute_command("del", self.k1, self.k2), 1)
         self.assertEqual(self.r.zcard(self.k2), 0)
 
+    def test_persist(self):
+        self.assertEqual(self.r.zadd(self.k1, {self.v1: 10}), 1)
+        # expire in 5s
+        self.assertTrue(self.r.execute_command('pexpire', self.k1, 5000))
+        pttl = self.r.execute_command('pttl', self.k1)
+        self.assertLessEqual(pttl, 5000)
+        self.assertGreater(pttl, 0)
+        self.assertEqual(self.r.zcard(self.k1), 1)
+        # persis the key
+        self.assertEqual(self.r.persist(self.k1), 1)
+        self.assertEqual(self.r.execute_command('pttl', self.k1), -1)
+
     def test_pexpire(self):
         self.assertEqual(self.r.zadd(self.k1, {self.v1: 10}), 1)
         # expire in 5s

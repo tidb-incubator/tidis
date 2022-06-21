@@ -36,6 +36,9 @@ pub use ping::Ping;
 mod expire;
 pub use expire::Expire;
 
+mod persist;
+pub use persist::Persist;
+
 mod exists;
 pub use exists::Exists;
 
@@ -198,6 +201,7 @@ pub enum Command {
     ExpireAt(Expire),
     Pexpire(Expire),
     PexpireAt(Expire),
+    Persist(Persist),
     Exists(Exists),
     Incr(Incr),
     Decr(Decr),
@@ -305,6 +309,7 @@ impl Command {
             "expireat" => Command::ExpireAt(Expire::parse_frames(&mut parse)?),
             "pexpire" => Command::Pexpire(Expire::parse_frames(&mut parse)?),
             "pexpireat" => Command::PexpireAt(Expire::parse_frames(&mut parse)?),
+            "persist" => Command::Persist(Persist::parse_frames(&mut parse)?),
             "exists" => Command::Exists(Exists::parse_frames(&mut parse)?),
             "incr" => Command::Incr(Incr::parse_frames(&mut parse)?),
             "decr" => Command::Decr(Decr::parse_frames(&mut parse)?),
@@ -403,6 +408,7 @@ impl Command {
             "expireat" => Command::ExpireAt(Expire::parse_argv(argv)?),
             "pexpire" => Command::Pexpire(Expire::parse_argv(argv)?),
             "pexpireat" => Command::PexpireAt(Expire::parse_argv(argv)?),
+            "persist" => Command::Persist(Persist::parse_argv(argv)?),
             "hset" => Command::Hset(Hset::parse_argv(argv)?),
             "hmset" => Command::Hmset(Hset::parse_argv(argv)?),
             "hget" => Command::Hget(Hget::parse_argv(argv)?),
@@ -485,6 +491,7 @@ impl Command {
             ExpireAt(cmd) => cmd.apply(dst, false, true).await,
             Pexpire(cmd) => cmd.apply(dst, true, false).await,
             PexpireAt(cmd) => cmd.apply(dst, true, true).await,
+            Persist(cmd) => cmd.apply(dst).await,
             Exists(cmd) => cmd.apply(dst).await,
             Incr(cmd) => cmd.apply(dst).await,
             Decr(cmd) => cmd.apply(dst).await,
@@ -569,6 +576,7 @@ impl Command {
             Command::ExpireAt(_) => "expireat",
             Command::Pexpire(_) => "pexpire",
             Command::PexpireAt(_) => "pexpireat",
+            Command::Persist(_) => "persist",
             Command::Exists(_) => "exists",
             Command::Incr(_) => "incr",
             Command::Decr(_) => "decr",

@@ -90,6 +90,7 @@ impl<'a> LuaCommandCtx<'a> {
                     Command::ExpireAt(cmd) => cmd.expire(false, true, txn_rc.clone()).await,
                     Command::Pexpire(cmd) => cmd.expire(true, false, txn_rc.clone()).await,
                     Command::PexpireAt(cmd) => cmd.expire(true, true, txn_rc.clone()).await,
+                    Command::Persist(cmd) => cmd.persist(txn_rc.clone()).await,
                     Command::Hset(cmd) => cmd.hset(txn_rc.clone(), false).await,
                     Command::Hmset(cmd) => cmd.hset(txn_rc.clone(), true).await,
                     Command::Hget(cmd) => cmd.hget(txn_rc.clone()).await,

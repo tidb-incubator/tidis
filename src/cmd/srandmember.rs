@@ -84,8 +84,8 @@ impl Srandmember {
         }
         if is_use_txn_api() {
             let mut count;
-            let mut repeatable;
-            let mut array_resp;
+            let repeatable;
+            let array_resp;
             if self.count.is_none() {
                 repeatable = false;
                 count = 1;

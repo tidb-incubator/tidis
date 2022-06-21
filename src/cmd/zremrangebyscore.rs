@@ -15,13 +15,13 @@ use tokio::sync::Mutex;
 #[derive(Debug)]
 pub struct Zremrangebyscore {
     key: String,
-    min: i64,
-    max: i64,
+    min: f64,
+    max: f64,
     valid: bool,
 }
 
 impl Zremrangebyscore {
-    pub fn new(key: &str, min: i64, max: i64) -> Zremrangebyscore {
+    pub fn new(key: &str, min: f64, max: f64) -> Zremrangebyscore {
         Zremrangebyscore {
             key: key.to_string(),
             min,
@@ -33,8 +33,8 @@ impl Zremrangebyscore {
     pub fn new_invalid() -> Zremrangebyscore {
         Zremrangebyscore {
             key: "".to_string(),
-            min: 0,
-            max: 0,
+            min: 0f64,
+            max: 0f64,
             valid: false,
         }
     }
@@ -43,8 +43,8 @@ impl Zremrangebyscore {
         let key = parse.next_string()?;
 
         // TODO support (/-inf/+inf
-        let min = parse.next_int()?;
-        let max = parse.next_int()?;
+        let min = parse.next_string()?.parse::<f64>()?;
+        let max = parse.next_string()?.parse::<f64>()?;
 
         let z = Zremrangebyscore::new(&key, min, max);
 
@@ -56,12 +56,12 @@ impl Zremrangebyscore {
             return Ok(Zremrangebyscore::new_invalid());
         }
         // TODO
-        let min = match argv[1].parse::<i64>() {
+        let min = match argv[1].parse::<f64>() {
             Ok(v) => v,
             Err(_) => return Ok(Zremrangebyscore::new_invalid()),
         };
 
-        let max = match argv[2].parse::<i64>() {
+        let max = match argv[2].parse::<f64>() {
             Ok(v) => v,
             Err(_) => return Ok(Zremrangebyscore::new_invalid()),
         };

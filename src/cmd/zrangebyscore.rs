@@ -16,9 +16,9 @@ use tokio::sync::Mutex;
 #[derive(Debug)]
 pub struct Zrangebyscore {
     key: String,
-    min: i64,
+    min: f64,
     min_inclusive: bool,
-    max: i64,
+    max: f64,
     max_inclusive: bool,
     withscores: bool,
     valid: bool,
@@ -27,9 +27,9 @@ pub struct Zrangebyscore {
 impl Zrangebyscore {
     pub fn new(
         key: &str,
-        min: i64,
+        min: f64,
         min_inclusive: bool,
-        max: i64,
+        max: f64,
         max_inclusive: bool,
         withscores: bool,
     ) -> Zrangebyscore {
@@ -47,9 +47,9 @@ impl Zrangebyscore {
     pub fn new_invalid() -> Zrangebyscore {
         Zrangebyscore {
             key: "".to_string(),
-            min: 0,
+            min: 0f64,
             min_inclusive: false,
-            max: 0,
+            max: 0f64,
             max_inclusive: false,
             withscores: false,
             valid: false,
@@ -61,6 +61,9 @@ impl Zrangebyscore {
         let mut min_inclusive = true;
         let mut max_inclusive = true;
 
+        let mut min = 0f64;
+        let mut max = 0f64;
+
         // parse score range as bytes, to handle exclusive bounder
         let mut bmin = parse.next_bytes()?;
         // check first byte
@@ -68,22 +71,35 @@ impl Zrangebyscore {
             // drain the first byte
             bmin.advance(1);
             min_inclusive = false;
+        } else if bmin == *"-inf" {
+            min = f64::MIN;
+        } else if bmin == *"+inf" {
+            min = f64::MAX;
         }
-        let min = String::from_utf8_lossy(&bmin.to_vec())
-            .parse::<i64>()
-            .unwrap();
+
+        if min == 0f64 {
+            min = String::from_utf8_lossy(&bmin.to_vec())
+                .parse::<f64>()
+                .unwrap();
+        }
 
         let mut bmax = parse.next_bytes()?;
         if bmax[0] == b'(' {
             bmax.advance(1);
             max_inclusive = false;
+        } else if bmax == *"+inf" {
+            max = f64::MAX;
+        } else if bmax == *"-inf" {
+            max = f64::MIN;
         }
-        let max = String::from_utf8_lossy(&bmax.to_vec())
-            .parse::<i64>()
-            .unwrap();
+
+        if max == 0f64 {
+            max = String::from_utf8_lossy(&bmax.to_vec())
+                .parse::<f64>()
+                .unwrap();
+        }
 
         let mut withscores = false;
-
         // try to parse other flags
         while let Ok(v) = parse.next_string() {
             match v.to_uppercase().as_str() {
@@ -107,6 +123,8 @@ impl Zrangebyscore {
         }
         let mut min_inclusive = true;
         let mut max_inclusive = true;
+        let mut min = 0f64;
+        let mut max: f64 = 0f64;
 
         // parse score range as bytes, to handle exclusive bounder
         let mut bmin = Bytes::from(argv[1].clone());
@@ -115,19 +133,33 @@ impl Zrangebyscore {
             // drain the first byte
             bmin.advance(1);
             min_inclusive = false;
+        } else if bmin == *"-inf" {
+            min = f64::MIN;
+        } else if bmin == *"+inf" {
+            min = f64::MAX;
         }
-        let min = String::from_utf8_lossy(&bmin.to_vec())
-            .parse::<i64>()
-            .unwrap();
+
+        if min == 0f64 {
+            min = String::from_utf8_lossy(&bmin.to_vec())
+                .parse::<f64>()
+                .unwrap();
+        }
 
         let mut bmax = Bytes::from(argv[2].clone());
         if bmax[0] == b'(' {
             bmax.advance(1);
             max_inclusive = false;
+        } else if bmax == *"+inf" {
+            max = f64::MAX;
+        } else if bmax == *"-inf" {
+            max = f64::MIN;
         }
-        let max = String::from_utf8_lossy(&bmax.to_vec())
-            .parse::<i64>()
-            .unwrap();
+
+        if max == 0f64 {
+            max = String::from_utf8_lossy(&bmax.to_vec())
+                .parse::<f64>()
+                .unwrap();
+        }
 
         let mut withscores = false;
 

@@ -16,7 +16,7 @@ use tokio::sync::Mutex;
 pub struct Zadd {
     key: String,
     members: Vec<String>,
-    scores: Vec<i64>,
+    scores: Vec<f64>,
     exists: Option<bool>,
     changed_only: bool,
     valid: bool,
@@ -66,14 +66,14 @@ impl Zadd {
         self.members.push(member.to_string());
     }
 
-    pub fn add_score(&mut self, score: i64) {
+    pub fn add_score(&mut self, score: f64) {
         self.scores.push(score);
     }
 
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Zadd> {
         let key = parse.next_string()?;
         let mut zadd = Zadd::new(&key);
-        let mut first_score: Option<i64>;
+        let mut first_score: Option<f64>;
 
         // try to parse the flag
         loop {
@@ -96,7 +96,7 @@ impl Zadd {
                 }
                 Ok(s) => {
                     // check if this is a score args
-                    match String::from_utf8_lossy(s.as_bytes()).parse::<i64>() {
+                    match String::from_utf8_lossy(s.as_bytes()).parse::<f64>() {
                         Ok(score) => {
                             first_score = Some(score);
                             // flags parse done
@@ -125,8 +125,9 @@ impl Zadd {
                 // parse next member
                 let member = parse.next_string()?;
                 zadd.add_member(&member);
-            } else if let Ok(score) = parse.next_int() {
+            } else if let Ok(str_score) = parse.next_string() {
                 let member = parse.next_string()?;
+                let score = String::from_utf8_lossy(str_score.as_bytes()).parse::<f64>()?;
                 zadd.add_score(score);
                 zadd.add_member(&member);
             } else {
@@ -142,7 +143,7 @@ impl Zadd {
             return Ok(Zadd::new_invalid());
         }
         let mut zadd = Zadd::new(&argv[0]);
-        let mut first_score: Option<i64>;
+        let mut first_score: Option<f64>;
 
         // try to parse the flag
         let mut idx = 1;
@@ -170,7 +171,7 @@ impl Zadd {
                 }
                 _ => {
                     // check if this is a score args
-                    match String::from_utf8_lossy(arg.as_bytes()).parse::<i64>() {
+                    match String::from_utf8_lossy(arg.as_bytes()).parse::<f64>() {
                         Ok(score) => {
                             first_score = Some(score);
                             // flags parse done
@@ -206,7 +207,7 @@ impl Zadd {
                 if idx == argv.len() {
                     break;
                 }
-                if let Ok(score) = argv[idx].parse::<i64>() {
+                if let Ok(score) = argv[idx].parse::<f64>() {
                     idx += 1;
                     if idx >= argv.len() {
                         return Ok(Zadd::new_invalid());

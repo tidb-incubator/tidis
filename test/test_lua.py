@@ -406,13 +406,15 @@ class LuaTest(unittest.TestCase):
     def test_zrangebyscore(self):
         for i in range(100):
             self.assertEqual(self.execute_eval('zadd', self.k1, 100 - i, str(i)), 1)
-        self.assertListEqual(self.execute_eval('zrangebyscore', self.k1, 0, -1),
+        self.assertListEqual(self.execute_eval('zrangebyscore', self.k1, 0, -1), [])
+        self.assertListEqual(self.execute_eval('zrangebyscore', self.k1, '-inf', '+inf'),
                              list(reversed([str(i) for i in range(100)])))
 
     def test_zrevrangebyscore(self):
         for i in range(100):
             self.assertEqual(self.execute_eval('zadd', self.k1, 100 - i, str(i)), 1)
-        self.assertListEqual(self.execute_eval('zrevrangebyscore', self.k1, 0, -1), [str(i) for i in range(100)])
+        self.assertListEqual(self.execute_eval('zrevrangebyscore', self.k1, '+inf', '-inf'), [str(i) for i in range(100)])
+        self.assertListEqual(self.execute_eval('zrevrangebyscore', self.k1, -1, 0), [])
 
     def test_zremrangebyscore(self):
         for i in range(100):

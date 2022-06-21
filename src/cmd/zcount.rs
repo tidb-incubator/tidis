@@ -16,15 +16,15 @@ use tokio::sync::Mutex;
 #[derive(Debug)]
 pub struct Zcount {
     key: String,
-    min: i64,
+    min: f64,
     min_inclusive: bool,
-    max: i64,
+    max: f64,
     max_inclusive: bool,
     valid: bool,
 }
 
 impl Zcount {
-    pub fn new(key: &str, min: i64, min_inclusive: bool, max: i64, max_inclusive: bool) -> Zcount {
+    pub fn new(key: &str, min: f64, min_inclusive: bool, max: f64, max_inclusive: bool) -> Zcount {
         Zcount {
             key: key.to_string(),
             min,
@@ -38,9 +38,9 @@ impl Zcount {
     pub fn new_invalid() -> Zcount {
         Zcount {
             key: "".to_string(),
-            min: 0,
+            min: 0f64,
             min_inclusive: false,
-            max: 0,
+            max: 0f64,
             max_inclusive: false,
             valid: false,
         }
@@ -60,7 +60,7 @@ impl Zcount {
             min_inclusive = false;
         }
         let min = String::from_utf8_lossy(&bmin.to_vec())
-            .parse::<i64>()
+            .parse::<f64>()
             .unwrap();
 
         let mut bmax = parse.next_bytes()?;
@@ -69,7 +69,7 @@ impl Zcount {
             max_inclusive = false;
         }
         let max = String::from_utf8_lossy(&bmax.to_vec())
-            .parse::<i64>()
+            .parse::<f64>()
             .unwrap();
 
         let z = Zcount::new(&key, min, min_inclusive, max, max_inclusive);
@@ -93,7 +93,7 @@ impl Zcount {
             min_inclusive = false;
         }
         let min = String::from_utf8_lossy(&bmin.to_vec())
-            .parse::<i64>()
+            .parse::<f64>()
             .unwrap();
 
         let mut bmax = Bytes::from(argv[2].clone());
@@ -102,7 +102,7 @@ impl Zcount {
             max_inclusive = false;
         }
         let max = String::from_utf8_lossy(&bmax.to_vec())
-            .parse::<i64>()
+            .parse::<f64>()
             .unwrap();
 
         let z = Zcount::new(&argv[0], min, min_inclusive, max, max_inclusive);

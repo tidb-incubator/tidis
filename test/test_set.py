@@ -62,6 +62,15 @@ class SetTest(unittest.TestCase):
             self.assertEqual(self.r.sadd(self.k1, str(i)), 1)
         self.assertSetEqual(self.r.smembers(self.k1), set([str(i) for i in range(200)]))
 
+    def test_srandmember(self):
+        for i in range(200):
+            self.assertEqual(self.r.sadd(self.k1, str(i)), 1)
+        self.assertIn(self.r.srandmember(self.k1), set([str(i) for i in range(200)]))
+        self.assertEqual(len(self.r.srandmember(self.k1, 10)), 10)
+        self.assertEqual(len(self.r.srandmember(self.k1, -10)), 10)
+        self.assertEqual(len(self.r.srandmember(self.k1, 300)), 200)
+        self.assertEqual(len(self.r.srandmember(self.k1, -300)), 300)
+
     def test_srem(self):
         for i in range(200):
             self.assertEqual(self.r.sadd(self.k1, str(i)), 1)

@@ -120,6 +120,9 @@ pub use smismember::Smismember;
 mod smembers;
 pub use smembers::Smembers;
 
+mod srandmember;
+pub use srandmember::Srandmember;
+
 mod spop;
 pub use spop::Spop;
 
@@ -235,6 +238,7 @@ pub enum Command {
     Sismember(Sismember),
     Smismember(Smismember),
     Smembers(Smembers),
+    Srandmember(Srandmember),
     Spop(Spop),
     Srem(Srem),
     // sorted set
@@ -342,6 +346,7 @@ impl Command {
             "sismember" => Command::Sismember(Sismember::parse_frames(&mut parse)?),
             "smismember" => Command::Smismember(Smismember::parse_frames(&mut parse)?),
             "smembers" => Command::Smembers(Smembers::parse_frames(&mut parse)?),
+            "srandmember" => Command::Srandmember(Srandmember::parse_frames(&mut parse)?),
             "spop" => Command::Spop(Spop::parse_frames(&mut parse)?),
             "srem" => Command::Srem(Srem::parse_frames(&mut parse)?),
             "zadd" => Command::Zadd(Zadd::parse_frames(&mut parse)?),
@@ -435,6 +440,7 @@ impl Command {
             "sismember" => Command::Sismember(Sismember::parse_argv(argv)?),
             "smismember" => Command::Smismember(Smismember::parse_argv(argv)?),
             "smembers" => Command::Smembers(Smembers::parse_argv(argv)?),
+            "srandmember" => Command::Srandmember(Srandmember::parse_argv(argv)?),
             "spop" => Command::Spop(Spop::parse_argv(argv)?),
             "srem" => Command::Srem(Srem::parse_argv(argv)?),
             "zadd" => Command::Zadd(Zadd::parse_argv(argv)?),
@@ -524,6 +530,7 @@ impl Command {
             Sismember(cmd) => cmd.apply(dst).await,
             Smismember(cmd) => cmd.apply(dst).await,
             Smembers(cmd) => cmd.apply(dst).await,
+            Srandmember(cmd) => cmd.apply(dst).await,
             Spop(cmd) => cmd.apply(dst).await,
             Srem(cmd) => cmd.apply(dst).await,
             Zadd(cmd) => cmd.apply(dst).await,
@@ -609,6 +616,7 @@ impl Command {
             Command::Sismember(_) => "sismember",
             Command::Smismember(_) => "smismember",
             Command::Smembers(_) => "smembers",
+            Command::Srandmember(_) => "srandmember",
             Command::Spop(_) => "spop",
             Command::Srem(_) => "srem",
             Command::Zadd(_) => "zadd",

@@ -117,6 +117,7 @@ impl<'a> LuaCommandCtx<'a> {
                     Command::Sismember(cmd) => cmd.sismember(txn_rc.clone()).await,
                     Command::Smismember(cmd) => cmd.smismember(txn_rc.clone()).await,
                     Command::Smembers(cmd) => cmd.smembers(txn_rc.clone()).await,
+                    Command::Srandmember(cmd) => cmd.srandmember(txn_rc.clone()).await,
                     Command::Spop(cmd) => cmd.spop(txn_rc.clone()).await,
                     Command::Srem(cmd) => cmd.srem(txn_rc.clone()).await,
                     Command::Zadd(cmd) => cmd.zadd(txn_rc.clone()).await,

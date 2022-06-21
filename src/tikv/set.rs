@@ -9,12 +9,17 @@ use super::{
 use crate::utils::{key_is_expired, resp_array, resp_bulk, resp_err, resp_int, resp_nil};
 use crate::Frame;
 use ::futures::future::FutureExt;
+use rand::prelude::SliceRandom;
 use std::convert::TryInto;
 use std::sync::Arc;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
+use rand::{rngs::SmallRng, Rng, SeedableRng};
+
 use crate::metrics::REMOVED_EXPIRED_KEY_COUNTER;
+
+const RANDOM_BASE: i64 = 100;
 
 #[derive(Clone)]
 pub struct SetCommandCtx {
@@ -246,6 +251,97 @@ impl SetCommandCtx {
                     Ok(resp_int(0))
                 } else {
                     Ok(resp_array(vec![resp_int(0); member_len]))
+                }
+            }
+        }
+    }
+
+    // The rand is a fake algirithm for performance, the members will be random
+    // get from first 100 elements, if count is above 100, `count` members will be
+    // returned, so client should not be strongly rely on the random behavior
+    pub async fn do_async_txnkv_srandmemeber(
+        self,
+        key: &str,
+        count: i64,
+        repeatable: bool,
+        array_resp: bool,
+    ) -> AsyncResult<Frame> {
+        let client = get_txn_client()?;
+        let meta_key = KEY_ENCODER.encode_txnkv_meta_key(key);
+        let mut ss = match self.txn.clone() {
+            Some(txn) => client.snapshot_from_txn(txn).await,
+            None => client.newest_snapshot().await,
+        };
+
+        match ss.get(meta_key).await? {
+            Some(meta_value) => {
+                // check key type and ttl
+                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Set) {
+                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                }
+
+                let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
+                if key_is_expired(ttl) {
+                    self.clone()
+                        .do_async_txnkv_set_expire_if_needed(key)
+                        .await?;
+                    return Ok(resp_array(vec![]));
+                }
+
+                // create random
+                let mut rng = SmallRng::from_entropy();
+
+                let mut ele_count = RANDOM_BASE;
+                if count > RANDOM_BASE {
+                    ele_count = count;
+                }
+
+                let bound_range = KEY_ENCODER.encode_txnkv_set_data_key_range(key, version);
+                let iter = ss
+                    .scan_keys(bound_range, ele_count.try_into().unwrap())
+                    .await?;
+
+                let mut resp: Vec<Frame> = iter
+                    .map(|k| {
+                        // decode member from data key
+                        let user_key = KeyDecoder::decode_key_set_member_from_datakey(key, k);
+                        resp_bulk(user_key)
+                    })
+                    .collect();
+
+                // shuffle the resp vector
+                resp.shuffle(&mut rng);
+
+                let resp_len = resp.len();
+
+                if !array_resp {
+                    assert!(count == 1);
+
+                    // called with no count argument, return bulk reply
+                    // choose a random from resp
+                    let rand_idx = rng.gen_range(0..resp_len);
+                    return Ok(resp[rand_idx].clone());
+                }
+
+                // check resp is enough when repeatable is set, fill it with random element in resp vector
+                while repeatable && (resp.len() as i64) < count {
+                    let rand_idx = rng.gen_range(0..resp_len);
+                    resp.push(resp[rand_idx].clone());
+                }
+
+                // if count is less than resp.len(), truncate it
+                if count < resp_len as i64 {
+                    resp.truncate(count.try_into().unwrap());
+                }
+
+                Ok(resp_array(resp))
+            }
+            None => {
+                if array_resp {
+                    Ok(resp_array(vec![]))
+                } else {
+                    assert!(count == 1);
+                    Ok(resp_nil())
                 }
             }
         }

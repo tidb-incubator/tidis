@@ -284,6 +284,15 @@ class LuaTest(unittest.TestCase):
             self.assertEqual(self.execute_eval('sadd', self.k1, str(i)), 1)
         self.assertSetEqual(set(self.execute_eval('smembers', self.k1)), set([str(i) for i in range(200)]))
 
+    def test_srandmember(self):
+        for i in range(200):
+            self.assertEqual(self.execute_eval('sadd', self.k1, str(i)), 1)
+        self.assertIn(self.execute_eval('srandmember', self.k1), set([str(i) for i in range(200)]))
+        self.assertEqual(len(self.execute_eval('srandmember', self.k1, 10)), 10)
+        self.assertEqual(len(self.execute_eval('srandmember', self.k1, -10)), 10)
+        self.assertEqual(len(self.execute_eval('srandmember', self.k1, 300)), 200)
+        self.assertEqual(len(self.execute_eval('srandmember', self.k1, -300)), 300)
+
     def test_srem(self):
         for i in range(200):
             self.assertEqual(self.execute_eval('sadd', self.k1, str(i)), 1)

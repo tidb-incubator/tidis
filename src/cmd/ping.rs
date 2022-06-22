@@ -10,7 +10,7 @@ use slog::debug;
 ///
 /// This command is often used to test if a connection
 /// is still alive, or to measure latency.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Ping {
     /// optional message to be returned
     msg: Option<String>,
@@ -78,6 +78,15 @@ impl Ping {
         dst.write_frame(&response).await?;
 
         Ok(())
+    }
+}
+
+impl Default for Ping {
+    fn default() -> Self {
+        Ping {
+            msg: None,
+            valid: true,
+        }
     }
 }
 

@@ -6,6 +6,7 @@ use crate::tikv::string::StringCommandCtx;
 use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame, Parse};
 
+use crate::cmd::Invalid;
 use crate::config::LOGGER;
 use slog::debug;
 use tikv_client::Transaction;
@@ -24,14 +25,6 @@ impl IncrDecr {
             key: key.to_string(),
             step,
             valid: true,
-        }
-    }
-
-    pub fn new_invalid() -> IncrDecr {
-        IncrDecr {
-            key: "".to_owned(),
-            step: 0,
-            valid: false,
         }
     }
 
@@ -106,6 +99,16 @@ impl IncrDecr {
             StringCommandCtx::new(None)
                 .do_async_rawkv_incr(&self.key, self.step)
                 .await
+        }
+    }
+}
+
+impl Invalid for IncrDecr {
+    fn new_invalid() -> IncrDecr {
+        IncrDecr {
+            key: "".to_owned(),
+            step: 0,
+            valid: false,
         }
     }
 }

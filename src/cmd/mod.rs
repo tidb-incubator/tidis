@@ -187,6 +187,19 @@ pub trait Invalid {
     fn new_invalid() -> Self;
 }
 
+fn transform_parse<T: Invalid>(parse_res: crate::Result<T>, parse: &mut Parse) -> T {
+    match parse_res {
+        Ok(cmd) => {
+            if parse.check_finish() {
+                cmd
+            } else {
+                T::new_invalid()
+            }
+        }
+        Err(_) => T::new_invalid(),
+    }
+}
+
 /// Enumeration of supported Redis commands.
 ///
 /// Methods called on `Command` are delegated to the command implementation.
@@ -304,121 +317,196 @@ impl Command {
         // Match the command name, delegating the rest of the parsing to the
         // specific command.
         let command = match &command_name[..] {
-            "del" => Command::Del(Del::parse_frames(&mut parse).map_or_else(
-                |_| Del::new_invalid(),
-                |cmd| {
-                    if parse.check_finish() {
-                        cmd
-                    } else {
-                        Del::new_invalid()
-                    }
-                },
+            "del" => Command::Del(transform_parse(Del::parse_frames(&mut parse), &mut parse)),
+            "get" => Command::Get(transform_parse(Get::parse_frames(&mut parse), &mut parse)),
+            "publish" => Command::Publish(transform_parse(
+                Publish::parse_frames(&mut parse),
+                &mut parse,
             )),
-            "get" => Command::Get(Get::parse_frames(&mut parse).map_or_else(
-                |_| Get::new_invalid(),
-                |cmd| {
-                    if parse.check_finish() {
-                        cmd
-                    } else {
-                        Get::new_invalid()
-                    }
-                },
+            "set" => Command::Set(transform_parse(Set::parse_frames(&mut parse), &mut parse)),
+            "setnx" => Command::SetNX(transform_parse(SetNX::parse_frames(&mut parse), &mut parse)),
+            "setex" => Command::SetEX(transform_parse(SetEX::parse_frames(&mut parse), &mut parse)),
+            "subscribe" => Command::Subscribe(transform_parse(
+                Subscribe::parse_frames(&mut parse),
+                &mut parse,
             )),
-            "publish" => Command::Publish(Publish::parse_frames(&mut parse).map_or_else(
-                |_| Publish::new_invalid(),
-                |cmd| {
-                    if parse.check_finish() {
-                        cmd
-                    } else {
-                        Publish::new_invalid()
-                    }
-                },
+            "unsubscribe" => Command::Unsubscribe(transform_parse(
+                Unsubscribe::parse_frames(&mut parse),
+                &mut parse,
             )),
-            "set" => Command::Set(Set::parse_frames(&mut parse).map_or_else(
-                |_| Set::new_invalid(),
-                |cmd| {
-                    if parse.check_finish() {
-                        cmd
-                    } else {
-                        Set::new_invalid()
-                    }
-                },
+            "ping" => Command::Ping(transform_parse(Ping::parse_frames(&mut parse), &mut parse)),
+            "mget" => Command::Mget(transform_parse(Mget::parse_frames(&mut parse), &mut parse)),
+            "mset" => Command::Mset(transform_parse(Mset::parse_frames(&mut parse), &mut parse)),
+            "ttl" => Command::TTL(transform_parse(TTL::parse_frames(&mut parse), &mut parse)),
+            "pttl" => Command::PTTL(transform_parse(TTL::parse_frames(&mut parse), &mut parse)),
+            "expire" => Command::Expire(transform_parse(
+                Expire::parse_frames(&mut parse),
+                &mut parse,
             )),
-            "setnx" => Command::SetNX(SetNX::parse_frames(&mut parse)?),
-            "setex" => Command::SetEX(SetEX::parse_frames(&mut parse)?),
-            "subscribe" => Command::Subscribe(Subscribe::parse_frames(&mut parse)?),
-            "unsubscribe" => Command::Unsubscribe(Unsubscribe::parse_frames(&mut parse)?),
-            "ping" => Command::Ping(Ping::parse_frames(&mut parse)?),
-            "mget" => Command::Mget(Mget::parse_frames(&mut parse)?),
-            "mset" => Command::Mset(Mset::parse_frames(&mut parse)?),
-            "ttl" => Command::TTL(TTL::parse_frames(&mut parse)?),
-            "pttl" => Command::PTTL(TTL::parse_frames(&mut parse)?),
-            "expire" => Command::Expire(Expire::parse_frames(&mut parse)?),
-            "expireat" => Command::ExpireAt(Expire::parse_frames(&mut parse)?),
-            "pexpire" => Command::Pexpire(Expire::parse_frames(&mut parse)?),
-            "pexpireat" => Command::PexpireAt(Expire::parse_frames(&mut parse)?),
-            "persist" => Command::Persist(Persist::parse_frames(&mut parse)?),
-            "exists" => Command::Exists(Exists::parse_frames(&mut parse)?),
-            "incr" => Command::Incr(IncrDecr::parse_frames(&mut parse, true)?),
-            "decr" => Command::Decr(IncrDecr::parse_frames(&mut parse, true)?),
-            "incrby" => Command::IncrBy(IncrDecr::parse_frames(&mut parse, false)?),
-            "decrby" => Command::DecrBy(IncrDecr::parse_frames(&mut parse, false)?),
-            "strlen" => Command::Strlen(Strlen::parse_frames(&mut parse)?),
-            "hset" => Command::Hset(Hset::parse_frames(&mut parse)?),
-            "hmset" => Command::Hmset(Hset::parse_frames(&mut parse)?),
-            "hget" => Command::Hget(Hget::parse_frames(&mut parse)?),
-            "hmget" => Command::Hmget(Hmget::parse_frames(&mut parse)?),
-            "hlen" => Command::Hlen(Hlen::parse_frames(&mut parse)?),
-            "hgetall" => Command::Hgetall(Hgetall::parse_frames(&mut parse)?),
-            "hdel" => Command::Hdel(Hdel::parse_frames(&mut parse)?),
-            "hkeys" => Command::Hkeys(Hkeys::parse_frames(&mut parse)?),
-            "hvals" => Command::Hvals(Hvals::parse_frames(&mut parse)?),
-            "hincrby" => Command::Hincrby(Hincrby::parse_frames(&mut parse)?),
-            "hexists" => Command::Hexists(Hexists::parse_frames(&mut parse)?),
-            "hstrlen" => Command::Hstrlen(Hstrlen::parse_frames(&mut parse)?),
-            "lpush" => Command::Lpush(Push::parse_frames(&mut parse)?),
-            "rpush" => Command::Rpush(Push::parse_frames(&mut parse)?),
-            "lpop" => Command::Lpop(Pop::parse_frames(&mut parse)?),
-            "rpop" => Command::Rpop(Pop::parse_frames(&mut parse)?),
-            "lrange" => Command::Lrange(Lrange::parse_frames(&mut parse)?),
-            "llen" => Command::Llen(Llen::parse_frames(&mut parse)?),
-            "lindex" => Command::Lindex(Lindex::parse_frames(&mut parse)?),
-            "lset" => Command::Lset(Lset::parse_frames(&mut parse)?),
-            "ltrim" => Command::Ltrim(Ltrim::parse_frames(&mut parse)?),
-            "eval" => Command::Eval(Eval::parse_frames(&mut parse)?),
-            "evalsha" => Command::Evalsha(Eval::parse_frames(&mut parse)?),
-            "script" => Command::Script(Script::parse_frames(&mut parse)?),
-            "sadd" => Command::Sadd(Sadd::parse_frames(&mut parse)?),
-            "scard" => Command::Scard(Scard::parse_frames(&mut parse)?),
-            "sismember" => Command::Sismember(Sismember::parse_frames(&mut parse)?),
-            "smismember" => Command::Smismember(Smismember::parse_frames(&mut parse)?),
-            "smembers" => Command::Smembers(Smembers::parse_frames(&mut parse)?),
-            "srandmember" => Command::Srandmember(Srandmember::parse_frames(&mut parse)?),
-            "spop" => Command::Spop(Spop::parse_frames(&mut parse)?),
-            "srem" => Command::Srem(Srem::parse_frames(&mut parse)?),
-            "zadd" => Command::Zadd(Zadd::parse_frames(&mut parse)?),
-            "zcard" => Command::Zcard(Zcard::parse_frames(&mut parse)?),
-            "zscore" => Command::Zscore(Zscore::parse_frames(&mut parse)?),
-            "zrem" => Command::Zrem(Zrem::parse_frames(&mut parse)?),
-            "zremrangebyscore" => {
-                Command::Zremrangebyscore(Zremrangebyscore::parse_frames(&mut parse)?)
+            "expireat" => Command::ExpireAt(transform_parse(
+                Expire::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "pexpire" => Command::Pexpire(transform_parse(
+                Expire::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "pexpireat" => Command::PexpireAt(transform_parse(
+                Expire::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "persist" => Command::Persist(transform_parse(
+                Persist::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "exists" => Command::Exists(transform_parse(
+                Exists::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "incr" => Command::Incr(transform_parse(
+                IncrDecr::parse_frames(&mut parse, true),
+                &mut parse,
+            )),
+            "decr" => Command::Decr(transform_parse(
+                IncrDecr::parse_frames(&mut parse, true),
+                &mut parse,
+            )),
+            "incrby" => Command::IncrBy(transform_parse(
+                IncrDecr::parse_frames(&mut parse, false),
+                &mut parse,
+            )),
+            "decrby" => Command::DecrBy(transform_parse(
+                IncrDecr::parse_frames(&mut parse, false),
+                &mut parse,
+            )),
+            "strlen" => Command::Strlen(transform_parse(
+                Strlen::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "hset" => Command::Hset(transform_parse(Hset::parse_frames(&mut parse), &mut parse)),
+            "hmset" => Command::Hmset(transform_parse(Hset::parse_frames(&mut parse), &mut parse)),
+            "hget" => Command::Hget(transform_parse(Hget::parse_frames(&mut parse), &mut parse)),
+            "hmget" => Command::Hmget(transform_parse(Hmget::parse_frames(&mut parse), &mut parse)),
+            "hlen" => Command::Hlen(transform_parse(Hlen::parse_frames(&mut parse), &mut parse)),
+            "hgetall" => Command::Hgetall(transform_parse(
+                Hgetall::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "hdel" => Command::Hdel(transform_parse(Hdel::parse_frames(&mut parse), &mut parse)),
+            "hkeys" => Command::Hkeys(transform_parse(Hkeys::parse_frames(&mut parse), &mut parse)),
+            "hvals" => Command::Hvals(transform_parse(Hvals::parse_frames(&mut parse), &mut parse)),
+            "hincrby" => Command::Hincrby(transform_parse(
+                Hincrby::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "hexists" => Command::Hexists(transform_parse(
+                Hexists::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "hstrlen" => Command::Hstrlen(transform_parse(
+                Hstrlen::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "lpush" => Command::Lpush(transform_parse(Push::parse_frames(&mut parse), &mut parse)),
+            "rpush" => Command::Rpush(transform_parse(Push::parse_frames(&mut parse), &mut parse)),
+            "lpop" => Command::Lpop(transform_parse(Pop::parse_frames(&mut parse), &mut parse)),
+            "rpop" => Command::Rpop(transform_parse(Pop::parse_frames(&mut parse), &mut parse)),
+            "lrange" => Command::Lrange(transform_parse(
+                Lrange::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "llen" => Command::Llen(transform_parse(Llen::parse_frames(&mut parse), &mut parse)),
+            "lindex" => Command::Lindex(transform_parse(
+                Lindex::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "lset" => Command::Lset(transform_parse(Lset::parse_frames(&mut parse), &mut parse)),
+            "ltrim" => Command::Ltrim(transform_parse(Ltrim::parse_frames(&mut parse), &mut parse)),
+            "eval" => Command::Eval(transform_parse(Eval::parse_frames(&mut parse), &mut parse)),
+            "evalsha" => {
+                Command::Evalsha(transform_parse(Eval::parse_frames(&mut parse), &mut parse))
             }
-            "zrange" => Command::Zrange(Zrange::parse_frames(&mut parse)?),
-            "zrevrange" => Command::Zrevrange(Zrevrange::parse_frames(&mut parse)?),
-            "zrangebyscore" => Command::Zrangebyscore(Zrangebyscore::parse_frames(&mut parse)?),
-            "zrevrangebyscore" => {
-                Command::Zrevrangebyscore(Zrangebyscore::parse_frames(&mut parse)?)
+            "script" => Command::Script(transform_parse(
+                Script::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "sadd" => Command::Sadd(transform_parse(Sadd::parse_frames(&mut parse), &mut parse)),
+            "scard" => Command::Scard(transform_parse(Scard::parse_frames(&mut parse), &mut parse)),
+            "sismember" => Command::Sismember(transform_parse(
+                Sismember::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "smismember" => Command::Smismember(transform_parse(
+                Smismember::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "smembers" => Command::Smembers(transform_parse(
+                Smembers::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "srandmember" => Command::Srandmember(transform_parse(
+                Srandmember::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "spop" => Command::Spop(transform_parse(Spop::parse_frames(&mut parse), &mut parse)),
+            "srem" => Command::Srem(transform_parse(Srem::parse_frames(&mut parse), &mut parse)),
+            "zadd" => Command::Zadd(transform_parse(Zadd::parse_frames(&mut parse), &mut parse)),
+            "zcard" => Command::Zcard(transform_parse(Zcard::parse_frames(&mut parse), &mut parse)),
+            "zscore" => Command::Zscore(transform_parse(
+                Zscore::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "zrem" => Command::Zrem(transform_parse(Zrem::parse_frames(&mut parse), &mut parse)),
+            "zremrangebyscore" => Command::Zremrangebyscore(transform_parse(
+                Zremrangebyscore::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "zrange" => Command::Zrange(transform_parse(
+                Zrange::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "zrevrange" => Command::Zrevrange(transform_parse(
+                Zrevrange::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "zrangebyscore" => Command::Zrangebyscore(transform_parse(
+                Zrangebyscore::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "zrevrangebyscore" => Command::Zrevrangebyscore(transform_parse(
+                Zrangebyscore::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "zcount" => Command::Zcount(transform_parse(
+                Zcount::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "zpopmin" => {
+                Command::Zpopmin(transform_parse(Zpop::parse_frames(&mut parse), &mut parse))
             }
-            "zcount" => Command::Zcount(Zcount::parse_frames(&mut parse)?),
-            "zpopmin" => Command::Zpopmin(Zpop::parse_frames(&mut parse)?),
-            "zrank" => Command::Zrank(Zrank::parse_frames(&mut parse)?),
-            "auth" => Command::Auth(Auth::parse_frames(&mut parse)?),
-            "debug" => Command::Debug(Debug::parse_frames(&mut parse)?),
-            "cluster" => Command::Cluster(Cluster::parse_frames(&mut parse)?),
-            "readwrite" => Command::ReadWrite(Fake::parse_frames(&mut parse, "readwrite")?),
-            "readonly" => Command::ReadOnly(Fake::parse_frames(&mut parse, "readonly")?),
-            "client" => Command::Client(Fake::parse_frames(&mut parse, "client")?),
-            "info" => Command::Info(Fake::parse_frames(&mut parse, "info")?),
+            "zrank" => Command::Zrank(transform_parse(Zrank::parse_frames(&mut parse), &mut parse)),
+            "auth" => Command::Auth(transform_parse(Auth::parse_frames(&mut parse), &mut parse)),
+            "debug" => Command::Debug(transform_parse(Debug::parse_frames(&mut parse), &mut parse)),
+            "cluster" => Command::Cluster(transform_parse(
+                Cluster::parse_frames(&mut parse),
+                &mut parse,
+            )),
+            "readwrite" => Command::ReadWrite(transform_parse(
+                Fake::parse_frames(&mut parse, "readwrite"),
+                &mut parse,
+            )),
+            "readonly" => Command::ReadOnly(transform_parse(
+                Fake::parse_frames(&mut parse, "readonly"),
+                &mut parse,
+            )),
+            "client" => Command::Client(transform_parse(
+                Fake::parse_frames(&mut parse, "client"),
+                &mut parse,
+            )),
+            "info" => Command::Info(transform_parse(
+                Fake::parse_frames(&mut parse, "info"),
+                &mut parse,
+            )),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.

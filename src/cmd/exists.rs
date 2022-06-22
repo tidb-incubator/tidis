@@ -8,6 +8,7 @@ use crate::{Connection, Frame, Parse};
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
+use crate::cmd::Invalid;
 use crate::config::LOGGER;
 use slog::debug;
 
@@ -87,6 +88,15 @@ impl Default for Exists {
         Exists {
             keys: vec![],
             valid: true,
+        }
+    }
+}
+
+impl Invalid for Exists {
+    fn new_invalid() -> Exists {
+        Exists {
+            keys: vec![],
+            valid: false,
         }
     }
 }

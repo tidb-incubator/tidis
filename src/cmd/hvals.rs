@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::hash::HashCommandCtx;
@@ -42,10 +42,7 @@ impl Hvals {
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Hvals> {
         if argv.len() != 1 {
-            return Ok(Hvals {
-                key: "".to_owned(),
-                valid: false,
-            });
+            return Ok(Hvals::new_invalid());
         }
         let key = &argv[0];
         Ok(Hvals::new(key))
@@ -75,6 +72,15 @@ impl Hvals {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Hvals {
+    fn new_invalid() -> Hvals {
+        Hvals {
+            key: "".to_owned(),
+            valid: false,
         }
     }
 }

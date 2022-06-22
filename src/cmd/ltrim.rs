@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::list::ListCommandCtx;
@@ -27,15 +27,6 @@ impl Ltrim {
             start,
             end,
             valid: true,
-        }
-    }
-
-    pub fn new_invalid() -> Ltrim {
-        Ltrim {
-            key: "".to_owned(),
-            start: 0,
-            end: 0,
-            valid: false,
         }
     }
 
@@ -97,6 +88,17 @@ impl Ltrim {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Ltrim {
+    fn new_invalid() -> Ltrim {
+        Ltrim {
+            key: "".to_owned(),
+            start: 0,
+            end: 0,
+            valid: false,
         }
     }
 }

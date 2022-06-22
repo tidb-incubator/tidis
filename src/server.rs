@@ -6,7 +6,7 @@ use crate::metrics::{
 };
 use crate::tikv::encoding::KeyDecoder;
 use crate::tikv::{get_txn_client, KEY_ENCODER};
-use crate::utils::{self, resp_err, resp_ok, sleep};
+use crate::utils::{self, resp_err, resp_invalid_arguments, resp_ok, sleep};
 use crate::{
     config_cluster_broadcast_addr_or_default, config_cluster_topology_expire_or_default,
     config_cluster_topology_interval_or_default, config_local_pool_number, is_auth_enabled,
@@ -664,8 +664,12 @@ impl Handler {
 
             match cmd {
                 Command::Auth(c) => {
-                    // check password and update connection authorized flag
-                    if !is_auth_enabled() {
+                    if !c.valid() {
+                        self.connection
+                            .write_frame(&resp_invalid_arguments())
+                            .await?;
+                    } else if !is_auth_enabled() {
+                        // check password and update connection authorized flag
                         self.connection
                             .write_frame(&resp_err(REDIS_AUTH_WHEN_DISABLED_ERR))
                             .await?;

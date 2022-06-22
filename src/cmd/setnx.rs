@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::string::StringCommandCtx;
@@ -122,6 +122,16 @@ impl SetNX {
             StringCommandCtx::new(txn)
                 .do_async_rawkv_put_not_exists(&self.key, &self.value)
                 .await
+        }
+    }
+}
+
+impl Invalid for SetNX {
+    fn new_invalid() -> SetNX {
+        SetNX {
+            key: "".to_owned(),
+            value: Bytes::new(),
+            valid: false,
         }
     }
 }

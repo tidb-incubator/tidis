@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::list::ListCommandCtx;
@@ -26,14 +26,6 @@ impl Push {
             items: vec![],
             key: key.to_owned(),
             valid: true,
-        }
-    }
-
-    pub fn new_invalid() -> Push {
-        Push {
-            items: vec![],
-            key: "".to_owned(),
-            valid: false,
         }
     }
 
@@ -101,6 +93,16 @@ impl Push {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Push {
+    fn new_invalid() -> Push {
+        Push {
+            items: vec![],
+            key: "".to_owned(),
+            valid: false,
         }
     }
 }

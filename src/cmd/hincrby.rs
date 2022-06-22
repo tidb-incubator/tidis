@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::hash::HashCommandCtx;
@@ -27,15 +27,6 @@ impl Hincrby {
             field: field.to_string(),
             step,
             valid: true,
-        }
-    }
-
-    pub fn new_invalid() -> Hincrby {
-        Hincrby {
-            key: "".to_string(),
-            field: "".to_string(),
-            step: 0,
-            valid: false,
         }
     }
 
@@ -105,6 +96,17 @@ impl Hincrby {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Hincrby {
+    fn new_invalid() -> Hincrby {
+        Hincrby {
+            key: "".to_string(),
+            field: "".to_string(),
+            step: 0,
+            valid: false,
         }
     }
 }

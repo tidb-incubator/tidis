@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::zset::ZsetCommandCtx;
@@ -25,14 +25,6 @@ impl Zpop {
             key: key.to_string(),
             count,
             valid: true,
-        }
-    }
-
-    pub fn new_invalid() -> Zpop {
-        Zpop {
-            key: "".to_string(),
-            count: 0,
-            valid: false,
         }
     }
 
@@ -92,6 +84,16 @@ impl Zpop {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Zpop {
+    fn new_invalid() -> Zpop {
+        Zpop {
+            key: "".to_string(),
+            count: 0,
+            valid: false,
         }
     }
 }

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::string::StringCommandCtx;
 use crate::utils::{resp_err, resp_invalid_arguments, timestamp_from_ttl};
@@ -122,6 +122,17 @@ impl SetEX {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for SetEX {
+    fn new_invalid() -> SetEX {
+        SetEX {
+            key: "".to_owned(),
+            value: Bytes::new(),
+            expire: 0,
+            valid: false,
         }
     }
 }

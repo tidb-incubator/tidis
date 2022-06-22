@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::zset::ZsetCommandCtx;
@@ -42,10 +42,7 @@ impl Zcard {
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Zcard> {
         if argv.len() != 1 {
-            return Ok(Zcard {
-                key: "".to_owned(),
-                valid: false,
-            });
+            return Ok(Zcard::new_invalid());
         }
         Ok(Zcard::new(&argv[0]))
     }
@@ -74,6 +71,15 @@ impl Zcard {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Zcard {
+    fn new_invalid() -> Zcard {
+        Zcard {
+            key: "".to_owned(),
+            valid: false,
         }
     }
 }

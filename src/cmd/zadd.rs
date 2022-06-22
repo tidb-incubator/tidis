@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::zset::ZsetCommandCtx;
@@ -31,17 +31,6 @@ impl Zadd {
             exists: None,
             changed_only: false,
             valid: true,
-        }
-    }
-
-    pub fn new_invalid() -> Zadd {
-        Zadd {
-            key: "".to_string(),
-            members: vec![],
-            scores: vec![],
-            exists: None,
-            changed_only: false,
-            valid: false,
         }
     }
 
@@ -255,6 +244,19 @@ impl Zadd {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Zadd {
+    fn new_invalid() -> Zadd {
+        Zadd {
+            key: "".to_string(),
+            members: vec![],
+            scores: vec![],
+            exists: None,
+            changed_only: false,
+            valid: false,
         }
     }
 }

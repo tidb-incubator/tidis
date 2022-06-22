@@ -3,6 +3,7 @@ use crate::{Connection, Db, Frame, Parse};
 use bytes::Bytes;
 
 use super::Invalid;
+use crate::utils::resp_invalid_arguments;
 
 /// Posts a message to the given channel.
 ///
@@ -74,6 +75,11 @@ impl Publish {
     /// The response is written to `dst`. This is called by the server in order
     /// to execute a received command.
     pub(crate) async fn apply(self, db: &Db, dst: &mut Connection) -> crate::Result<()> {
+        if !self.valid {
+            dst.write_frame(&resp_invalid_arguments()).await?;
+            return Ok(());
+        }
+
         // The shared state contains the `tokio::sync::broadcast::Sender` for
         // all active channels. Calling `db.publish` dispatches the message into
         // the appropriate channel.

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::hash::HashCommandCtx;
@@ -25,14 +25,6 @@ impl Hexists {
             field: field.to_owned(),
             key: key.to_owned(),
             valid: true,
-        }
-    }
-
-    pub fn new_invalid() -> Hexists {
-        Hexists {
-            field: "".to_owned(),
-            key: "".to_owned(),
-            valid: false,
         }
     }
 
@@ -81,6 +73,16 @@ impl Hexists {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Hexists {
+    fn new_invalid() -> Hexists {
+        Hexists {
+            field: "".to_owned(),
+            key: "".to_owned(),
+            valid: false,
         }
     }
 }

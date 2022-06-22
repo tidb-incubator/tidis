@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::list::ListCommandCtx;
@@ -25,14 +25,6 @@ impl Lindex {
             key: key.to_owned(),
             idx,
             valid: true,
-        }
-    }
-
-    pub fn new_invalid() -> Lindex {
-        Lindex {
-            key: "".to_owned(),
-            idx: 0,
-            valid: false,
         }
     }
 
@@ -87,6 +79,16 @@ impl Lindex {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Lindex {
+    fn new_invalid() -> Lindex {
+        Lindex {
+            key: "".to_owned(),
+            idx: 0,
+            valid: false,
         }
     }
 }

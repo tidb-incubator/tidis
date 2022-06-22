@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::cmd::Invalid;
 use crate::config::is_use_txn_api;
 use crate::config::LOGGER;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
@@ -37,10 +38,7 @@ impl TTL {
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<TTL> {
         if argv.len() != 1 {
-            return Ok(TTL {
-                key: "".to_owned(),
-                valid: false,
-            });
+            return Ok(TTL::new_invalid());
         }
         Ok(TTL {
             key: argv[0].to_owned(),
@@ -78,6 +76,15 @@ impl TTL {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for TTL {
+    fn new_invalid() -> TTL {
+        TTL {
+            key: "".to_owned(),
+            valid: false,
         }
     }
 }

@@ -9,6 +9,7 @@ use crate::{Connection, Frame, Parse};
 use tikv_client::{KvPair, Transaction};
 use tokio::sync::Mutex;
 
+use crate::cmd::Invalid;
 use crate::config::LOGGER;
 use bytes::Bytes;
 use slog::debug;
@@ -126,6 +127,16 @@ impl Default for Mset {
             keys: vec![],
             vals: vec![],
             valid: true,
+        }
+    }
+}
+
+impl Invalid for Mset {
+    fn new_invalid() -> Mset {
+        Mset {
+            keys: vec![],
+            vals: vec![],
+            valid: false,
         }
     }
 }

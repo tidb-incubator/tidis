@@ -1,5 +1,6 @@
 use slog::debug;
 
+use crate::cmd::Invalid;
 use crate::{
     config::LOGGER,
     tikv::errors::REDIS_UNKNOWN_SUBCOMMAND,
@@ -23,10 +24,7 @@ impl Fake {
             || command.to_uppercase().as_str() == "INFO")
             && args.is_empty()
         {
-            return Ok(Fake {
-                args: vec![],
-                valid: false,
-            });
+            return Ok(Fake::new_invalid());
         }
         Ok(Fake { args, valid: true })
     }
@@ -81,5 +79,14 @@ impl Fake {
             _ => resp_nil(),
         };
         response
+    }
+}
+
+impl Invalid for Fake {
+    fn new_invalid() -> Fake {
+        Fake {
+            args: vec![],
+            valid: false,
+        }
     }
 }

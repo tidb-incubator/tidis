@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::list::ListCommandCtx;
@@ -38,10 +38,7 @@ impl Llen {
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Llen> {
         if argv.len() != 1 {
-            return Ok(Llen {
-                key: "".to_owned(),
-                valid: false,
-            });
+            return Ok(Llen::new_invalid());
         }
         let key = &argv[0];
         Ok(Llen::new(key))
@@ -71,6 +68,15 @@ impl Llen {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Llen {
+    fn new_invalid() -> Llen {
+        Llen {
+            key: "".to_owned(),
+            valid: false,
         }
     }
 }

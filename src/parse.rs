@@ -121,15 +121,6 @@ impl Parse {
         }
     }
 
-    /// Ensure there are no more entries in the array
-    pub(crate) fn finish(&mut self) -> Result<(), ParseError> {
-        if self.parts.next().is_none() {
-            Ok(())
-        } else {
-            Err("protocol error; expected end of frame, but there was more".into())
-        }
-    }
-
     pub(crate) fn check_finish(&mut self) -> bool {
         self.parts.next().is_none()
     }
@@ -137,11 +128,11 @@ impl Parse {
     /// Ensure there are no more entries in the array
     pub(crate) fn check_and_ensure_finish(&mut self) -> bool {
         if self.parts.next().is_none() {
-            return true;
+            true
         } else {
             // consume all left parts and drop it
-            while let Ok(_) = self.next() {}
-            return false;
+            while self.next().is_ok() {}
+            false
         }
     }
 }

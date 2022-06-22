@@ -129,6 +129,21 @@ impl Parse {
             Err("protocol error; expected end of frame, but there was more".into())
         }
     }
+
+    pub(crate) fn check_finish(&mut self) -> bool {
+        self.parts.next().is_none()
+    }
+
+    /// Ensure there are no more entries in the array
+    pub(crate) fn check_and_ensure_finish(&mut self) -> bool {
+        if self.parts.next().is_none() {
+            return true;
+        } else {
+            // consume all left parts and drop it
+            while let Ok(_) = self.next() {}
+            return false;
+        }
+    }
 }
 
 impl From<String> for ParseError {

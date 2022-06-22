@@ -182,6 +182,11 @@ pub use fake::Fake;
 
 use crate::{cluster::Cluster as Topo, Connection, Db, Frame, Parse, ParseError, Shutdown};
 
+/// All commands should be implement new_invalid() for invalid check
+pub trait Invalid {
+    fn new_invalid() -> Self;
+}
+
 /// Enumeration of supported Redis commands.
 ///
 /// Methods called on `Command` are delegated to the command implementation.
@@ -299,10 +304,46 @@ impl Command {
         // Match the command name, delegating the rest of the parsing to the
         // specific command.
         let command = match &command_name[..] {
-            "del" => Command::Del(Del::parse_frames(&mut parse)?),
-            "get" => Command::Get(Get::parse_frames(&mut parse)?),
-            "publish" => Command::Publish(Publish::parse_frames(&mut parse)?),
-            "set" => Command::Set(Set::parse_frames(&mut parse)?),
+            "del" => Command::Del(Del::parse_frames(&mut parse).map_or_else(
+                |_| Del::new_invalid(),
+                |cmd| {
+                    if parse.check_finish() {
+                        cmd
+                    } else {
+                        Del::new_invalid()
+                    }
+                },
+            )),
+            "get" => Command::Get(Get::parse_frames(&mut parse).map_or_else(
+                |_| Get::new_invalid(),
+                |cmd| {
+                    if parse.check_finish() {
+                        cmd
+                    } else {
+                        Get::new_invalid()
+                    }
+                },
+            )),
+            "publish" => Command::Publish(Publish::parse_frames(&mut parse).map_or_else(
+                |_| Publish::new_invalid(),
+                |cmd| {
+                    if parse.check_finish() {
+                        cmd
+                    } else {
+                        Publish::new_invalid()
+                    }
+                },
+            )),
+            "set" => Command::Set(Set::parse_frames(&mut parse).map_or_else(
+                |_| Set::new_invalid(),
+                |cmd| {
+                    if parse.check_finish() {
+                        cmd
+                    } else {
+                        Set::new_invalid()
+                    }
+                },
+            )),
             "setnx" => Command::SetNX(SetNX::parse_frames(&mut parse)?),
             "setex" => Command::SetEX(SetEX::parse_frames(&mut parse)?),
             "subscribe" => Command::Subscribe(Subscribe::parse_frames(&mut parse)?),
@@ -389,10 +430,7 @@ impl Command {
             }
         };
 
-        // Check if there is any remaining unconsumed fields in the `Parse`
-        // value. If fields remain, this indicates an unexpected frame format
-        // and an error is returned.
-        parse.finish()?;
+        parse.check_and_ensure_finish();
 
         // The command has been successfully parsed
         Ok(command)

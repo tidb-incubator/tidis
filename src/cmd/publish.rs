@@ -2,6 +2,8 @@ use crate::{Connection, Db, Frame, Parse};
 
 use bytes::Bytes;
 
+use super::Invalid;
+
 /// Posts a message to the given channel.
 ///
 /// Send a message into a channel without any knowledge of individual consumers.
@@ -16,6 +18,7 @@ pub struct Publish {
 
     /// The message to publish.
     message: Bytes,
+    valid: bool,
 }
 
 impl Publish {
@@ -25,6 +28,7 @@ impl Publish {
         Publish {
             channel: channel.to_string(),
             message,
+            valid: true,
         }
     }
 
@@ -58,7 +62,11 @@ impl Publish {
         // The `message` is arbitrary bytes.
         let message = parse.next_bytes()?;
 
-        Ok(Publish { channel, message })
+        Ok(Publish {
+            channel,
+            message,
+            valid: true,
+        })
     }
 
     /// Apply the `Publish` command to the specified `Db` instance.
@@ -99,5 +107,15 @@ impl Publish {
         frame.push_bulk(self.message);
 
         frame
+    }
+}
+
+impl Invalid for Publish {
+    fn new_invalid() -> Self {
+        Publish {
+            channel: "".to_string(),
+            message: Bytes::from(""),
+            valid: false,
+        }
     }
 }

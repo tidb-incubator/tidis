@@ -5,6 +5,7 @@ use crate::tikv::get_instance_id;
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::ops::Range;
+use std::ops::RangeInclusive;
 use tikv_client::BoundRange;
 use tikv_client::Key;
 use tikv_client::Value;
@@ -279,7 +280,7 @@ impl KeyEncoder {
     /// right initial value 1<<32, right is point to the next right position of right element
     /// list is indicated as null if left index equal to right
     pub fn encode_txnkv_list_data_key(&self, ukey: &str, idx: u64, version: u16) -> Key {
-        let mut key = Vec::with_capacity(13 + ukey.len());
+        let mut key = Vec::with_capacity(18 + ukey.len());
 
         self.encode_txnkv_type_data_key_prefix(
             DATA_TYPE_DATA,
@@ -288,8 +289,57 @@ impl KeyEncoder {
             &mut key,
             version,
         );
+        key.push(PLACE_HOLDER);
         key.extend_from_slice(&idx.to_be_bytes());
         key.into()
+    }
+
+    pub fn encode_txnkv_list_data_key_idx_range(
+        &self,
+        key: &str,
+        start: u64,
+        end: u64,
+        version: u16,
+    ) -> BoundRange {
+        let data_key_start = self.encode_txnkv_list_data_key(key, start, version);
+        let data_key_end = self.encode_txnkv_list_data_key(key, end, version);
+        let range: RangeInclusive<Key> = data_key_start..=data_key_end;
+        range.into()
+    }
+
+    fn encode_txnkv_list_data_key_start(&self, ukey: &str, version: u16) -> Key {
+        let mut key = Vec::with_capacity(10 + ukey.len());
+
+        self.encode_txnkv_type_data_key_prefix(
+            DATA_TYPE_DATA,
+            DATA_TYPE_LIST,
+            ukey,
+            &mut key,
+            version,
+        );
+        key.push(PLACE_HOLDER);
+        key.into()
+    }
+
+    fn encode_txnkv_list_data_key_end(&self, ukey: &str, version: u16) -> Key {
+        let mut key = Vec::with_capacity(10 + ukey.len());
+
+        self.encode_txnkv_type_data_key_prefix(
+            DATA_TYPE_DATA,
+            DATA_TYPE_LIST,
+            ukey,
+            &mut key,
+            version,
+        );
+        key.push(PLACE_HOLDER + 1);
+        key.into()
+    }
+
+    pub fn encode_txnkv_list_data_key_range(&self, key: &str, version: u16) -> BoundRange {
+        let data_key_start = self.encode_txnkv_list_data_key_start(key, version);
+        let data_key_end = self.encode_txnkv_list_data_key_end(key, version);
+        let range: Range<Key> = data_key_start..data_key_end;
+        range.into()
     }
 
     pub fn encode_txnkv_list_meta_value(

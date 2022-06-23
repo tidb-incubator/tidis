@@ -75,6 +75,12 @@ impl KeyDecoder {
         )
     }
 
+    pub fn decode_key_list_idx_from_datakey(rkey: &str, key: Key) -> u64 {
+        let key: Vec<u8> = key.into();
+        let idx = 10 + rkey.len();
+        u64::from_be_bytes(key[idx..].try_into().unwrap())
+    }
+
     pub fn decode_key_set_member_from_datakey(rkey: &str, key: Key) -> Vec<u8> {
         let key: Vec<u8> = key.into();
         let idx = 10 + rkey.len();

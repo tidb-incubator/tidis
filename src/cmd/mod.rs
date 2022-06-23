@@ -102,6 +102,12 @@ pub use lset::Lset;
 mod ltrim;
 pub use ltrim::Ltrim;
 
+mod lrem;
+pub use lrem::Lrem;
+
+mod linsert;
+pub use linsert::Linsert;
+
 mod eval;
 pub use eval::Eval;
 
@@ -253,6 +259,8 @@ pub enum Command {
     Lindex(Lindex),
     Lset(Lset),
     Ltrim(Ltrim),
+    Lrem(Lrem),
+    Linsert(Linsert),
     // set
     Sadd(Sadd),
     Scard(Scard),
@@ -422,10 +430,11 @@ impl Command {
             )),
             "lset" => Command::Lset(transform_parse(Lset::parse_frames(&mut parse), &mut parse)),
             "ltrim" => Command::Ltrim(transform_parse(Ltrim::parse_frames(&mut parse), &mut parse)),
+            "lrem" => Command::Lrem(transform_parse(Lrem::parse_frames(&mut parse), &mut parse)),
+            "linsert" => Command::Linsert(transform_parse(Linsert::parse_frames(&mut parse), &mut parse)),
             "eval" => Command::Eval(transform_parse(Eval::parse_frames(&mut parse), &mut parse)),
             "evalsha" => {
                 Command::Evalsha(transform_parse(Eval::parse_frames(&mut parse), &mut parse))
-            }
             "script" => Command::Script(transform_parse(
                 Script::parse_frames(&mut parse),
                 &mut parse,
@@ -570,6 +579,8 @@ impl Command {
             "lindex" => Command::Lindex(Lindex::parse_argv(argv)?),
             "lset" => Command::Lset(Lset::parse_argv(argv)?),
             "ltrim" => Command::Ltrim(Ltrim::parse_argv(argv)?),
+            "lrem" => Command::Lrem(Lrem::parse_argv(argv)?),
+            "linsert" => Command::Linsert(Linsert::parse_argv(argv)?),
             "sadd" => Command::Sadd(Sadd::parse_argv(argv)?),
             "scard" => Command::Scard(Scard::parse_argv(argv)?),
             "sismember" => Command::Sismember(Sismember::parse_argv(argv)?),
@@ -660,6 +671,8 @@ impl Command {
             Lindex(cmd) => cmd.apply(dst).await,
             Lset(cmd) => cmd.apply(dst).await,
             Ltrim(cmd) => cmd.apply(dst).await,
+            Lrem(cmd) => cmd.apply(dst).await,
+            Linsert(cmd) => cmd.apply(dst).await,
             Eval(cmd) => cmd.apply(dst, false, db, lua).await,
             Evalsha(cmd) => cmd.apply(dst, true, db, lua).await,
             Script(cmd) => cmd.apply(dst, db).await,
@@ -749,6 +762,8 @@ impl Command {
             Command::Lindex(_) => "lindex",
             Command::Lset(_) => "lset",
             Command::Ltrim(_) => "ltrim",
+            Command::Lrem(_) => "lrem",
+            Command::Linsert(_) => "linsert",
             Command::Eval(_) => "eval",
             Command::Evalsha(_) => "evalsha",
             Command::Script(_) => "script",

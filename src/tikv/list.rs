@@ -5,6 +5,8 @@ use super::{
     encoding::{DataType, KeyDecoder},
     errors::AsyncResult,
 };
+use crate::cmd_linsert_length_limit_or_default;
+use crate::cmd_lrem_length_limit_or_default;
 use crate::metrics::REMOVED_EXPIRED_KEY_COUNTER;
 use crate::utils::{resp_array, resp_bulk, resp_err, resp_int, resp_nil, resp_ok};
 use crate::{utils::key_is_expired, Frame};
@@ -594,6 +596,12 @@ impl<'a> ListCommandCtx {
                                 return Err(REDIS_NO_SUCH_KEY_ERR);
                             }
 
+                            // check list length is not too long
+                            let limit_len = cmd_linsert_length_limit_or_default();
+                            if limit_len > 0 && right - left > limit_len as u64 {
+                                return Err(REDIS_LIST_TOO_LARGE_ERR);
+                            }
+
                             // get list items bound range
                             let bound_range =
                                 KEY_ENCODER.encode_txnkv_list_data_key_range(&key, version);
@@ -745,6 +753,12 @@ impl<'a> ListCommandCtx {
                             }
 
                             let len = right - left;
+
+                            // check list length is not too long
+                            let limit_len = cmd_lrem_length_limit_or_default();
+                            if limit_len > 0 && len > limit_len as u64 {
+                                return Err(REDIS_LIST_TOO_LARGE_ERR);
+                            }
 
                             // get list items bound range
                             let bound_range =

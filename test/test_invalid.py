@@ -123,6 +123,15 @@ class InvalidTest(unittest.TestCase):
     def test_ltrim(self):
         self.assertInvalid('ltrim', self.k1)
         self.assertInvalid('ltrim', self.k1, NaN, NaN)
+    
+    def test_lrem(self):
+        self.assertInvalid('lrem', self.k1, NaN, 'x')
+        self.assertInvalid('lrem', self.k1, 0, 'x', 'x')
+
+    def test_linsert(self):
+        self.assertInvalid('linsert', self.k1, 'invalid_op', 'x', 'x')
+        self.assertInvalid('linsert', self.k1, 'before', 'x')
+        self.assertInvalid('linsert', self.k1, 'before', 'x', 'x', 'x')
 
     # ================ set ================
     def test_sadd(self):

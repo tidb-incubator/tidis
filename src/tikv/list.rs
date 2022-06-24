@@ -399,8 +399,17 @@ impl<'a> ListCommandCtx {
                     return Ok(resp_array(vec![]));
                 }
 
-                let bound_range = KEY_ENCODER.encode_txnkv_list_data_key_range(key, version);
-                let iter = ss.scan(bound_range, u32::MAX).await?;
+                let real_left = r_left + left as i64;
+                let mut real_length = r_right - r_left + 1;
+                if real_length > llen {
+                    real_length = llen;
+                }
+
+                let data_key_start =
+                    KEY_ENCODER.encode_txnkv_list_data_key(key, real_left as u64, version);
+                let range: RangeFrom<Key> = data_key_start..;
+                let from_range: BoundRange = range.into();
+                let iter = ss.scan(from_range, real_length.try_into().unwrap()).await?;
 
                 let resp = iter.map(|kv| resp_bulk(kv.1)).collect();
                 Ok(resp_array(resp))

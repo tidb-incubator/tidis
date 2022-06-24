@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::cmd::Invalid;
 use crate::config::is_use_txn_api;
 use crate::config::LOGGER;
 use crate::tikv::errors::AsyncResult;
@@ -23,13 +24,6 @@ pub struct Mget {
 }
 
 impl Mget {
-    pub fn new_invalid() -> Mget {
-        Mget {
-            keys: vec![],
-            valid: false,
-        }
-    }
-
     /// Get the keys
     pub fn keys(&self) -> &Vec<String> {
         &self.keys
@@ -102,6 +96,15 @@ impl Default for Mget {
         Mget {
             keys: vec![],
             valid: true,
+        }
+    }
+}
+
+impl Invalid for Mget {
+    fn new_invalid() -> Mget {
+        Mget {
+            keys: vec![],
+            valid: false,
         }
     }
 }

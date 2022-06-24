@@ -1,3 +1,4 @@
+use crate::cmd::Invalid;
 use crate::config::LOGGER;
 use crate::db::Db;
 use crate::tikv::errors::AsyncResult;
@@ -41,17 +42,6 @@ impl Script {
             sha1_vec: vec![],
             is_exists,
             is_flush,
-            valid: true,
-        }
-    }
-
-    pub fn new_invalid() -> Script {
-        Script {
-            script: "".to_owned(),
-            is_load: false,
-            sha1_vec: vec![],
-            is_exists: false,
-            is_flush: false,
             valid: true,
         }
     }
@@ -126,5 +116,18 @@ impl Script {
             return Ok(resp_array(resp));
         }
         Ok(resp_ok())
+    }
+}
+
+impl Invalid for Script {
+    fn new_invalid() -> Script {
+        Script {
+            script: "".to_owned(),
+            is_load: false,
+            sha1_vec: vec![],
+            is_exists: false,
+            is_flush: false,
+            valid: true,
+        }
     }
 }

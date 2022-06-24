@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::cmd::Invalid;
 use crate::config::is_use_txn_api;
 use crate::config::LOGGER;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
@@ -37,10 +38,7 @@ impl Persist {
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Persist> {
         if argv.len() != 1 {
-            return Ok(Persist {
-                key: "".to_owned(),
-                valid: false,
-            });
+            return Ok(Persist::new_invalid());
         }
         Ok(Persist {
             key: argv[0].to_owned(),
@@ -74,6 +72,15 @@ impl Persist {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Persist {
+    fn new_invalid() -> Persist {
+        Persist {
+            key: "".to_owned(),
+            valid: false,
         }
     }
 }

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::list::ListCommandCtx;
@@ -28,15 +28,6 @@ impl Lset {
             idx,
             element: ele,
             valid: true,
-        }
-    }
-
-    pub fn new_invalid() -> Lset {
-        Lset {
-            key: "".to_owned(),
-            idx: 0,
-            element: Bytes::new(),
-            valid: false,
         }
     }
 
@@ -94,6 +85,17 @@ impl Lset {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Lset {
+    fn new_invalid() -> Lset {
+        Lset {
+            key: "".to_owned(),
+            idx: 0,
+            element: Bytes::new(),
+            valid: false,
         }
     }
 }

@@ -2,6 +2,9 @@ use crate::{Connection, Db, Frame, Parse};
 
 use bytes::Bytes;
 
+use super::Invalid;
+use crate::utils::resp_invalid_arguments;
+
 /// Posts a message to the given channel.
 ///
 /// Send a message into a channel without any knowledge of individual consumers.
@@ -16,6 +19,7 @@ pub struct Publish {
 
     /// The message to publish.
     message: Bytes,
+    valid: bool,
 }
 
 impl Publish {
@@ -25,6 +29,7 @@ impl Publish {
         Publish {
             channel: channel.to_string(),
             message,
+            valid: true,
         }
     }
 
@@ -58,7 +63,11 @@ impl Publish {
         // The `message` is arbitrary bytes.
         let message = parse.next_bytes()?;
 
-        Ok(Publish { channel, message })
+        Ok(Publish {
+            channel,
+            message,
+            valid: true,
+        })
     }
 
     /// Apply the `Publish` command to the specified `Db` instance.
@@ -66,6 +75,11 @@ impl Publish {
     /// The response is written to `dst`. This is called by the server in order
     /// to execute a received command.
     pub(crate) async fn apply(self, db: &Db, dst: &mut Connection) -> crate::Result<()> {
+        if !self.valid {
+            dst.write_frame(&resp_invalid_arguments()).await?;
+            return Ok(());
+        }
+
         // The shared state contains the `tokio::sync::broadcast::Sender` for
         // all active channels. Calling `db.publish` dispatches the message into
         // the appropriate channel.
@@ -99,5 +113,15 @@ impl Publish {
         frame.push_bulk(self.message);
 
         frame
+    }
+}
+
+impl Invalid for Publish {
+    fn new_invalid() -> Self {
+        Publish {
+            channel: "".to_string(),
+            message: Bytes::from(""),
+            valid: false,
+        }
     }
 }

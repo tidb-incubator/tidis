@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::set::SetCommandCtx;
@@ -74,6 +74,15 @@ impl Smembers {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Smembers {
+    fn new_invalid() -> Smembers {
+        Smembers {
+            key: "".to_owned(),
+            valid: false,
         }
     }
 }

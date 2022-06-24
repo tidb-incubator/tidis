@@ -5,12 +5,13 @@ use crate::db::Db;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::get_txn_client;
 use crate::tikv::lua::LuaCommandCtx;
-use crate::utils::resp_err;
+use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame, Parse};
 
 use mlua::Lua;
 use tokio::sync::Mutex;
 
+use crate::cmd::Invalid;
 use crate::config::LOGGER;
 use slog::debug;
 
@@ -20,6 +21,7 @@ pub struct Eval {
     numkeys: i64,
     keys: Vec<String>,
     args: Vec<String>,
+    valid: bool,
 }
 
 impl Eval {
@@ -29,6 +31,7 @@ impl Eval {
             numkeys,
             keys: vec![],
             args: vec![],
+            valid: true,
         }
     }
 
@@ -88,6 +91,10 @@ impl Eval {
     }
 
     async fn eval(&self, is_sha: bool, db: &Db, lua: &Option<Lua>) -> AsyncResult<Frame> {
+        if !self.valid {
+            return Ok(resp_invalid_arguments());
+        }
+
         if !is_use_txn_api() {
             return Ok(resp_err(REDIS_NOT_SUPPORTED_ERR));
         }
@@ -117,6 +124,18 @@ impl Eval {
                 txn.rollback().await?;
                 Ok(resp_err(e))
             }
+        }
+    }
+}
+
+impl Invalid for Eval {
+    fn new_invalid() -> Eval {
+        Eval {
+            script: "".to_owned(),
+            numkeys: 0,
+            keys: vec![],
+            args: vec![],
+            valid: false,
         }
     }
 }

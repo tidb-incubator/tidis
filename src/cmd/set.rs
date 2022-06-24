@@ -12,6 +12,8 @@ use std::sync::Arc;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
+use super::Invalid;
+
 /// Set `key` to hold the string `value`.
 ///
 /// If `key` already holds a value, it is overwritten, regardless of its type.
@@ -53,16 +55,6 @@ impl Set {
             expire,
             nx: None,
             valid: true,
-        }
-    }
-
-    pub fn new_invalid() -> Set {
-        Set {
-            key: "".to_owned(),
-            value: Bytes::new(),
-            expire: None,
-            nx: None,
-            valid: false,
         }
     }
 
@@ -202,11 +194,8 @@ impl Set {
     /// The response is written to `dst`. This is called by the server in order
     /// to execute a received command.
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
-        let response = match self.nx {
-            Some(_) => self.put_not_exists(None).await,
-            None => self.put(None).await,
-        }
-        .unwrap_or_else(Into::into);
+        let response = self.set(None).await?;
+
         debug!(
             LOGGER,
             "res, {} -> {}, {:?}",
@@ -255,6 +244,18 @@ impl Set {
             StringCommandCtx::new(txn)
                 .do_async_rawkv_put(&self.key, &self.value)
                 .await
+        }
+    }
+}
+
+impl Invalid for Set {
+    fn new_invalid() -> Set {
+        Set {
+            key: "".to_owned(),
+            value: Bytes::new(),
+            expire: None,
+            nx: None,
+            valid: false,
         }
     }
 }

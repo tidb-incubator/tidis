@@ -9,6 +9,7 @@ use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
+use crate::cmd::Invalid;
 use crate::config::is_use_txn_api;
 
 #[derive(Debug)]
@@ -22,13 +23,6 @@ impl Strlen {
         Strlen {
             key: key.to_string(),
             valid: true,
-        }
-    }
-
-    pub fn new_invalid() -> Strlen {
-        Strlen {
-            key: "".to_owned(),
-            valid: false,
         }
     }
 
@@ -79,6 +73,15 @@ impl Strlen {
             StringCommandCtx::new(None)
                 .do_async_rawkv_strlen(&self.key)
                 .await
+        }
+    }
+}
+
+impl Invalid for Strlen {
+    fn new_invalid() -> Strlen {
+        Strlen {
+            key: "".to_owned(),
+            valid: false,
         }
     }
 }

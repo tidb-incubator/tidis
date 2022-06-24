@@ -11,6 +11,8 @@ use tokio::sync::Mutex;
 
 use crate::config::is_use_txn_api;
 
+use super::Invalid;
+
 /// Get the value of key.
 ///
 /// If the key does not exist the special value nil is returned. An error is
@@ -29,13 +31,6 @@ impl Get {
         Get {
             key: key.to_string(),
             valid: true,
-        }
-    }
-
-    pub fn new_invalid() -> Get {
-        Get {
-            key: "".to_owned(),
-            valid: false,
         }
     }
 
@@ -115,6 +110,15 @@ impl Get {
             StringCommandCtx::new(txn)
                 .do_async_rawkv_get(&self.key)
                 .await
+        }
+    }
+}
+
+impl Invalid for Get {
+    fn new_invalid() -> Get {
+        Get {
+            key: "".to_owned(),
+            valid: false,
         }
     }
 }

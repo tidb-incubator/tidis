@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::cmd::Invalid;
 use crate::config::is_use_txn_api;
 use crate::config::LOGGER;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
@@ -23,14 +24,6 @@ impl Expire {
             key: key.to_string(),
             seconds,
             valid: true,
-        }
-    }
-
-    pub fn new_invalid() -> Expire {
-        Expire {
-            key: "".to_owned(),
-            seconds: 0,
-            valid: false,
         }
     }
 
@@ -110,6 +103,16 @@ impl Expire {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Expire {
+    fn new_invalid() -> Expire {
+        Expire {
+            key: "".to_owned(),
+            seconds: 0,
+            valid: false,
         }
     }
 }

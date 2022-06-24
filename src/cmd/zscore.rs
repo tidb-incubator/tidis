@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::zset::ZsetCommandCtx;
@@ -25,14 +25,6 @@ impl Zscore {
             key: key.to_string(),
             member: member.to_string(),
             valid: true,
-        }
-    }
-
-    pub fn new_invalid() -> Zscore {
-        Zscore {
-            key: "".to_string(),
-            member: "".to_string(),
-            valid: false,
         }
     }
 
@@ -78,6 +70,16 @@ impl Zscore {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Zscore {
+    fn new_invalid() -> Zscore {
+        Zscore {
+            key: "".to_string(),
+            member: "".to_string(),
+            valid: false,
         }
     }
 }

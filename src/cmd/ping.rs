@@ -1,4 +1,6 @@
+use crate::cmd::Invalid;
 use crate::config::LOGGER;
+use crate::utils::resp_invalid_arguments;
 use crate::{Connection, Frame, Parse, ParseError};
 use bytes::Bytes;
 use slog::debug;
@@ -8,16 +10,17 @@ use slog::debug;
 ///
 /// This command is often used to test if a connection
 /// is still alive, or to measure latency.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Ping {
     /// optional message to be returned
     msg: Option<String>,
+    valid: bool,
 }
 
 impl Ping {
     /// Create a new `Ping` command with optional `msg`.
     pub fn new(msg: Option<String>) -> Ping {
-        Ping { msg }
+        Ping { msg, valid: true }
     }
 
     /// Parse a `Ping` instance from a received frame.
@@ -53,6 +56,11 @@ impl Ping {
     /// The response is written to `dst`. This is called by the server in order
     /// to execute a received command.
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {
+        if !self.valid {
+            dst.write_frame(&resp_invalid_arguments()).await?;
+            return Ok(());
+        }
+
         let response = match self.msg {
             None => Frame::Simple("PONG".to_string()),
             Some(msg) => Frame::Bulk(Bytes::from(msg)),
@@ -70,5 +78,23 @@ impl Ping {
         dst.write_frame(&response).await?;
 
         Ok(())
+    }
+}
+
+impl Default for Ping {
+    fn default() -> Self {
+        Ping {
+            msg: None,
+            valid: true,
+        }
+    }
+}
+
+impl Invalid for Ping {
+    fn new_invalid() -> Ping {
+        Ping {
+            msg: None,
+            valid: false,
+        }
     }
 }

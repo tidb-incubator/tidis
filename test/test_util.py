@@ -3,6 +3,8 @@ import string
 import time
 from math import floor
 
+NaN = float('nan')
+
 
 def current_sec_ts():
     return int(floor(time.time()))

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::set::SetCommandCtx;
@@ -42,10 +42,7 @@ impl Scard {
 
     pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Scard> {
         if argv.len() != 1 {
-            return Ok(Scard {
-                key: "".to_owned(),
-                valid: false,
-            });
+            return Ok(Scard::new_invalid());
         }
         Ok(Scard::new(&argv[0]))
     }
@@ -74,6 +71,15 @@ impl Scard {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Scard {
+    fn new_invalid() -> Scard {
+        Scard {
+            key: "".to_owned(),
+            valid: false,
         }
     }
 }

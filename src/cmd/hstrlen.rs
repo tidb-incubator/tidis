@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::hash::HashCommandCtx;
@@ -81,6 +81,16 @@ impl Hstrlen {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Hstrlen {
+    fn new_invalid() -> Hstrlen {
+        Hstrlen {
+            field: "".to_owned(),
+            key: "".to_owned(),
+            valid: false,
         }
     }
 }

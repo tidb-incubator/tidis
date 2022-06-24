@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::list::ListCommandCtx;
@@ -27,15 +27,6 @@ impl Lrange {
             left,
             right,
             valid: true,
-        }
-    }
-
-    pub fn new_invalid() -> Lrange {
-        Lrange {
-            key: "".to_owned(),
-            left: 0,
-            right: 0,
-            valid: false,
         }
     }
 
@@ -97,6 +88,17 @@ impl Lrange {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Lrange {
+    fn new_invalid() -> Lrange {
+        Lrange {
+            key: "".to_owned(),
+            left: 0,
+            right: 0,
+            valid: false,
         }
     }
 }

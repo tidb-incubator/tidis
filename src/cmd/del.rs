@@ -10,6 +10,8 @@ use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
+use super::Invalid;
+
 #[derive(Debug)]
 pub struct Del {
     keys: Vec<String>,
@@ -84,6 +86,15 @@ impl Default for Del {
         Del {
             keys: vec![],
             valid: true,
+        }
+    }
+}
+
+impl Invalid for Del {
+    fn new_invalid() -> Self {
+        Del {
+            keys: vec![],
+            valid: false,
         }
     }
 }

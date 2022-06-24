@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::zset::ZsetCommandCtx;
@@ -41,18 +41,6 @@ impl Zrangebyscore {
             max_inclusive,
             withscores,
             valid: true,
-        }
-    }
-
-    pub fn new_invalid() -> Zrangebyscore {
-        Zrangebyscore {
-            key: "".to_string(),
-            min: 0f64,
-            min_inclusive: false,
-            max: 0f64,
-            max_inclusive: false,
-            withscores: false,
-            valid: false,
         }
     }
 
@@ -216,6 +204,20 @@ impl Zrangebyscore {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Zrangebyscore {
+    fn new_invalid() -> Zrangebyscore {
+        Zrangebyscore {
+            key: "".to_string(),
+            min: 0f64,
+            min_inclusive: false,
+            max: 0f64,
+            max_inclusive: false,
+            withscores: false,
+            valid: false,
         }
     }
 }

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::hash::HashCommandCtx;
@@ -20,14 +20,6 @@ pub struct Hset {
 }
 
 impl Hset {
-    pub fn new_invalid() -> Hset {
-        Hset {
-            field_and_value: vec![],
-            key: String::new(),
-            valid: false,
-        }
-    }
-
     /// Get the key
     pub fn key(&self) -> &str {
         &self.key
@@ -118,6 +110,16 @@ impl Default for Hset {
             field_and_value: vec![],
             key: String::new(),
             valid: true,
+        }
+    }
+}
+
+impl Invalid for Hset {
+    fn new_invalid() -> Hset {
+        Hset {
+            field_and_value: vec![],
+            key: String::new(),
+            valid: false,
         }
     }
 }

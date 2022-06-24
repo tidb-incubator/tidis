@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cmd::Parse;
+use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::set::SetCommandCtx;
@@ -25,14 +25,6 @@ impl Srandmember {
             key: key.to_string(),
             count,
             valid: true,
-        }
-    }
-
-    pub fn new_invalid() -> Srandmember {
-        Srandmember {
-            key: "".to_string(),
-            count: None,
-            valid: false,
         }
     }
 
@@ -105,6 +97,16 @@ impl Srandmember {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Srandmember {
+    fn new_invalid() -> Srandmember {
+        Srandmember {
+            key: "".to_string(),
+            count: None,
+            valid: false,
         }
     }
 }

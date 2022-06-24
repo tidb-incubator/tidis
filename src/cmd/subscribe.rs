@@ -1,6 +1,7 @@
-use crate::cmd::{Parse, ParseError, Unknown};
+use crate::cmd::{Invalid, Parse, ParseError, Unknown};
 use crate::{Command, Connection, Db, Frame, Shutdown};
 
+use crate::utils::resp_invalid_arguments;
 use bytes::Bytes;
 use std::pin::Pin;
 use tokio::select;
@@ -15,6 +16,7 @@ use tokio_stream::{Stream, StreamExt, StreamMap};
 #[derive(Debug)]
 pub struct Subscribe {
     channels: Vec<String>,
+    valid: bool,
 }
 
 /// Unsubscribes the client from one or more channels.
@@ -24,6 +26,7 @@ pub struct Subscribe {
 #[derive(Clone, Debug)]
 pub struct Unsubscribe {
     channels: Vec<String>,
+    valid: bool,
 }
 
 /// Stream of messages. The stream receives messages from the
@@ -38,6 +41,7 @@ impl Subscribe {
     pub(crate) fn new(channels: &[String]) -> Subscribe {
         Subscribe {
             channels: channels.to_vec(),
+            valid: true,
         }
     }
 
@@ -89,7 +93,10 @@ impl Subscribe {
             }
         }
 
-        Ok(Subscribe { channels })
+        Ok(Subscribe {
+            channels,
+            valid: true,
+        })
     }
 
     /// Apply the `Subscribe` command to the specified `Db` instance.
@@ -106,6 +113,11 @@ impl Subscribe {
         dst: &mut Connection,
         shutdown: &mut Shutdown,
     ) -> crate::Result<()> {
+        if !self.valid {
+            dst.write_frame(&resp_invalid_arguments()).await?;
+            return Ok(());
+        }
+
         // Each individual channel subscription is handled using a
         // `sync::broadcast` channel. Messages are then fanned out to all
         // clients currently subscribed to the channels.
@@ -288,6 +300,7 @@ impl Unsubscribe {
     pub(crate) fn new(channels: &[String]) -> Unsubscribe {
         Unsubscribe {
             channels: channels.to_vec(),
+            valid: true,
         }
     }
 
@@ -311,7 +324,7 @@ impl Unsubscribe {
     /// ```text
     /// UNSUBSCRIBE [channel [channel ...]]
     /// ```
-    pub(crate) fn parse_frames(parse: &mut Parse) -> Result<Unsubscribe, ParseError> {
+    pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Unsubscribe> {
         use ParseError::EndOfStream;
 
         // There may be no channels listed, so start with an empty vec.
@@ -330,11 +343,14 @@ impl Unsubscribe {
                 Err(EndOfStream) => break,
                 // All other errors are bubbled up, resulting in the connection
                 // being terminated.
-                Err(err) => return Err(err),
+                Err(_) => return Ok(Unsubscribe::new_invalid()),
             }
         }
 
-        Ok(Unsubscribe { channels })
+        Ok(Unsubscribe {
+            channels,
+            valid: true,
+        })
     }
 
     #[allow(dead_code)]
@@ -343,6 +359,10 @@ impl Unsubscribe {
     /// This is called by the client when encoding an `Unsubscribe` command to
     /// send to the server.
     pub(crate) fn into_frame(self) -> Frame {
+        if !self.valid {
+            return resp_invalid_arguments();
+        }
+
         let mut frame = Frame::array();
         frame.push_bulk(Bytes::from("unsubscribe".as_bytes()));
 
@@ -351,5 +371,23 @@ impl Unsubscribe {
         }
 
         frame
+    }
+}
+
+impl Invalid for Subscribe {
+    fn new_invalid() -> Subscribe {
+        Subscribe {
+            channels: vec![],
+            valid: false,
+        }
+    }
+}
+
+impl Invalid for Unsubscribe {
+    fn new_invalid() -> Unsubscribe {
+        Unsubscribe {
+            channels: vec![],
+            valid: false,
+        }
     }
 }

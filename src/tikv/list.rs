@@ -399,17 +399,8 @@ impl<'a> ListCommandCtx {
                     return Ok(resp_array(vec![]));
                 }
 
-                let real_left = r_left + left as i64;
-                let mut real_length = r_right - r_left + 1;
-                if real_length > llen {
-                    real_length = llen;
-                }
-
-                let data_key_start =
-                    KEY_ENCODER.encode_txnkv_list_data_key(key, real_left as u64, version);
-                let range: RangeFrom<Key> = data_key_start..;
-                let from_range: BoundRange = range.into();
-                let iter = ss.scan(from_range, real_length.try_into().unwrap()).await?;
+                let bound_range = KEY_ENCODER.encode_txnkv_list_data_key_range(key, version);
+                let iter = ss.scan(bound_range, u32::MAX).await?;
 
                 let resp = iter.map(|kv| resp_bulk(kv.1)).collect();
                 Ok(resp_array(resp))
@@ -584,7 +575,7 @@ impl<'a> ListCommandCtx {
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
                                 return Err(REDIS_WRONG_TYPE_ERR);
                             }
-                            let (ttl, version, left, right) =
+                            let (ttl, version, mut left, mut right) =
                                 KeyDecoder::decode_key_list_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
@@ -599,13 +590,12 @@ impl<'a> ListCommandCtx {
                                 KEY_ENCODER.encode_txnkv_list_data_key_range(&key, version);
 
                             // iter will only return the matched kvpair
-                            let mut iter =
-                                txn.scan(bound_range, u32::MAX).await?.take_while(|kv| {
-                                    if kv.1 == pivot.to_vec() {
-                                        return true;
-                                    }
-                                    false
-                                });
+                            let mut iter = txn.scan(bound_range, u32::MAX).await?.filter(|kv| {
+                                if kv.1 == pivot.to_vec() {
+                                    return true;
+                                }
+                                false
+                            });
 
                             // yeild the first matched kvpair
                             if let Some(kv) = iter.next() {
@@ -615,59 +605,79 @@ impl<'a> ListCommandCtx {
                                 // compare the pivot distance to left and right, choose the shorter one
                                 let from_left = idx - left < right - idx;
 
-                                let idx_op = if before_pivot { idx - 1 } else { idx + 1 };
+                                let idx_op;
                                 if from_left {
+                                    idx_op = if before_pivot { idx - 1 } else { idx };
                                     // move data key from left to left-1
                                     // move backwards for elements in idx [left, idx_op], add the new element to idx_op
-                                    let left_range = KEY_ENCODER
-                                        .encode_txnkv_list_data_key_idx_range(
-                                            &key, left, idx_op, version,
-                                        );
-                                    let iter = txn.scan(left_range, u32::MAX).await?;
+                                    if idx_op >= left {
+                                        let left_range = KEY_ENCODER
+                                            .encode_txnkv_list_data_key_idx_range(
+                                                &key, left, idx_op, version,
+                                            );
+                                        let iter = txn.scan(left_range, u32::MAX).await?;
 
-                                    for kv in iter {
-                                        let key_idx = KeyDecoder::decode_key_list_idx_from_datakey(
-                                            &key, kv.0,
-                                        );
-                                        let new_data_key = KEY_ENCODER.encode_txnkv_list_data_key(
-                                            &key,
-                                            key_idx - 1,
-                                            version,
-                                        );
-                                        txn.put(new_data_key, kv.1).await?;
+                                        for kv in iter {
+                                            let key_idx =
+                                                KeyDecoder::decode_key_list_idx_from_datakey(
+                                                    &key, kv.0,
+                                                );
+                                            let new_data_key = KEY_ENCODER
+                                                .encode_txnkv_list_data_key(
+                                                    &key,
+                                                    key_idx - 1,
+                                                    version,
+                                                );
+                                            txn.put(new_data_key, kv.1).await?;
+                                        }
                                     }
+
+                                    left -= 1;
                                 } else {
+                                    idx_op = if before_pivot { idx } else { idx + 1 };
                                     // move data key from right to right+1
                                     // move forwards for elements in idx [idx_op, right-1], add the new element to idx_op
-                                    let right_range = KEY_ENCODER
-                                        .encode_txnkv_list_data_key_idx_range(
-                                            &key,
-                                            idx_op,
-                                            right - 1,
-                                            version,
-                                        );
-                                    let iter = txn.scan(right_range, u32::MAX).await?;
+                                    // if idx_op == right, no need to move data key
+                                    if idx_op < right {
+                                        let right_range = KEY_ENCODER
+                                            .encode_txnkv_list_data_key_idx_range(
+                                                &key,
+                                                idx_op,
+                                                right - 1,
+                                                version,
+                                            );
+                                        let iter = txn.scan(right_range, u32::MAX).await?;
 
-                                    for kv in iter {
-                                        let key_idx = KeyDecoder::decode_key_list_idx_from_datakey(
-                                            &key, kv.0,
-                                        );
-                                        let new_data_key = KEY_ENCODER.encode_txnkv_list_data_key(
-                                            &key,
-                                            key_idx + 1,
-                                            version,
-                                        );
-                                        txn.put(new_data_key, kv.1).await?;
+                                        for kv in iter {
+                                            let key_idx =
+                                                KeyDecoder::decode_key_list_idx_from_datakey(
+                                                    &key, kv.0,
+                                                );
+                                            let new_data_key = KEY_ENCODER
+                                                .encode_txnkv_list_data_key(
+                                                    &key,
+                                                    key_idx + 1,
+                                                    version,
+                                                );
+                                            txn.put(new_data_key, kv.1).await?;
+                                        }
                                     }
 
-                                    // fill the pivot
-                                    let pivot_data_key = KEY_ENCODER
-                                        .encode_txnkv_list_data_key(&key, idx_op, version);
-                                    txn.put(pivot_data_key, element.to_vec()).await?;
+                                    right += 1;
                                 }
 
+                                // fill the pivot
+                                let pivot_data_key =
+                                    KEY_ENCODER.encode_txnkv_list_data_key(&key, idx_op, version);
+                                txn.put(pivot_data_key, element.to_vec()).await?;
+
+                                // update meta key
+                                let new_meta_value = KEY_ENCODER
+                                    .encode_txnkv_list_meta_value(ttl, version, left, right);
+                                txn.put(meta_key, new_meta_value).await?;
+
                                 let len = (right - left) as i64;
-                                Ok(len + 1)
+                                Ok(len)
                             } else {
                                 // no matched pivot, ignore
                                 Ok(-1)
@@ -725,7 +735,7 @@ impl<'a> ListCommandCtx {
                                 return Err(REDIS_NO_SUCH_KEY_ERR);
                             }
 
-                            let _len = right - left;
+                            let len = right - left;
 
                             // get list items bound range
                             let bound_range =
@@ -733,14 +743,12 @@ impl<'a> ListCommandCtx {
 
                             // iter will only return the matched kvpair
                             let iter =
-                                txn.scan(bound_range.clone(), u32::MAX)
-                                    .await?
-                                    .take_while(|kv| {
-                                        if kv.1 == ele.to_vec() {
-                                            return true;
-                                        }
-                                        false
-                                    });
+                                txn.scan(bound_range.clone(), u32::MAX).await?.filter(|kv| {
+                                    if kv.1 == ele.to_vec() {
+                                        return true;
+                                    }
+                                    false
+                                });
 
                             // hole saves the elements to be removed in order
                             let hole: Vec<u64> = iter
@@ -761,7 +769,10 @@ impl<'a> ListCommandCtx {
                                     &key,
                                     kv.0.clone(),
                                 );
-                                if hole.is_empty() || (count > 0 && removed_count == count) {
+                                if hole.is_empty()
+                                    || (count > 0 && removed_count == count)
+                                    || removed_count == hole.len()
+                                {
                                     break;
                                 }
 
@@ -783,6 +794,18 @@ impl<'a> ListCommandCtx {
                                 }
                             }
 
+                            // update meta key or delete it if no element left
+                            if len == removed_count as u64 {
+                                txn.delete(meta_key).await?;
+                            } else {
+                                let new_meta_value = KEY_ENCODER.encode_txnkv_list_meta_value(
+                                    ttl,
+                                    version,
+                                    left,
+                                    right - removed_count as u64,
+                                );
+                                txn.put(meta_key, new_meta_value).await?;
+                            }
                             Ok(removed_count as i64)
                         }
                         None => {

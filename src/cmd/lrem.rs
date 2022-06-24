@@ -13,6 +13,8 @@ use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
+use super::Invalid;
+
 #[derive(Debug)]
 pub struct Lrem {
     key: String,
@@ -28,15 +30,6 @@ impl Lrem {
             count,
             element,
             valid: true,
-        }
-    }
-
-    pub fn new_invalid() -> Lrem {
-        Lrem {
-            key: "".to_owned(),
-            count: 0,
-            element: Bytes::new(),
-            valid: false,
         }
     }
 
@@ -92,6 +85,17 @@ impl Lrem {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Lrem {
+    fn new_invalid() -> Lrem {
+        Lrem {
+            key: "".to_owned(),
+            count: 0,
+            element: Bytes::new(),
+            valid: false,
         }
     }
 }

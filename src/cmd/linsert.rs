@@ -13,6 +13,8 @@ use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
+use super::Invalid;
+
 #[derive(Debug)]
 pub struct Linsert {
     key: String,
@@ -30,16 +32,6 @@ impl Linsert {
             pivot,
             element,
             valid: true,
-        }
-    }
-
-    pub fn new_invalid() -> Linsert {
-        Linsert {
-            key: "".to_owned(),
-            before_pivot: false,
-            pivot: Bytes::new(),
-            element: Bytes::new(),
-            valid: false,
         }
     }
 
@@ -107,6 +99,18 @@ impl Linsert {
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
+        }
+    }
+}
+
+impl Invalid for Linsert {
+    fn new_invalid() -> Linsert {
+        Linsert {
+            key: "".to_owned(),
+            before_pivot: false,
+            pivot: Bytes::new(),
+            element: Bytes::new(),
+            valid: false,
         }
     }
 }

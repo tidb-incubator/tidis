@@ -276,6 +276,41 @@ class LuaTest(unittest.TestCase):
         self.assertEqual(100, self.execute_eval('llen', self.k1))
         self.assertListEqual([str(i) for i in range(0, 100)], self.execute_eval('lrange', self.k1, 0, -1))
 
+    def test_lrem(self):
+        for i in range(50):
+            for j in range(i):
+                self.assertTrue(self.execute_eval('rpush', self.k1, str(i)))
+        self.assertEqual(1225, self.execute_eval('llen', self.k1))
+        # remove all the same elements
+        self.assertEqual(self.execute_eval('lrem', self.k1, 0, 10), 10)
+        # remove same elements at most 5 times
+        self.assertEqual(self.execute_eval('lrem', self.k1, 5, 11), 5)
+        # remove not exists elements
+        self.assertEqual(self.execute_eval('lrem', self.k1, 0, 100), 0)
+
+    def test_linsert(self):
+        for i in range(100):
+            self.assertTrue(self.execute_eval('rpush', self.k1, str(i)))
+        llen = self.execute_eval('llen', self.k1)
+        # test insert before the first element
+        self.assertEqual(self.execute_eval('linsert', self.k1, 'before', '0', 'hello1'), llen+1)
+        self.assertListEqual(self.execute_eval('lrange', self.k1, 0, -1), ['hello1'] + [str(i) for i in range(0, 100)])
+        # test insert after the first element
+        self.assertEqual(self.execute_eval('linsert', self.k1, 'after', 'hello1', 'hello2'), llen+2)
+        self.assertListEqual(self.execute_eval('lrange', self.k1, 0, -1), ['hello1', 'hello2'] + [str(i) for i in range(0, 100)])
+        # test insert in the middle
+        self.assertEqual(self.execute_eval('linsert', self.k1, 'before', '50', 'hello3'), llen+3)
+        self.assertListEqual(self.execute_eval('lrange', self.k1, 0 ,-1), ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3'] + [str(i) for i in range(50, 100)])
+        self.assertEqual(self.execute_eval('linsert', self.k1, 'after', '50', 'hello4'), llen+4)
+        self.assertListEqual(self.execute_eval('lrange', self.k1, 0, -1), ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3', '50', 'hello4'] + [str(i) for i in range(51, 100)])
+        # test insert before the last element
+        self.assertEqual(self.execute_eval('linsert', self.k1, 'before', '99', 'hello5'), llen+5)
+        self.assertListEqual(self.execute_eval('lrange', self.k1, 0, -1), ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3', '50', 'hello4'] + [str(i) for i in range(51, 99)] + ['hello5', '99'])
+        # test insert after the last element
+        self.assertEqual(self.execute_eval('linsert', self.k1, 'after', '99', 'hello6'), llen+6)
+        self.assertListEqual(self.execute_eval('lrange', self.k1, 0, -1), ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3', '50', 'hello4'] + [str(i) for i in range(51, 99)] + ['hello5', '99', 'hello6'])
+
+
     # ================ set ================
     def test_sadd(self):
         for i in range(200):

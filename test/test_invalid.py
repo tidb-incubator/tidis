@@ -1,7 +1,8 @@
+import random
 import unittest
 
 from rediswrap import RedisWrapper
-from test_util import NaN
+from test_util import NaN, random_string
 
 
 class InvalidTest(unittest.TestCase):
@@ -206,10 +207,11 @@ class InvalidTest(unittest.TestCase):
         self.assertInvalid('expireat', self.k1, NaN)
 
     def test_unknown(self):
+        arbitrary_unknown = "unknown_" + random_string(random.randint(3, 6)).lower()
         with self.assertRaises(Exception) as cm:
-            self.r.execute_command("arbitrary_unknown")
+            self.r.execute_command(arbitrary_unknown)
         err = cm.exception
-        self.assertEqual(str(err), "unknown command 'arbitrary_unknown'")
+        self.assertEqual(str(err), "unknown command '{}'".format(arbitrary_unknown))
 
     def tearDown(self):
         pass

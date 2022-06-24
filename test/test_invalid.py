@@ -1,6 +1,7 @@
 import unittest
 
 from rediswrap import RedisWrapper
+from test_util import NaN
 
 
 class InvalidTest(unittest.TestCase):
@@ -44,21 +45,25 @@ class InvalidTest(unittest.TestCase):
 
     def test_incrby(self):
         self.assertInvalid('incrby', self.k1, self.v1, self.v2)
+        self.assertInvalid('incrby', self.k1, self.v1, NaN)
 
     def test_decr(self):
         self.assertInvalid('decr')
 
     def test_decrby(self):
         self.assertInvalid('decrby', self.k1, self.v1, self.v2)
+        self.assertInvalid('decrby', self.k1, self.v1, NaN)
 
     def test_strlen(self):
         self.assertInvalid('strlen', self.k1, self.v1)
 
     # ================ hash ================
     def test_hget_hset(self):
+        self.assertInvalid('hget', self.k1, self.f1, self.v1)
         self.assertInvalid('hset', self.k1, self.f1)
 
     def test_hmget_hmset(self):
+        self.assertInvalid('hmget')
         self.assertInvalid('hmset', self.k1, self.f1)
 
     def test_hexists(self):
@@ -81,6 +86,7 @@ class InvalidTest(unittest.TestCase):
 
     def test_hincrby(self):
         self.assertInvalid('hincrby', self.k1, self.v1, self.v2)
+        self.assertInvalid('hincrby', self.k1, self.f1, NaN)
 
     def test_hdel(self):
         self.assertInvalid('hdel')
@@ -103,15 +109,19 @@ class InvalidTest(unittest.TestCase):
 
     def test_lindex(self):
         self.assertInvalid('lindex', self.k1)
+        self.assertInvalid('lindex', self.k1, NaN)
 
     def test_lrange(self):
         self.assertInvalid('lrange', self.k1)
+        self.assertInvalid('lrange', self.k1, NaN, NaN)
 
     def test_lset(self):
         self.assertInvalid('lset', self.k1)
+        self.assertInvalid('lset', self.k1, NaN, self.v1)
 
     def test_ltrim(self):
         self.assertInvalid('ltrim', self.k1)
+        self.assertInvalid('ltrim', self.k1, NaN, NaN)
 
     # ================ set ================
     def test_sadd(self):
@@ -181,15 +191,25 @@ class InvalidTest(unittest.TestCase):
 
     def test_pexpire(self):
         self.assertInvalid('pexpire', self.k1, self.v1, self.v2)
+        self.assertInvalid('pexpire', self.k1, NaN)
 
     def test_pexpireat(self):
         self.assertInvalid('pexpireat', self.k1, self.v1, self.v2)
+        self.assertInvalid('pexpireat', self.k1, NaN)
 
     def test_expire(self):
         self.assertInvalid('expire', self.k1, self.v1, self.v2)
+        self.assertInvalid('expire', self.k1, NaN)
 
     def test_expireat(self):
         self.assertInvalid('expireat', self.k1, self.v1, self.v2)
+        self.assertInvalid('expireat', self.k1, NaN)
+
+    def test_unknown(self):
+        with self.assertRaises(Exception) as cm:
+            self.r.execute_command("arbitrary_unknown")
+        err = cm.exception
+        self.assertEqual(str(err), "unknown command 'arbitrary_unknown'")
 
     def tearDown(self):
         pass

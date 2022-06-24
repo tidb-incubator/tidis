@@ -64,6 +64,9 @@ struct Backend {
     txn_region_backoff_delay_attemps: Option<u32>,
     txn_lock_backoff_delay_ms: Option<u64>,
     txn_lock_backoff_delay_attemps: Option<u32>,
+
+    cmd_lrem_length_limit: Option<u32>,
+    cmd_linsert_length_limit: Option<u32>,
 }
 
 // Config
@@ -444,4 +447,28 @@ pub fn txn_lock_backoff_delay_attemps() -> u32 {
         }
     }
     2
+}
+
+pub fn cmd_lrem_length_limit_or_default() -> u32 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.cmd_lrem_length_limit {
+                return b;
+            }
+        }
+    }
+    // default lrem length no limit
+    0
+}
+
+pub fn cmd_linsert_length_limit_or_default() -> u32 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.cmd_linsert_length_limit {
+                return b;
+            }
+        }
+    }
+    // default linsert length no limit
+    0
 }

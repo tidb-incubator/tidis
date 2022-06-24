@@ -431,10 +431,14 @@ impl Command {
             "lset" => Command::Lset(transform_parse(Lset::parse_frames(&mut parse), &mut parse)),
             "ltrim" => Command::Ltrim(transform_parse(Ltrim::parse_frames(&mut parse), &mut parse)),
             "lrem" => Command::Lrem(transform_parse(Lrem::parse_frames(&mut parse), &mut parse)),
-            "linsert" => Command::Linsert(transform_parse(Linsert::parse_frames(&mut parse), &mut parse)),
+            "linsert" => Command::Linsert(transform_parse(
+                Linsert::parse_frames(&mut parse),
+                &mut parse,
+            )),
             "eval" => Command::Eval(transform_parse(Eval::parse_frames(&mut parse), &mut parse)),
             "evalsha" => {
                 Command::Evalsha(transform_parse(Eval::parse_frames(&mut parse), &mut parse))
+            }
             "script" => Command::Script(transform_parse(
                 Script::parse_frames(&mut parse),
                 &mut parse,

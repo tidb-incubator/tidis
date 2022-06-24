@@ -115,6 +115,8 @@ impl<'a> LuaCommandCtx<'a> {
                     Command::Lindex(cmd) => cmd.lindex(txn_rc.clone()).await,
                     Command::Lset(cmd) => cmd.lset(txn_rc.clone()).await,
                     Command::Ltrim(cmd) => cmd.ltrim(txn_rc.clone()).await,
+                    Command::Lrem(cmd) => cmd.lrem(txn_rc.clone()).await,
+                    Command::Linsert(cmd) => cmd.linsert(txn_rc.clone()).await,
                     Command::Sadd(cmd) => cmd.sadd(txn_rc.clone()).await,
                     Command::Scard(cmd) => cmd.scard(txn_rc.clone()).await,
                     Command::Sismember(cmd) => cmd.sismember(txn_rc.clone()).await,

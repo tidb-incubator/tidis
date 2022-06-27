@@ -593,7 +593,7 @@ impl<'a> ListCommandCtx {
                                 self.clone()
                                     .do_async_txnkv_list_expire_if_needed(&key)
                                     .await?;
-                                return Err(REDIS_NO_SUCH_KEY_ERR);
+                                return Ok(0);
                             }
 
                             // check list length is not too long
@@ -749,7 +749,7 @@ impl<'a> ListCommandCtx {
                                 self.clone()
                                     .do_async_txnkv_list_expire_if_needed(&key)
                                     .await?;
-                                return Err(REDIS_NO_SUCH_KEY_ERR);
+                                return Ok(0);
                             }
 
                             let len = right - left;

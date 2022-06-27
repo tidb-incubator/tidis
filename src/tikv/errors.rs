@@ -76,5 +76,4 @@ pub const REDIS_LUA_PANIC: RTError = RTError::String("ERR lua panic");
 pub const REDIS_UNKNOWN_SUBCOMMAND: RTError =
     RTError::String("Unknown subcommand or wrong number of arguments");
 pub const DECREMENT_OVERFLOW: RTError = RTError::String("Decrement would overflow");
-pub const REDIS_LIST_TOO_LARGE_ERR: RTError =
-    RTError::String("ERR list is too large to allow execute cmd");
+pub const REDIS_LIST_TOO_LARGE_ERR: RTError = RTError::String("ERR list is too large to execute");

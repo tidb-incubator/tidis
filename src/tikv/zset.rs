@@ -742,6 +742,102 @@ impl ZsetCommandCtx {
         }
     }
 
+    pub async fn do_async_txnkv_zincrby(
+        self,
+        key: &str,
+        step: f64,
+        member: &str,
+    ) -> AsyncResult<Frame> {
+        if step.is_nan() {
+            return Ok(resp_err(REDIS_VALUE_IS_NOT_VALID_FLOAT_ERR));
+        }
+
+        let key = key.to_owned();
+        let member = member.to_owned();
+        let mut client = get_txn_client()?;
+        let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
+
+        let resp = client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    let prev_score;
+                    let data_key;
+                    let mut txn = txn_rc.lock().await;
+                    match txn.get(meta_key.clone()).await? {
+                        Some(meta_value) => {
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Zset) {
+                                return Err(REDIS_WRONG_TYPE_ERR);
+                            }
+
+                            let mut expired = false;
+
+                            let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
+                            if key_is_expired(ttl) {
+                                drop(txn);
+                                self.do_async_txnkv_zset_expire_if_needed(&key).await?;
+                                expired = true;
+                                txn = txn_rc.lock().await;
+                            }
+
+                            data_key =
+                                KEY_ENCODER.encode_txnkv_zset_data_key(&key, &member, version);
+
+                            match txn.get(data_key.clone()).await? {
+                                Some(data_value) => {
+                                    prev_score =
+                                        KeyDecoder::decode_key_zset_data_value(&data_value);
+                                    let prev_score_key = KEY_ENCODER.encode_txnkv_zset_score_key(
+                                        &key, prev_score, &member, version,
+                                    );
+                                    txn.delete(prev_score_key).await?;
+                                }
+                                None => {
+                                    prev_score = 0f64;
+
+                                    // add meta key if key expired above
+                                    if expired {
+                                        let new_meta_value =
+                                            KEY_ENCODER.encode_txnkv_zset_meta_value(ttl, 0, 0);
+                                        txn.put(meta_key, new_meta_value).await?;
+                                    }
+                                }
+                            }
+                        }
+                        None => {
+                            prev_score = 0f64;
+
+                            let meta_value = KEY_ENCODER.encode_txnkv_zset_meta_value(0, 0, 0);
+                            txn.put(meta_key, meta_value).await?;
+                            data_key = KEY_ENCODER.encode_txnkv_zset_data_key(&key, &member, 0);
+                            let sub_meta_key = KEY_ENCODER.encode_txnkv_sub_meta_key(
+                                &key,
+                                0,
+                                gen_next_meta_index(),
+                            );
+                            txn.put(sub_meta_key, 1_i64.to_be_bytes().to_vec()).await?;
+                        }
+                    }
+
+                    let new_score = prev_score + step;
+                    let score_key =
+                        KEY_ENCODER.encode_txnkv_zset_score_key(&key, new_score, &member, 0);
+                    // add data key and score key
+                    let data_value = KEY_ENCODER.encode_txnkv_zset_data_value(new_score);
+                    txn.put(data_key, data_value).await?;
+                    txn.put(score_key, member).await?;
+
+                    Ok(new_score)
+                }
+                .boxed()
+            })
+            .await;
+
+        match resp {
+            Ok(new_score) => Ok(resp_bulk(new_score.to_string().as_bytes().to_vec())),
+            Err(e) => Ok(resp_err(e)),
+        }
+    }
+
     pub async fn do_async_txnkv_zrem(
         mut self,
         key: &str,

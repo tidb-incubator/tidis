@@ -21,11 +21,14 @@ class InvalidTest(unittest.TestCase):
         self.r.execute_command('del', self.k1)
         pass
 
-    def assertInvalid(self, cmd, *args):
+    def assertError(self, err_str, cmd, *args):
         with self.assertRaises(Exception) as cm:
             self.r.execute_command(cmd, *args)
         err = cm.exception
-        self.assertEqual(str(err), 'Invalid arguments')
+        self.assertEqual(str(err), err_str)
+
+    def assertInvalid(self, cmd, *args):
+        self.assertError('Invalid arguments', cmd, *args)
 
     # # ================ string ================
     def test_set_get(self):
@@ -186,6 +189,11 @@ class InvalidTest(unittest.TestCase):
     def test_zpopmin(self):
         self.assertInvalid('zpopmin', self.k1, self.v1, self.v2)
 
+    def test_zincrby(self):
+        self.assertInvalid('zincrby', self.k1, self.v1)
+        self.assertInvalid('zincrby', self.k1, self.v1, self.f1)
+        self.assertError('value is not a valid float', 'zincrby', self.k1, NaN, self.f1)
+
     # ================ generic ================
     def test_persist(self):
         self.assertInvalid('persist', self.k1, self.v1, self.v2)
@@ -208,10 +216,7 @@ class InvalidTest(unittest.TestCase):
 
     def test_unknown(self):
         arbitrary_unknown = "unknown_" + random_string(random.randint(3, 6)).lower()
-        with self.assertRaises(Exception) as cm:
-            self.r.execute_command(arbitrary_unknown)
-        err = cm.exception
-        self.assertEqual(str(err), "unknown command '{}'".format(arbitrary_unknown))
+        self.assertError("unknown command '{}'".format(arbitrary_unknown), arbitrary_unknown)
 
     def tearDown(self):
         pass

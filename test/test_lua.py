@@ -422,7 +422,8 @@ class LuaTest(unittest.TestCase):
     def test_zrevrangebyscore(self):
         for i in range(100):
             self.assertEqual(self.execute_eval('zadd', self.k1, 100 - i, str(i)), 1)
-        self.assertListEqual(self.execute_eval('zrevrangebyscore', self.k1, '+inf', '-inf'), [str(i) for i in range(100)])
+        self.assertListEqual(self.execute_eval('zrevrangebyscore', self.k1, '+inf', '-inf'),
+                             [str(i) for i in range(100)])
         self.assertListEqual(self.execute_eval('zrevrangebyscore', self.k1, -1, 0), [])
 
     def test_zremrangebyscore(self):
@@ -463,6 +464,17 @@ class LuaTest(unittest.TestCase):
     def test_zpopmin(self):
         self.assertEqual(self.execute_eval('zadd', self.k1, 1, self.v1, 2, self.v2), 2)
         self.assertListEqual(self.execute_eval('zpopmin', self.k1), [self.v1, '1'])
+
+    def test_zincrby(self):
+        self.assertEqual(self.execute_eval('zadd', self.k1, 1, self.v1, 2, self.v2), 2)
+        self.assertListEqual(self.execute_eval('zrange', self.k1, 0, -1, 'withscores'), [self.v1, '1', self.v2, '2'])
+        self.assertEqual(self.execute_eval('zincrby', self.k1, 2, self.v1), '3')
+        self.assertListEqual(self.execute_eval('zrange', self.k1, 0, -1, 'withscores'), [self.v2, '2', self.v1, '3'])
+        self.assertEqual(self.execute_eval('zscore', self.k1, self.v1), '3')
+
+        self.assertEqual(self.execute_eval('zincrby', self.k1, -1.2, self.v1), '1.8')
+        self.assertListEqual(self.execute_eval('zrange', self.k1, 0, -1, 'withscores'), [self.v1, '1.8', self.v2, '2'])
+        self.assertEqual(self.execute_eval('zscore', self.k1, self.v1), '1.8')
 
     # ================ generic ================
 

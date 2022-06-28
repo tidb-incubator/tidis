@@ -743,7 +743,7 @@ impl ZsetCommandCtx {
     }
 
     pub async fn do_async_txnkv_zincrby(
-        self,
+        mut self,
         key: &str,
         step: f64,
         member: &str,
@@ -760,6 +760,10 @@ impl ZsetCommandCtx {
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
                 async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
+
                     let prev_score;
                     let data_key;
                     let mut txn = txn_rc.lock().await;

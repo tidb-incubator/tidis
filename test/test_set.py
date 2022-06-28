@@ -3,7 +3,7 @@ import time
 import unittest
 
 from rediswrap import RedisWrapper
-from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs
+from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs, NOT_EXISTS_LITERAL
 
 
 class SetTest(unittest.TestCase):
@@ -55,7 +55,8 @@ class SetTest(unittest.TestCase):
 
         self.assertEqual(self.r.sadd(self.k1, self.v1), 1)
         self.assertEqual(self.r.sadd(self.k1, self.v2), 1)
-        self.assertListEqual(self.r.execute_command('smismember', self.k1, self.v1, self.v2, 'not_exist'), [1, 1, 0])
+        self.assertListEqual(self.r.execute_command('smismember', self.k1, self.v1, self.v2, NOT_EXISTS_LITERAL),
+                             [1, 1, 0])
 
     def test_smembers(self):
         for i in range(200):

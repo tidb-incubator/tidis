@@ -798,6 +798,28 @@ impl ZsetCommandCtx {
                                 None => {
                                     prev_score = 0f64;
 
+                                    let sub_meta_key = KEY_ENCODER.encode_txnkv_sub_meta_key(
+                                        &key,
+                                        version,
+                                        gen_next_meta_index(),
+                                    );
+                                    let new_sub_meta_value = txn
+                                        .get_for_update(sub_meta_key.clone())
+                                        .await?
+                                        .map_or_else(
+                                            || 1_i64,
+                                            |v| {
+                                                let old_sub_meta_value =
+                                                    i64::from_be_bytes(v.try_into().unwrap());
+                                                old_sub_meta_value + 1_i64
+                                            },
+                                        );
+                                    txn.put(
+                                        sub_meta_key,
+                                        new_sub_meta_value.to_be_bytes().to_vec(),
+                                    )
+                                    .await?;
+
                                     // add meta key if key expired above
                                     if expired {
                                         let new_meta_value =

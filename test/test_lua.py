@@ -5,7 +5,7 @@ import unittest
 from functools import reduce
 
 from rediswrap import RedisWrapper
-from test_util import msec_ts_after_five_secs, sec_ts_after_five_secs
+from test_util import msec_ts_after_five_secs, sec_ts_after_five_secs, NOT_EXISTS_LITERAL
 
 
 class LuaTest(unittest.TestCase):
@@ -87,7 +87,7 @@ class LuaTest(unittest.TestCase):
 
         self.assertFalse(self.execute_eval('exists', self.k2))
         self.assertTrue(self.execute_eval('set', self.k2, self.v2))
-        self.assertEqual(self.execute_eval('exists', self.k1, self.k2, 'not_exists'), 2)
+        self.assertEqual(self.execute_eval('exists', self.k1, self.k2, NOT_EXISTS_LITERAL), 2)
 
     def test_incr(self):
         self.assertEqual(self.execute_eval("incr", self.k1), 1)
@@ -308,7 +308,7 @@ class LuaTest(unittest.TestCase):
 
         self.assertEqual(self.execute_eval('sadd', self.k1, self.v1), 1)
         self.assertEqual(self.execute_eval('sadd', self.k1, self.v2), 1)
-        self.assertListEqual(self.execute_eval('smismember', self.k1, self.v1, self.v2, 'not_exist'), [1, 1, 0])
+        self.assertListEqual(self.execute_eval('smismember', self.k1, self.v1, self.v2, NOT_EXISTS_LITERAL), [1, 1, 0])
 
     def test_smembers(self):
         for i in range(200):
@@ -475,6 +475,11 @@ class LuaTest(unittest.TestCase):
         self.assertEqual(self.execute_eval('zincrby', self.k1, -1.2, self.v1), '1.8')
         self.assertListEqual(self.execute_eval('zrange', self.k1, 0, -1, 'withscores'), [self.v1, '1.8', self.v2, '2'])
         self.assertEqual(self.execute_eval('zscore', self.k1, self.v1), '1.8')
+
+        self.assertEqual(self.execute_eval('zincrby', self.k1, 1.5, NOT_EXISTS_LITERAL), '1.5')
+        self.assertListEqual(self.execute_eval('zrange', self.k1, 0, -1, 'withscores'),
+                             [NOT_EXISTS_LITERAL, '1.5', self.v1, '1.8', self.v2, '2'])
+        self.assertEqual(self.execute_eval('zscore', self.k1, NOT_EXISTS_LITERAL), '1.5')
 
     # ================ generic ================
 

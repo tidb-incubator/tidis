@@ -2,7 +2,7 @@ import time
 import unittest
 
 from rediswrap import RedisWrapper
-from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs
+from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs, NOT_EXISTS_LITERAL
 
 
 class StringTest(unittest.TestCase):
@@ -90,7 +90,7 @@ class StringTest(unittest.TestCase):
 
         self.assertFalse(self.r.exists(self.k2))
         self.assertTrue(self.r.set(self.k2, self.v2))
-        self.assertEqual(self.r.exists(self.k1, self.k2, 'not_exists'), 2)
+        self.assertEqual(self.r.exists(self.k1, self.k2, NOT_EXISTS_LITERAL), 2)
 
     def test_incr(self):
         # incr a new key
@@ -179,7 +179,6 @@ class StringTest(unittest.TestCase):
         # persis the key
         self.assertEqual(self.r.persist(self.k1), 1)
         self.assertEqual(self.r.execute_command('pttl', self.k1), -1)
-
 
     def test_pexpire(self):
         self.assertTrue(self.r.set(self.k1, self.v1))

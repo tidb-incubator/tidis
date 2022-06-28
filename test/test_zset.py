@@ -2,7 +2,7 @@ import time
 import unittest
 
 from rediswrap import RedisWrapper
-from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs
+from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs, NOT_EXISTS_LITERAL
 
 
 class ZsetTest(unittest.TestCase):
@@ -85,7 +85,8 @@ class ZsetTest(unittest.TestCase):
     def test_zrangebyscore(self):
         for i in range(100):
             self.assertEqual(self.r.zadd(self.k1, {str(i): 100 - i}), 1)
-        self.assertListEqual(self.r.zrangebyscore(self.k1, '-inf', '+inf'), list(reversed([str(i) for i in range(100)])))
+        self.assertListEqual(self.r.zrangebyscore(self.k1, '-inf', '+inf'),
+                             list(reversed([str(i) for i in range(100)])))
         self.assertListEqual(self.r.zrangebyscore(self.k1, '0', '-1'), [])
 
     def test_zrevrangebyscore(self):
@@ -133,6 +134,22 @@ class ZsetTest(unittest.TestCase):
     def test_zpopmin(self):
         self.assertEqual(self.r.zadd(self.k1, {self.v1: 1, self.v2: 2}), 2)
         self.assertListEqual(self.r.zpopmin(self.k1), [(self.v1, 1)])
+
+    def test_zincrby(self):
+        self.assertEqual(self.r.zadd(self.k1, {self.v1: 1, self.v2: 2}), 2)
+        self.assertListEqual(self.r.zrange(self.k1, 0, -1, False, True), [(self.v1, 1), (self.v2, 2)])
+        self.assertEqual(self.r.zincrby(self.k1, 2, self.v1), 3)
+        self.assertListEqual(self.r.zrange(self.k1, 0, -1, False, True), [(self.v2, 2), (self.v1, 3)])
+        self.assertEqual(self.r.zscore(self.k1, self.v1), 3)
+
+        self.assertEqual(self.r.zincrby(self.k1, -1.2, self.v1), 1.8)
+        self.assertListEqual(self.r.zrange(self.k1, 0, -1, False, True), [(self.v1, 1.8), (self.v2, 2)])
+        self.assertEqual(self.r.zscore(self.k1, self.v1), 1.8)
+
+        self.assertEqual(self.r.zincrby(self.k1, 1.5, NOT_EXISTS_LITERAL), 1.5)
+        self.assertListEqual(self.r.zrange(self.k1, 0, -1, False, True),
+                             [(NOT_EXISTS_LITERAL, 1.5), (self.v1, 1.8), (self.v2, 2)])
+        self.assertEqual(self.r.zscore(self.k1, NOT_EXISTS_LITERAL), 1.5)
 
     def test_del(self):
         self.assertTrue(self.r.zadd(self.k1, {self.v1: 1}), 1)
@@ -211,4 +228,3 @@ class ZsetTest(unittest.TestCase):
         cls.r.execute_command('del', cls.k1)
         cls.r.execute_command('del', cls.k2)
         print('test data cleaned up')
-

@@ -4,6 +4,7 @@ import time
 from math import floor
 
 NaN = float('nan')
+NOT_EXISTS_LITERAL = "__not_exists__"
 
 
 def current_sec_ts():

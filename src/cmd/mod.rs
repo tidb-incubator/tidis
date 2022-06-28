@@ -168,6 +168,9 @@ pub use zpop::Zpop;
 mod zrank;
 pub use zrank::Zrank;
 
+mod zincrby;
+pub use zincrby::Zincrby;
+
 mod script;
 pub use script::Script;
 
@@ -283,6 +286,7 @@ pub enum Command {
     Zcount(Zcount),
     Zpopmin(Zpop),
     Zrank(Zrank),
+    Zincryby(Zincrby),
 
     // scripts
     Eval(Eval),
@@ -498,6 +502,10 @@ impl Command {
                 Command::Zpopmin(transform_parse(Zpop::parse_frames(&mut parse), &mut parse))
             }
             "zrank" => Command::Zrank(transform_parse(Zrank::parse_frames(&mut parse), &mut parse)),
+            "zincrby" => Command::Zincryby(transform_parse(
+                Zincrby::parse_frames(&mut parse),
+                &mut parse,
+            )),
             "auth" => Command::Auth(transform_parse(Auth::parse_frames(&mut parse), &mut parse)),
             "debug" => Command::Debug(transform_parse(Debug::parse_frames(&mut parse), &mut parse)),
             "cluster" => Command::Cluster(transform_parse(
@@ -605,7 +613,7 @@ impl Command {
             "zcount" => Command::Zcount(Zcount::parse_argv(argv)?),
             "zpopmin" => Command::Zpopmin(Zpop::parse_argv(argv)?),
             "zrank" => Command::Zrank(Zrank::parse_argv(argv)?),
-
+            "zincrby" => Command::Zincryby(Zincrby::parse_argv(argv)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -700,6 +708,7 @@ impl Command {
             Zcount(cmd) => cmd.apply(dst).await,
             Zpopmin(cmd) => cmd.apply(dst, true).await,
             Zrank(cmd) => cmd.apply(dst).await,
+            Zincryby(cmd) => cmd.apply(dst).await,
 
             Debug(cmd) => cmd.apply(dst).await,
 
@@ -791,6 +800,7 @@ impl Command {
             Command::Zcount(_) => "zcount",
             Command::Zpopmin(_) => "zpopmin",
             Command::Zrank(_) => "zrank",
+            Command::Zincryby(_) => "zincrby",
             Command::Auth(_) => "auth",
             Command::Debug(_) => "debug",
             Command::Cluster(_) => "cluster",

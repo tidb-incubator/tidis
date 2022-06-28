@@ -137,6 +137,7 @@ impl<'a> LuaCommandCtx<'a> {
                     Command::Zcount(cmd) => cmd.zcount(txn_rc.clone()).await,
                     Command::Zpopmin(cmd) => cmd.zpop(txn_rc.clone(), true).await,
                     Command::Zrank(cmd) => cmd.zrank(txn_rc.clone()).await,
+                    Command::Zincryby(cmd) => cmd.zincrby(txn_rc.clone()).await,
                     _ => Ok(resp_invalid_arguments()),
                 };
                 match result {

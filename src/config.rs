@@ -67,6 +67,16 @@ struct Backend {
 
     cmd_lrem_length_limit: Option<u32>,
     cmd_linsert_length_limit: Option<u32>,
+
+    async_del_list_threshold: Option<u32>,
+    async_del_hash_threshold: Option<u32>,
+    async_del_set_threshold: Option<u32>,
+    async_del_zset_threshold: Option<u32>,
+
+    async_expire_list_threshold: Option<u32>,
+    async_expire_hash_threshold: Option<u32>,
+    async_expire_set_threshold: Option<u32>,
+    async_expire_zset_threshold: Option<u32>,
 }
 
 // Config
@@ -471,4 +481,100 @@ pub fn cmd_linsert_length_limit_or_default() -> u32 {
     }
     // default linsert length no limit
     0
+}
+
+pub fn async_del_list_threshold_or_default() -> u32 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.async_del_list_threshold {
+                return b;
+            }
+        }
+    }
+    // default async del list threshold
+    1000
+}
+
+pub fn async_del_hash_threshold_or_default() -> u32 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.async_del_hash_threshold {
+                return b;
+            }
+        }
+    }
+    // default async del hash threshold
+    1000
+}
+
+pub fn async_del_set_threshold_or_default() -> u32 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.async_del_set_threshold {
+                return b;
+            }
+        }
+    }
+    // default async del set threshold
+    1000
+}
+
+pub fn async_del_zset_threshold_or_default() -> u32 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.async_del_zset_threshold {
+                return b;
+            }
+        }
+    }
+    // default async del zset threshold
+    1000
+}
+
+pub fn async_expire_list_threshold_or_default() -> u32 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.async_expire_list_threshold {
+                return b;
+            }
+        }
+    }
+    // default async expire list threshold
+    1000
+}
+
+pub fn async_expire_hash_threshold_or_default() -> u32 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.async_expire_hash_threshold {
+                return b;
+            }
+        }
+    }
+    // default async expire hash threshold
+    1000
+}
+
+pub fn async_expire_set_threshold_or_default() -> u32 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.async_expire_set_threshold {
+                return b;
+            }
+        }
+    }
+    // default async expire set threshold
+    1000
+}
+
+pub fn async_expire_zset_threshold_or_default() -> u32 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.async_expire_zset_threshold {
+                return b;
+            }
+        }
+    }
+    // default async expire zset threshold
+    1000
 }

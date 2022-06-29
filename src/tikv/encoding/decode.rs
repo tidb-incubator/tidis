@@ -121,4 +121,13 @@ impl KeyDecoder {
     pub fn decode_key_zset_data_value(value: &[u8]) -> f64 {
         Self::decode_cmp_uint64_to_f64(u64::from_be_bytes(value[..].try_into().unwrap()))
     }
+
+    pub fn decode_key_gc_userkey_version(key: Key) -> (Vec<u8>, u16) {
+        let key: Vec<u8> = key.into();
+        // decode user key length first
+        let user_key_len = u16::from_be_bytes(key[5..7].try_into().unwrap());
+        let idx = 7 + user_key_len as usize;
+        let version = u16::from_be_bytes(key[idx..idx + 2].try_into().unwrap());
+        (key[7..idx].to_vec(), version)
+    }
 }

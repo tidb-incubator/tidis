@@ -5,6 +5,7 @@ use super::{
     encoding::{DataType, KeyDecoder},
     errors::AsyncResult,
 };
+use crate::async_del_list_threshold_or_default;
 use crate::cmd_linsert_length_limit_or_default;
 use crate::cmd_lrem_length_limit_or_default;
 use crate::metrics::REMOVED_EXPIRED_KEY_COUNTER;
@@ -864,17 +865,32 @@ impl<'a> ListCommandCtx {
                         Some(meta_value) => {
                             let (_, version, left, right) =
                                 KeyDecoder::decode_key_list_meta(&meta_value);
-                            let data_key_start =
-                                KEY_ENCODER.encode_txnkv_list_data_key(&key, left, version);
-                            let range: RangeFrom<Key> = data_key_start..;
-                            let from_range: BoundRange = range.into();
                             let len = right - left;
-                            let iter = txn.scan_keys(from_range, len.try_into().unwrap()).await?;
+                            if len >= async_del_list_threshold_or_default() as u64 {
+                                // async delete
+                                // delete meta key and create gc key and gc version key with the version
+                                txn.delete(meta_key).await?;
 
-                            for k in iter {
-                                txn.delete(k).await?;
+                                let gc_key = KEY_ENCODER.encode_txnkv_gc_key(&key);
+                                txn.put(gc_key, version.to_be_bytes()).await?;
+
+                                let gc_version_key =
+                                    KEY_ENCODER.encode_txnkv_gc_version_key(&key, version);
+                                txn.put(
+                                    gc_version_key,
+                                    vec![KEY_ENCODER.get_type_bytes(DataType::List)],
+                                )
+                                .await?;
+                            } else {
+                                let bound_range =
+                                    KEY_ENCODER.encode_txnkv_list_data_key_range(&key, version);
+                                let iter = txn.scan_keys(bound_range, u32::MAX).await?;
+
+                                for k in iter {
+                                    txn.delete(k).await?;
+                                }
+                                txn.delete(meta_key).await?;
                             }
-                            txn.delete(meta_key).await?;
                             Ok(1)
                         }
                         None => Ok(0),

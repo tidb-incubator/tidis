@@ -1,4 +1,5 @@
 use crate::cluster::Cluster;
+use crate::gc::GcMaster;
 use crate::metrics::{
     CURRENT_CONNECTION_COUNTER, CURRENT_TLS_CONNECTION_COUNTER, REQUEST_CMD_COUNTER,
     REQUEST_CMD_ERROR_COUNTER, REQUEST_CMD_FINISH_COUNTER, REQUEST_CMD_HANDLE_TIME,
@@ -213,6 +214,9 @@ pub async fn run(
         expire: config_cluster_topology_expire_or_default(),
     };
 
+    let mut gc_master = GcMaster::new(10);
+    gc_master.start_workers().await;
+
     if tcp_enabled && !tls_enabled {
         let (notify_shutdown, _) = broadcast::channel(1);
         let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
@@ -236,6 +240,9 @@ pub async fn run(
             }
             _ = topo_manager.run() => {
                 error!(LOGGER, "topology manager exit");
+            }
+            _ = gc_master.run() => {
+                error!(LOGGER, "gc master exit");
             }
             _ = shutdown => {
                 // The shutdown signal has been received.
@@ -275,6 +282,9 @@ pub async fn run(
             }
             _ = topo_manager.run() => {
                 error!(LOGGER, "topology manager exit");
+            }
+            _ = gc_master.run() => {
+                error!(LOGGER, "gc master exit");
             }
             _ = shutdown => {
                 // The shutdown signal has been received.
@@ -332,6 +342,9 @@ pub async fn run(
             }
             _ = topo_manager.run() => {
                 error!(LOGGER, "topology manager exit");
+            }
+            _ = gc_master.run() => {
+                error!(LOGGER, "gc master exit");
             }
             _ = shutdown => {
                 // The shutdown signal has been received.

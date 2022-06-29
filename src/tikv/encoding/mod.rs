@@ -1,6 +1,7 @@
 pub mod decode;
 pub mod encode;
 
+#[derive(Debug, Clone)]
 pub enum DataType {
     String,
     Hash,

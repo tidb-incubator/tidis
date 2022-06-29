@@ -28,6 +28,8 @@ pub const DATA_TYPE_LIST: u8 = b'l';
 pub const DATA_TYPE_SET: u8 = b's';
 pub const DATA_TYPE_ZSET: u8 = b'z';
 pub const DATA_TYPE_TOPO: u8 = b't';
+pub const DATA_TYPE_GC: u8 = b'g';
+pub const DATA_TYPE_GC_VERSION: u8 = b'v';
 
 pub const PLACE_HOLDER: u8 = b'`';
 
@@ -39,7 +41,7 @@ impl KeyEncoder {
         }
     }
 
-    fn get_type_bytes(&self, dt: DataType) -> u8 {
+    pub fn get_type_bytes(&self, dt: DataType) -> u8 {
         match dt {
             DataType::String => 0,
             DataType::Hash => 1,
@@ -617,5 +619,48 @@ impl KeyEncoder {
         key.extend_from_slice(&score.to_be_bytes());
         key.push(PLACE_HOLDER + 1);
         key.into()
+    }
+
+    pub fn encode_txnkv_gc_key_prefix(&self, ukey: &str, data_type: u8, extra: usize) -> Vec<u8> {
+        let key_len: u16 = ukey.len().try_into().unwrap();
+        let mut key = Vec::with_capacity(extra + ukey.len());
+        key.push(TXN_KEY_PREFIX);
+        key.extend_from_slice(self.instance_id.as_slice());
+        key.push(data_type);
+        key.push(PLACE_HOLDER);
+        key.extend_from_slice(&key_len.to_be_bytes());
+        key.extend_from_slice(ukey.as_bytes());
+        key
+    }
+
+    pub fn encode_txnkv_gc_key(&self, ukey: &str) -> Key {
+        self.encode_txnkv_gc_key_prefix(ukey, DATA_TYPE_GC, 7)
+            .into()
+    }
+
+    pub fn encode_txnkv_gc_version_key(&self, ukey: &str, version: u16) -> Key {
+        let mut key = self.encode_txnkv_gc_key_prefix(ukey, DATA_TYPE_GC_VERSION, 9);
+        key.extend_from_slice(&version.to_be_bytes());
+        key.into()
+    }
+
+    fn encode_txnkv_gc_version_key_bound(&self, start: bool) -> Key {
+        let mut key = Vec::with_capacity(5);
+        key.push(TXN_KEY_PREFIX);
+        key.extend_from_slice(self.instance_id.as_slice());
+        key.push(DATA_TYPE_GC_VERSION);
+        if start {
+            key.push(PLACE_HOLDER);
+        } else {
+            key.push(PLACE_HOLDER + 1);
+        }
+        key.into()
+    }
+
+    pub fn encode_txnkv_gc_version_key_range(&self) -> BoundRange {
+        let range_start = self.encode_txnkv_gc_version_key_bound(true);
+        let range_end = self.encode_txnkv_gc_version_key_bound(false);
+        let range: Range<Key> = range_start..range_end;
+        range.into()
     }
 }

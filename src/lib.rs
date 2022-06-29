@@ -71,6 +71,14 @@ pub mod cluster;
 pub mod utils;
 
 pub mod config;
+pub use config::async_del_hash_threshold_or_default;
+pub use config::async_del_list_threshold_or_default;
+pub use config::async_del_set_threshold_or_default;
+pub use config::async_del_zset_threshold_or_default;
+pub use config::async_expire_hash_threshold_or_default;
+pub use config::async_expire_list_threshold_or_default;
+pub use config::async_expire_set_threshold_or_default;
+pub use config::async_expire_zset_threshold_or_default;
 pub use config::cmd_linsert_length_limit_or_default;
 pub use config::cmd_lrem_length_limit_or_default;
 pub use config::config_cluster_broadcast_addr_or_default;
@@ -104,6 +112,8 @@ pub use config::txn_region_backoff_delay_attemps;
 pub use config::txn_region_backoff_delay_ms;
 pub use config::txn_retry_count;
 pub use config::Config;
+
+pub mod gc;
 
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 

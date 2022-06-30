@@ -1,3 +1,4 @@
+use super::client::get_version_for_new;
 use super::errors::*;
 use super::get_txn_client;
 use super::KEY_ENCODER;
@@ -92,6 +93,11 @@ impl<'a> ListCommandCtx {
                             Ok(right - left)
                         }
                         None => {
+                            // get next version available for new key
+                            drop(txn);
+                            let version = get_version_for_new(&key, txn_rc.clone()).await?;
+                            txn = txn_rc.lock().await;
+
                             let mut left = INIT_INDEX;
                             let mut right = INIT_INDEX;
                             let mut idx: u64;
@@ -106,13 +112,14 @@ impl<'a> ListCommandCtx {
                                 }
 
                                 // add data key
-                                let data_key = KEY_ENCODER.encode_txnkv_list_data_key(&key, idx, 0);
+                                let data_key =
+                                    KEY_ENCODER.encode_txnkv_list_data_key(&key, idx, version);
                                 txn.put(data_key, value.to_vec()).await?;
                             }
 
                             // add meta key
                             let meta_value =
-                                KEY_ENCODER.encode_txnkv_list_meta_value(0, 0, left, right);
+                                KEY_ENCODER.encode_txnkv_list_meta_value(0, version, left, right);
                             txn.put(meta_key, meta_value).await?;
 
                             Ok(right - left)
@@ -923,17 +930,33 @@ impl<'a> ListCommandCtx {
                             if !key_is_expired(ttl) {
                                 return Ok(0);
                             }
-                            let data_key_start =
-                                KEY_ENCODER.encode_txnkv_list_data_key(&key, left, version);
-                            let range: RangeFrom<Key> = data_key_start..;
-                            let from_range: BoundRange = range.into();
                             let len = right - left;
-                            let iter = txn.scan_keys(from_range, len.try_into().unwrap()).await?;
+                            if len >= async_del_list_threshold_or_default() as u64 {
+                                // async delete
+                                // delete meta key and create gc key and gc version key with the version
+                                txn.delete(meta_key).await?;
 
-                            for k in iter {
-                                txn.delete(k).await?;
+                                let gc_key = KEY_ENCODER.encode_txnkv_gc_key(&key);
+                                txn.put(gc_key, version.to_be_bytes()).await?;
+
+                                let gc_version_key =
+                                    KEY_ENCODER.encode_txnkv_gc_version_key(&key, version);
+                                txn.put(
+                                    gc_version_key,
+                                    vec![KEY_ENCODER.get_type_bytes(DataType::List)],
+                                )
+                                .await?;
+                            } else {
+                                let bound_range =
+                                    KEY_ENCODER.encode_txnkv_list_data_key_range(&key, version);
+                                let iter = txn.scan_keys(bound_range, u32::MAX).await?;
+
+                                for k in iter {
+                                    txn.delete(k).await?;
+                                }
+                                txn.delete(meta_key).await?;
                             }
-                            txn.delete(meta_key).await?;
+
                             REMOVED_EXPIRED_KEY_COUNTER
                                 .with_label_values(&["list"])
                                 .inc();

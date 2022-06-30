@@ -58,7 +58,7 @@ impl<'a> ListCommandCtx {
                                 return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
-                            let (ttl, version, mut left, mut right) =
+                            let (ttl, mut version, mut left, mut right) =
                                 KeyDecoder::decode_key_list_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
@@ -67,6 +67,7 @@ impl<'a> ListCommandCtx {
                                     .await?;
                                 left = INIT_INDEX;
                                 right = INIT_INDEX;
+                                version = get_version_for_new(&key, txn_rc.clone()).await?;
                                 txn = txn_rc.lock().await;
                             }
 

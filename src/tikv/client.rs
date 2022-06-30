@@ -11,9 +11,9 @@ use tikv_client::{
 
 use crate::config::LOGGER;
 use crate::{
-    is_try_one_pc_commit, is_use_async_commit, is_use_pessimistic_txn,
-    txn_lock_backoff_delay_attemps, txn_lock_backoff_delay_ms, txn_region_backoff_delay_attemps,
-    txn_region_backoff_delay_ms, txn_retry_count,
+    async_deletion_enabled_or_default, is_try_one_pc_commit, is_use_async_commit,
+    is_use_pessimistic_txn, txn_lock_backoff_delay_attemps, txn_lock_backoff_delay_ms,
+    txn_region_backoff_delay_attemps, txn_region_backoff_delay_ms, txn_retry_count,
 };
 
 use super::errors::{AsyncResult, RTError, KEY_VERSION_EXHUSTED_ERR};
@@ -320,7 +320,13 @@ impl TxnClientWrapper<'static> {
     }
 }
 
+// get_version_for_new must be called outside of a MutexGuard, otherwise it will deadlock.
 pub async fn get_version_for_new(key: &str, txn_rc: Arc<Mutex<Transaction>>) -> AsyncResult<u16> {
+    // check if async deletion is enabled, return ASAP if not
+    if !async_deletion_enabled_or_default() {
+        return Ok(0);
+    }
+
     let mut txn = txn_rc.lock().await;
     let gc_key = KEY_ENCODER.encode_txnkv_gc_key(key);
     let next_version = txn.get(gc_key).await?.map_or_else(

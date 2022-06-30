@@ -75,6 +75,7 @@ pub use config::async_del_hash_threshold_or_default;
 pub use config::async_del_list_threshold_or_default;
 pub use config::async_del_set_threshold_or_default;
 pub use config::async_del_zset_threshold_or_default;
+pub use config::async_deletion_enabled_or_default;
 pub use config::async_expire_hash_threshold_or_default;
 pub use config::async_expire_list_threshold_or_default;
 pub use config::async_expire_set_threshold_or_default;

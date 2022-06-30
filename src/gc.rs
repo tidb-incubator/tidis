@@ -73,7 +73,7 @@ impl GcMaster {
     pub async fn dispatch_task(&mut self, task: GcTask) -> AsyncResult<()> {
         // calculate task hash and dispatch to worker
         let idx = X25.checksum(&task.to_bytes()) as usize % self.workers.len();
-        debug!(LOGGER, "dispatch task {:?} to worker: {}", task, idx);
+        debug!(LOGGER, "[GC] dispatch task {:?} to worker: {}", task, idx);
         self.workers[idx].add_task(task).await
     }
 
@@ -120,7 +120,7 @@ struct GcWorker {
     tx: Sender<GcTask>,
 
     // check task already in queue, avoid duplicate task
-    task_sets: HashSet<Vec<u8>>,
+    task_sets: Arc<Mutex<HashSet<Vec<u8>>>>,
 }
 
 impl GcWorker {
@@ -129,17 +129,19 @@ impl GcWorker {
             id,
             rx: Arc::new(Mutex::new(rx)),
             tx,
-            task_sets: HashSet::new(),
+            task_sets: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
     // queue task to channel
     pub async fn add_task(&mut self, task: GcTask) -> AsyncResult<()> {
         let bytes = task.to_bytes();
-        if !self.task_sets.contains(&bytes) {
-            self.task_sets.insert(bytes);
+        let mut task_sets = self.task_sets.lock().await;
+        if !task_sets.contains(&bytes) {
+            debug!(LOGGER, "[GC] add task: {:?}", task);
+            task_sets.insert(bytes);
             if let Err(e) = self.tx.send(task).await {
-                error!(LOGGER, "send task to channel failed"; "error" => ?e);
+                error!(LOGGER, "[GC] send task to channel failed"; "error" => ?e);
                 return Err(RTError::Owned(e.to_string()));
             } else {
                 return Ok(());
@@ -148,8 +150,8 @@ impl GcWorker {
         Ok(())
     }
 
-    pub fn task_num_in_queue(&self) -> usize {
-        self.task_sets.len()
+    pub async fn task_num_in_queue(&self) -> usize {
+        self.task_sets.lock().await.len()
     }
 
     pub async fn handle_task(&self, task: GcTask) -> AsyncResult<()> {
@@ -167,7 +169,7 @@ impl GcWorker {
                         DataType::Hash => {
                             debug!(
                                 LOGGER,
-                                "async delete hash key {} with version {}", user_key, version
+                                "[GC] async delete hash key {} with version {}", user_key, version
                             );
                             // delete all sub meta key of this key and version
                             let bound_range =
@@ -188,7 +190,7 @@ impl GcWorker {
                         DataType::List => {
                             debug!(
                                 LOGGER,
-                                "async delete list key {} with version {}", user_key, version
+                                "[GC] async delete list key {} with version {}", user_key, version
                             );
                             // delete all data key of this key and version
                             let bound_range =
@@ -201,7 +203,7 @@ impl GcWorker {
                         DataType::Set => {
                             debug!(
                                 LOGGER,
-                                "async delete set key {} with version {}", user_key, version
+                                "[GC] async delete set key {} with version {}", user_key, version
                             );
                             // delete all sub meta key of this key and version
                             let bound_range =
@@ -221,7 +223,7 @@ impl GcWorker {
                         DataType::Zset => {
                             debug!(
                                 LOGGER,
-                                "async delete zset key {} with version {}", user_key, version
+                                "[GC] async delete zset key {} with version {}", user_key, version
                             );
                             // delete all sub meta key of this key and version
                             let bound_range =
@@ -265,7 +267,7 @@ impl GcWorker {
                         Some(v) => {
                             let ver = u16::from_be_bytes(v[..2].try_into().unwrap());
                             if ver == version {
-                                debug!(LOGGER, "clean gc key for user key {}", user_key);
+                                debug!(LOGGER, "[GC] clean gc key for user key {}", user_key);
                                 txn.delete(gc_key).await?;
                             }
                         }
@@ -278,20 +280,21 @@ impl GcWorker {
             .await
     }
 
-    pub async fn run(mut self) {
+    pub async fn run(self) {
         tokio::spawn(async move {
-            info!(LOGGER, "start gc worker thread: {}", self.id);
+            info!(LOGGER, "[GC] start gc worker thread: {}", self.id);
             while let Some(task) = self.rx.lock().await.recv().await {
                 match self.handle_task(task.clone()).await {
                     Ok(_) => {
-                        self.task_sets.remove(&task.to_bytes());
+                        debug!(LOGGER, "[GC] gc task done: {:?}", task);
+                        self.task_sets.lock().await.remove(&task.to_bytes());
                     }
                     Err(e) => {
-                        error!(LOGGER, "handle task error: {:?}", e);
+                        error!(LOGGER, "[GC] handle task error: {:?}", e);
                     }
                 }
             }
-            info!(LOGGER, "gc worker thread exit: {}", self.id);
+            info!(LOGGER, "[GC] gc worker thread exit: {}", self.id);
         });
     }
 }

@@ -1,3 +1,4 @@
+use super::client::get_version_for_new;
 use super::errors::*;
 use super::gen_next_meta_index;
 use super::get_txn_client;
@@ -6,6 +7,8 @@ use super::{
     encoding::{DataType, KeyDecoder},
     errors::AsyncResult,
 };
+use crate::async_del_set_threshold_or_default;
+use crate::async_expire_set_threshold_or_default;
 use crate::utils::{key_is_expired, resp_array, resp_bulk, resp_err, resp_int, resp_nil};
 use crate::Frame;
 use ::futures::future::FutureExt;
@@ -78,7 +81,7 @@ impl SetCommandCtx {
                             }
 
                             let mut expired = false;
-                            let (ttl, version, _meta_size) =
+                            let (ttl, mut version, _meta_size) =
                                 KeyDecoder::decode_key_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
@@ -86,6 +89,7 @@ impl SetCommandCtx {
                                     .do_async_txnkv_set_expire_if_needed(&key)
                                     .await?;
                                 expired = true;
+                                version = get_version_for_new(&key, txn_rc.clone()).await?;
                                 txn = txn_rc.lock().await;
                             }
                             let mut added: i64 = 0;
@@ -118,18 +122,23 @@ impl SetCommandCtx {
                             // create a new meta key if key already expired above
                             if expired {
                                 let new_meta_value =
-                                    KEY_ENCODER.encode_txnkv_set_meta_value(0, 0, 0);
+                                    KEY_ENCODER.encode_txnkv_set_meta_value(0, version, 0);
                                 txn.put(meta_key, new_meta_value).await?;
                             }
 
                             Ok(added)
                         }
                         None => {
+                            drop(txn);
+                            let version = get_version_for_new(&key, txn_rc.clone()).await?;
+                            txn = txn_rc.lock().await;
+
                             let mut added: i64 = 0;
                             // create new meta key and meta value
                             for m in &members {
                                 // check member already exists
-                                let data_key = KEY_ENCODER.encode_txnkv_set_data_key(&key, m, 0);
+                                let data_key =
+                                    KEY_ENCODER.encode_txnkv_set_data_key(&key, m, version);
                                 let member_exists = txn.key_exists(data_key.clone()).await?;
                                 if !member_exists {
                                     txn.put(data_key, vec![]).await?;
@@ -137,12 +146,12 @@ impl SetCommandCtx {
                                 }
                             }
                             // create meta key
-                            let meta_value = KEY_ENCODER.encode_txnkv_set_meta_value(0, 0, 0);
+                            let meta_value = KEY_ENCODER.encode_txnkv_set_meta_value(0, version, 0);
                             txn.put(meta_key, meta_value).await?;
 
                             // create sub meta key with a random index
                             let sub_meta_key =
-                                KEY_ENCODER.encode_txnkv_sub_meta_key(&key, 0, rand_idx);
+                                KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, rand_idx);
                             txn.put(sub_meta_key, added.to_be_bytes().to_vec()).await?;
                             Ok(added)
                         }
@@ -607,21 +616,43 @@ impl SetCommandCtx {
                         Some(meta_value) => {
                             let version = KeyDecoder::decode_key_version(&meta_value);
 
-                            let sub_meta_range =
-                                KEY_ENCODER.encode_txnkv_sub_meta_key_range(&key, version);
-                            let iter = txn.scan_keys(sub_meta_range, u32::MAX).await?;
-                            for k in iter {
-                                txn.delete(k).await?;
+                            drop(txn);
+                            let size = self.txnkv_sum_key_size(&key, version).await?;
+                            txn = txn_rc.lock().await;
+
+                            if size > async_del_set_threshold_or_default() as i64 {
+                                // async del set
+                                // do async del
+                                txn.delete(meta_key).await?;
+
+                                let gc_key = KEY_ENCODER.encode_txnkv_gc_key(&key);
+                                txn.put(gc_key, version.to_be_bytes()).await?;
+
+                                let gc_version_key =
+                                    KEY_ENCODER.encode_txnkv_gc_version_key(&key, version);
+                                txn.put(
+                                    gc_version_key,
+                                    vec![KEY_ENCODER.get_type_bytes(DataType::Hash)],
+                                )
+                                .await?;
+                            } else {
+                                let sub_meta_range =
+                                    KEY_ENCODER.encode_txnkv_sub_meta_key_range(&key, version);
+                                let iter = txn.scan_keys(sub_meta_range, u32::MAX).await?;
+                                for k in iter {
+                                    txn.delete(k).await?;
+                                }
+
+                                let data_bound_range =
+                                    KEY_ENCODER.encode_txnkv_set_data_key_range(&key, version);
+                                let iter = txn.scan_keys(data_bound_range, u32::MAX).await?;
+                                for k in iter {
+                                    txn.delete(k).await?;
+                                }
+
+                                txn.delete(meta_key).await?;
                             }
 
-                            let data_bound_range =
-                                KEY_ENCODER.encode_txnkv_set_data_key_range(&key, version);
-                            let iter = txn.scan_keys(data_bound_range, u32::MAX).await?;
-                            for k in iter {
-                                txn.delete(k).await?;
-                            }
-
-                            txn.delete(meta_key).await?;
                             Ok(1)
                         }
                         None => Ok(0),
@@ -652,22 +683,41 @@ impl SetCommandCtx {
                             if !key_is_expired(ttl) {
                                 return Ok(0);
                             }
-                            let data_bound_range =
-                                KEY_ENCODER.encode_txnkv_set_data_key_range(&key, version);
-                            let iter = txn.scan_keys(data_bound_range, u32::MAX).await?;
+                            drop(txn);
+                            let size = self.txnkv_sum_key_size(&key, version).await?;
+                            txn = txn_rc.lock().await;
 
-                            for k in iter {
-                                txn.delete(k).await?;
+                            if size > async_expire_set_threshold_or_default() as i64 {
+                                // async del set
+                                txn.delete(meta_key).await?;
+
+                                let gc_key = KEY_ENCODER.encode_txnkv_gc_key(&key);
+                                txn.put(gc_key, version.to_be_bytes()).await?;
+
+                                let gc_version_key =
+                                    KEY_ENCODER.encode_txnkv_gc_version_key(&key, version);
+                                txn.put(
+                                    gc_version_key,
+                                    vec![KEY_ENCODER.get_type_bytes(DataType::Hash)],
+                                )
+                                .await?;
+                            } else {
+                                let sub_meta_range =
+                                    KEY_ENCODER.encode_txnkv_sub_meta_key_range(&key, version);
+                                let iter = txn.scan_keys(sub_meta_range, u32::MAX).await?;
+                                for k in iter {
+                                    txn.delete(k).await?;
+                                }
+
+                                let data_bound_range =
+                                    KEY_ENCODER.encode_txnkv_set_data_key_range(&key, version);
+                                let iter = txn.scan_keys(data_bound_range, u32::MAX).await?;
+                                for k in iter {
+                                    txn.delete(k).await?;
+                                }
+
+                                txn.delete(meta_key).await?;
                             }
-
-                            let sub_meta_range =
-                                KEY_ENCODER.encode_txnkv_sub_meta_key_range(&key, version);
-                            let iter = txn.scan_keys(sub_meta_range, u32::MAX).await?;
-                            for k in iter {
-                                txn.delete(k).await?;
-                            }
-
-                            txn.delete(meta_key).await?;
                             REMOVED_EXPIRED_KEY_COUNTER
                                 .with_label_values(&["set"])
                                 .inc();

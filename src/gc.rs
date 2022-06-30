@@ -7,7 +7,7 @@ use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::Mutex;
 use tokio::time::{self, Duration, MissedTickBehavior};
 
-use crc::{Algorithm, Crc, CRC_16_IBM_SDLC, CRC_32_ISCSI};
+use crc::{Crc, CRC_16_IBM_SDLC};
 
 use crate::config::LOGGER;
 use crate::tikv::encoding::{DataType, KeyDecoder};
@@ -147,7 +147,7 @@ impl GcWorker {
         Ok(())
     }
 
-    pub fn queued_task(&self) -> usize {
+    pub fn task_num_in_queue(&self) -> usize {
         self.task_sets.len()
     }
 

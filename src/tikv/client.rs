@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -15,7 +16,7 @@ use crate::{
     txn_region_backoff_delay_ms, txn_retry_count,
 };
 
-use super::errors::{AsyncResult, RTError};
+use super::errors::{AsyncResult, RTError, KEY_VERSION_EXHUSTED_ERR};
 
 use futures::future::BoxFuture;
 
@@ -27,7 +28,7 @@ use crate::metrics::{
     TXN_MECHANISM_COUNTER, TXN_RETRY_COUNTER, TXN_RETRY_ERR, TXN_RETRY_KIND_COUNTER,
 };
 
-use super::sleep;
+use super::{sleep, KEY_ENCODER};
 use crate::server::duration_to_sec;
 use tokio::time::Instant;
 
@@ -317,6 +318,27 @@ impl TxnClientWrapper<'static> {
             }
         }
     }
+}
+
+pub async fn get_version_for_new(key: &str, txn_rc: Arc<Mutex<Transaction>>) -> AsyncResult<u16> {
+    let mut txn = txn_rc.lock().await;
+    let gc_key = KEY_ENCODER.encode_txnkv_gc_key(key);
+    let next_version = txn.get(gc_key).await?.map_or_else(
+        || 0,
+        |v| {
+            let version = u16::from_be_bytes(v[..].try_into().unwrap());
+            if version == u16::MAX {
+                0
+            } else {
+                version + 1
+            }
+        },
+    );
+    // check next version available
+    let gc_version_key = KEY_ENCODER.encode_txnkv_gc_version_key(key, next_version);
+    txn.get(gc_version_key)
+        .await?
+        .map_or_else(|| Ok(next_version), |_| Err(KEY_VERSION_EXHUSTED_ERR))
 }
 
 pub struct RawClientWrapper {

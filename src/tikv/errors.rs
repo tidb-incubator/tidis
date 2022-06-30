@@ -85,3 +85,4 @@ pub const REDIS_UNKNOWN_SUBCOMMAND: RTError =
     RTError::String("Unknown subcommand or wrong number of arguments");
 pub const DECREMENT_OVERFLOW: RTError = RTError::String("Decrement would overflow");
 pub const REDIS_LIST_TOO_LARGE_ERR: RTError = RTError::String("ERR list is too large to execute");
+pub const KEY_VERSION_EXHUSTED_ERR: RTError = RTError::String("ERR key version exhausted");

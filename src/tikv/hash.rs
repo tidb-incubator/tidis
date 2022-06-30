@@ -608,7 +608,10 @@ impl<'a> HashCommandCtx {
                             }
                         }
                         None => {
+                            drop(txn);
                             let version = get_version_for_new(&key, txn_rc.clone()).await?;
+                            txn = txn_rc.lock().await;
+
                             prev_int = 0;
                             // create new meta key first
                             let meta_size = config_meta_key_number_or_default();

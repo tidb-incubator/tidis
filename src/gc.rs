@@ -13,6 +13,7 @@ use crate::config::LOGGER;
 use crate::tikv::encoding::{DataType, KeyDecoder};
 use crate::tikv::errors::{AsyncResult, RTError};
 use crate::tikv::{get_txn_client, KEY_ENCODER};
+use crate::{async_gc_interval_or_default, async_gc_worker_queue_size_or_default};
 
 const X25: Crc<u16> = Crc::<u16>::new(&CRC_16_IBM_SDLC);
 
@@ -52,7 +53,7 @@ impl GcMaster {
 
         // create workers pool
         for id in 0..worker_num {
-            let (tx, rx) = mpsc::channel::<GcTask>(1000);
+            let (tx, rx) = mpsc::channel::<GcTask>(async_gc_worker_queue_size_or_default());
             let worker = GcWorker::new(id, rx, tx);
             workers.push(worker);
         }
@@ -80,7 +81,7 @@ impl GcMaster {
     // create gc task for each version key
     // dispatch gc task to workers
     pub async fn run(&mut self) -> AsyncResult<()> {
-        let mut interval = time::interval(Duration::from_millis(10000));
+        let mut interval = time::interval(Duration::from_millis(async_gc_interval_or_default()));
         interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
         let txn_client = get_txn_client()?;
         loop {

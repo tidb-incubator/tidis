@@ -70,6 +70,10 @@ struct Backend {
 
     async_deletion_enabled: Option<bool>,
 
+    async_gc_worker_number: Option<usize>,
+    async_gc_worker_queue_size: Option<usize>,
+    async_gc_interval: Option<u64>,
+
     async_del_list_threshold: Option<u32>,
     async_del_hash_threshold: Option<u32>,
     async_del_set_threshold: Option<u32>,
@@ -615,4 +619,40 @@ pub fn async_deletion_enabled_or_default() -> bool {
     }
     // default async deletion enabled
     true
+}
+
+pub fn async_gc_interval_or_default() -> u64 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.async_gc_interval {
+                return b;
+            }
+        }
+    }
+    // default async gc interval in ms
+    10000
+}
+
+pub fn async_gc_worker_number_or_default() -> usize {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.async_gc_worker_number {
+                return b;
+            }
+        }
+    }
+    // default async gc worker number
+    10
+}
+
+pub fn async_gc_worker_queue_size_or_default() -> usize {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.async_gc_worker_queue_size {
+                return b;
+            }
+        }
+    }
+    // default async gc worker queue size
+    100000
 }

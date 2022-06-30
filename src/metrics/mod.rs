@@ -1,5 +1,5 @@
 use prometheus::{
-    exponential_buckets, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge,
+    exponential_buckets, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
 };
 
 mod http;
@@ -121,6 +121,14 @@ lazy_static! {
         "tikv_redis_tikv_reported_errors_count_total",
         "TiKV reported err",
         &["err"]
+    )
+    .unwrap();
+
+    // GC
+    pub static ref GC_TASK_QUEUE_COUNTER: IntGaugeVec = register_int_gauge_vec!(
+        "tikv_redis_gc_task_queue_count",
+        "GC task queue gauge",
+        &["worker"]
     )
     .unwrap();
 }

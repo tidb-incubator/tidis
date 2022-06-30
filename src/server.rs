@@ -9,9 +9,10 @@ use crate::tikv::encoding::KeyDecoder;
 use crate::tikv::{get_txn_client, KEY_ENCODER};
 use crate::utils::{self, resp_err, resp_invalid_arguments, resp_ok, sleep};
 use crate::{
-    config_cluster_broadcast_addr_or_default, config_cluster_topology_expire_or_default,
-    config_cluster_topology_interval_or_default, config_local_pool_number, is_auth_enabled,
-    is_auth_matched, Command, Connection, Db, DbDropGuard, Shutdown,
+    async_gc_worker_number_or_default, config_cluster_broadcast_addr_or_default,
+    config_cluster_topology_expire_or_default, config_cluster_topology_interval_or_default,
+    config_local_pool_number, is_auth_enabled, is_auth_matched, Command, Connection, Db,
+    DbDropGuard, Shutdown,
 };
 
 use async_std::net::{TcpListener, TcpStream};
@@ -214,7 +215,7 @@ pub async fn run(
         expire: config_cluster_topology_expire_or_default(),
     };
 
-    let mut gc_master = GcMaster::new(10);
+    let mut gc_master = GcMaster::new(async_gc_worker_number_or_default());
     gc_master.start_workers().await;
 
     if tcp_enabled && !tls_enabled {

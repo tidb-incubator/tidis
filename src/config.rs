@@ -68,6 +68,8 @@ struct Backend {
     cmd_lrem_length_limit: Option<u32>,
     cmd_linsert_length_limit: Option<u32>,
 
+    async_deletion_enabled: Option<bool>,
+
     async_del_list_threshold: Option<u32>,
     async_del_hash_threshold: Option<u32>,
     async_del_set_threshold: Option<u32>,
@@ -491,8 +493,11 @@ pub fn async_del_list_threshold_or_default() -> u32 {
             }
         }
     }
-    // default async del list threshold
-    1000
+    if async_deletion_enabled_or_default() {
+        1000
+    } else {
+        u32::MAX
+    }
 }
 
 pub fn async_del_hash_threshold_or_default() -> u32 {
@@ -503,8 +508,11 @@ pub fn async_del_hash_threshold_or_default() -> u32 {
             }
         }
     }
-    // default async del hash threshold
-    1000
+    if async_deletion_enabled_or_default() {
+        1000
+    } else {
+        u32::MAX
+    }
 }
 
 pub fn async_del_set_threshold_or_default() -> u32 {
@@ -515,8 +523,11 @@ pub fn async_del_set_threshold_or_default() -> u32 {
             }
         }
     }
-    // default async del set threshold
-    1000
+    if async_deletion_enabled_or_default() {
+        1000
+    } else {
+        u32::MAX
+    }
 }
 
 pub fn async_del_zset_threshold_or_default() -> u32 {
@@ -527,8 +538,11 @@ pub fn async_del_zset_threshold_or_default() -> u32 {
             }
         }
     }
-    // default async del zset threshold
-    1000
+    if async_deletion_enabled_or_default() {
+        1000
+    } else {
+        u32::MAX
+    }
 }
 
 pub fn async_expire_list_threshold_or_default() -> u32 {
@@ -539,8 +553,11 @@ pub fn async_expire_list_threshold_or_default() -> u32 {
             }
         }
     }
-    // default async expire list threshold
-    1000
+    if async_deletion_enabled_or_default() {
+        1000
+    } else {
+        u32::MAX
+    }
 }
 
 pub fn async_expire_hash_threshold_or_default() -> u32 {
@@ -551,8 +568,11 @@ pub fn async_expire_hash_threshold_or_default() -> u32 {
             }
         }
     }
-    // default async expire hash threshold
-    1000
+    if async_deletion_enabled_or_default() {
+        1000
+    } else {
+        u32::MAX
+    }
 }
 
 pub fn async_expire_set_threshold_or_default() -> u32 {
@@ -563,8 +583,11 @@ pub fn async_expire_set_threshold_or_default() -> u32 {
             }
         }
     }
-    // default async expire set threshold
-    1000
+    if async_deletion_enabled_or_default() {
+        1000
+    } else {
+        u32::MAX
+    }
 }
 
 pub fn async_expire_zset_threshold_or_default() -> u32 {
@@ -575,6 +598,21 @@ pub fn async_expire_zset_threshold_or_default() -> u32 {
             }
         }
     }
-    // default async expire zset threshold
-    1000
+    if async_deletion_enabled_or_default() {
+        1000
+    } else {
+        u32::MAX
+    }
+}
+
+pub fn async_deletion_enabled_or_default() -> bool {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.async_deletion_enabled {
+                return b;
+            }
+        }
+    }
+    // default async deletion enabled
+    true
 }

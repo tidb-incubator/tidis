@@ -10,6 +10,7 @@ use tokio::time::{self, Duration, MissedTickBehavior};
 use crc::{Crc, CRC_16_IBM_SDLC};
 
 use crate::config::LOGGER;
+use crate::metrics::GC_TASK_QUEUE_COUNTER;
 use crate::tikv::encoding::{DataType, KeyDecoder};
 use crate::tikv::errors::{AsyncResult, RTError};
 use crate::tikv::{get_txn_client, KEY_ENCODER};
@@ -144,14 +145,13 @@ impl GcWorker {
                 error!(LOGGER, "[GC] send task to channel failed"; "error" => ?e);
                 return Err(RTError::Owned(e.to_string()));
             } else {
+                GC_TASK_QUEUE_COUNTER
+                    .with_label_values(&[&self.id.to_string()])
+                    .inc();
                 return Ok(());
             }
         }
         Ok(())
-    }
-
-    pub async fn task_num_in_queue(&self) -> usize {
-        self.task_sets.lock().await.len()
     }
 
     pub async fn handle_task(&self, task: GcTask) -> AsyncResult<()> {
@@ -288,6 +288,9 @@ impl GcWorker {
                     Ok(_) => {
                         debug!(LOGGER, "[GC] gc task done: {:?}", task);
                         self.task_sets.lock().await.remove(&task.to_bytes());
+                        GC_TASK_QUEUE_COUNTER
+                            .with_label_values(&[&self.id.to_string()])
+                            .dec();
                     }
                     Err(e) => {
                         error!(LOGGER, "[GC] handle task error: {:?}", e);

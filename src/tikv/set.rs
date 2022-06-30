@@ -632,7 +632,7 @@ impl SetCommandCtx {
                                     KEY_ENCODER.encode_txnkv_gc_version_key(&key, version);
                                 txn.put(
                                     gc_version_key,
-                                    vec![KEY_ENCODER.get_type_bytes(DataType::Hash)],
+                                    vec![KEY_ENCODER.get_type_bytes(DataType::Set)],
                                 )
                                 .await?;
                             } else {
@@ -698,7 +698,7 @@ impl SetCommandCtx {
                                     KEY_ENCODER.encode_txnkv_gc_version_key(&key, version);
                                 txn.put(
                                     gc_version_key,
-                                    vec![KEY_ENCODER.get_type_bytes(DataType::Hash)],
+                                    vec![KEY_ENCODER.get_type_bytes(DataType::Set)],
                                 )
                                 .await?;
                             } else {

@@ -1,3 +1,4 @@
+use super::client::get_version_for_new;
 use super::errors::*;
 use super::gen_next_meta_index;
 use super::get_txn_client;
@@ -6,6 +7,8 @@ use super::{
     encoding::{DataType, KeyDecoder},
     errors::AsyncResult,
 };
+use crate::async_del_zset_threshold_or_default;
+use crate::async_expire_zset_threshold_or_default;
 use crate::utils::{key_is_expired, resp_array, resp_bulk, resp_err, resp_int, resp_nil};
 use crate::Frame;
 use ::futures::future::FutureExt;
@@ -79,7 +82,7 @@ impl ZsetCommandCtx {
                                 return Err(REDIS_WRONG_TYPE_ERR);
                             }
 
-                            let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
+                            let (ttl, mut version, _) = KeyDecoder::decode_key_meta(&meta_value);
                             let mut expired = false;
                             if key_is_expired(ttl) {
                                 drop(txn);
@@ -87,6 +90,7 @@ impl ZsetCommandCtx {
                                     .do_async_txnkv_zset_expire_if_needed(&key)
                                     .await?;
                                 expired = true;
+                                version = get_version_for_new(&key, txn_rc.clone()).await?;
                                 txn = txn_rc.lock().await;
                             }
                             let mut updated_count = 0;
@@ -233,6 +237,10 @@ impl ZsetCommandCtx {
                             }
                         }
                         None => {
+                            drop(txn);
+                            let version = get_version_for_new(&key, txn_rc.clone()).await?;
+                            txn = txn_rc.lock().await;
+
                             if let Some(ex) = exists {
                                 if ex {
                                     // xx flag specified, do not create new key
@@ -241,12 +249,15 @@ impl ZsetCommandCtx {
                             }
                             // create new key
                             for idx in 0..members.len() {
-                                let data_key =
-                                    KEY_ENCODER.encode_txnkv_zset_data_key(&key, &members[idx], 0);
+                                let data_key = KEY_ENCODER.encode_txnkv_zset_data_key(
+                                    &key,
+                                    &members[idx],
+                                    version,
+                                );
                                 let score = scores[idx];
                                 let member = members[idx].clone();
                                 let score_key = KEY_ENCODER
-                                    .encode_txnkv_zset_score_key(&key, score, &member, 0);
+                                    .encode_txnkv_zset_score_key(&key, score, &member, version);
                                 // add data key and score key
                                 let data_value = KEY_ENCODER.encode_txnkv_zset_data_value(score);
                                 txn.put(data_key, data_value).await?;
@@ -255,12 +266,13 @@ impl ZsetCommandCtx {
                             }
                             // add sub meta key
                             let sub_meta_key =
-                                KEY_ENCODER.encode_txnkv_sub_meta_key(&key, 0, rand_idx);
+                                KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, rand_idx);
                             txn.put(sub_meta_key, (members.len() as i64).to_be_bytes().to_vec())
                                 .await?;
                             // add meta key
                             let size = members.len() as i64;
-                            let new_meta_value = KEY_ENCODER.encode_txnkv_zset_meta_value(0, 0, 0);
+                            let new_meta_value =
+                                KEY_ENCODER.encode_txnkv_zset_meta_value(0, version, 0);
                             txn.put(meta_key, new_meta_value).await?;
                             Ok(size)
                         }
@@ -766,6 +778,7 @@ impl ZsetCommandCtx {
 
                     let prev_score;
                     let data_key;
+                    let mut version;
                     let mut txn = txn_rc.lock().await;
                     match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
@@ -775,11 +788,13 @@ impl ZsetCommandCtx {
 
                             let mut expired = false;
 
-                            let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
+                            let (ttl, ver, _) = KeyDecoder::decode_key_meta(&meta_value);
+                            version = ver;
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.do_async_txnkv_zset_expire_if_needed(&key).await?;
                                 expired = true;
+                                version = get_version_for_new(&key, txn_rc.clone()).await?;
                                 txn = txn_rc.lock().await;
                             }
 
@@ -822,22 +837,28 @@ impl ZsetCommandCtx {
 
                                     // add meta key if key expired above
                                     if expired {
-                                        let new_meta_value =
-                                            KEY_ENCODER.encode_txnkv_zset_meta_value(ttl, 0, 0);
+                                        let new_meta_value = KEY_ENCODER
+                                            .encode_txnkv_zset_meta_value(ttl, version, 0);
                                         txn.put(meta_key, new_meta_value).await?;
                                     }
                                 }
                             }
                         }
                         None => {
+                            drop(txn);
+                            version = get_version_for_new(&key, txn_rc.clone()).await?;
+                            txn = txn_rc.lock().await;
+
                             prev_score = 0f64;
 
-                            let meta_value = KEY_ENCODER.encode_txnkv_zset_meta_value(0, 0, 0);
+                            let meta_value =
+                                KEY_ENCODER.encode_txnkv_zset_meta_value(0, version, 0);
                             txn.put(meta_key, meta_value).await?;
-                            data_key = KEY_ENCODER.encode_txnkv_zset_data_key(&key, &member, 0);
+                            data_key =
+                                KEY_ENCODER.encode_txnkv_zset_data_key(&key, &member, version);
                             let sub_meta_key = KEY_ENCODER.encode_txnkv_sub_meta_key(
                                 &key,
-                                0,
+                                version,
                                 gen_next_meta_index(),
                             );
                             txn.put(sub_meta_key, 1_i64.to_be_bytes().to_vec()).await?;
@@ -846,7 +867,7 @@ impl ZsetCommandCtx {
 
                     let new_score = prev_score + step;
                     let score_key =
-                        KEY_ENCODER.encode_txnkv_zset_score_key(&key, new_score, &member, 0);
+                        KEY_ENCODER.encode_txnkv_zset_score_key(&key, new_score, &member, version);
                     // add data key and score key
                     let data_value = KEY_ENCODER.encode_txnkv_zset_data_value(new_score);
                     txn.put(data_key, data_value).await?;
@@ -1094,37 +1115,59 @@ impl ZsetCommandCtx {
                     match txn.get_for_update(meta_key.clone()).await? {
                         Some(meta_value) => {
                             let version = KeyDecoder::decode_key_version(&meta_value);
-                            let bound_range =
-                                KEY_ENCODER.encode_txnkv_zset_data_key_range(&key, version);
-                            let iter = txn.scan(bound_range, u32::MAX).await?;
-                            for kv in iter {
-                                // kv.0 is member key
-                                // kv.1 is score
-                                // decode the score vec to i64
-                                let score = KeyDecoder::decode_key_zset_data_value(&kv.1);
 
-                                // decode member from data key
-                                let member_vec = KeyDecoder::decode_key_zset_member_from_datakey(
-                                    &key,
-                                    kv.0.clone(),
-                                );
-                                let member = String::from_utf8_lossy(&member_vec);
+                            drop(txn);
+                            let size = self.txnkv_sum_key_size(&key, version).await?;
+                            txn = txn_rc.lock().await;
 
-                                // remove member and score key
-                                let score_key = KEY_ENCODER
-                                    .encode_txnkv_zset_score_key(&key, score, &member, version);
-                                txn.delete(kv.0).await?;
-                                txn.delete(score_key).await?;
+                            if size > async_del_zset_threshold_or_default() as i64 {
+                                // async del zset
+                                txn.delete(meta_key).await?;
+
+                                let gc_key = KEY_ENCODER.encode_txnkv_gc_key(&key);
+                                txn.put(gc_key, version.to_be_bytes()).await?;
+
+                                let gc_version_key =
+                                    KEY_ENCODER.encode_txnkv_gc_version_key(&key, version);
+                                txn.put(
+                                    gc_version_key,
+                                    vec![KEY_ENCODER.get_type_bytes(DataType::Zset)],
+                                )
+                                .await?;
+                            } else {
+                                let bound_range =
+                                    KEY_ENCODER.encode_txnkv_zset_data_key_range(&key, version);
+                                let iter = txn.scan(bound_range, u32::MAX).await?;
+                                for kv in iter {
+                                    // kv.0 is member key
+                                    // kv.1 is score
+                                    // decode the score vec to i64
+                                    let score = KeyDecoder::decode_key_zset_data_value(&kv.1);
+
+                                    // decode member from data key
+                                    let member_vec =
+                                        KeyDecoder::decode_key_zset_member_from_datakey(
+                                            &key,
+                                            kv.0.clone(),
+                                        );
+                                    let member = String::from_utf8_lossy(&member_vec);
+
+                                    // remove member and score key
+                                    let score_key = KEY_ENCODER
+                                        .encode_txnkv_zset_score_key(&key, score, &member, version);
+                                    txn.delete(kv.0).await?;
+                                    txn.delete(score_key).await?;
+                                }
+
+                                // delete all sub meta keys
+                                let bound_range =
+                                    KEY_ENCODER.encode_txnkv_sub_meta_key_range(&key, version);
+                                let iter = txn.scan_keys(bound_range, u32::MAX).await?;
+                                for k in iter {
+                                    txn.delete(k).await?;
+                                }
+                                txn.delete(meta_key).await?;
                             }
-
-                            // delete all sub meta keys
-                            let bound_range =
-                                KEY_ENCODER.encode_txnkv_sub_meta_key_range(&key, version);
-                            let iter = txn.scan_keys(bound_range, u32::MAX).await?;
-                            for k in iter {
-                                txn.delete(k).await?;
-                            }
-                            txn.delete(meta_key).await?;
                             Ok(1)
                         }
                         None => Ok(0),
@@ -1155,38 +1198,62 @@ impl ZsetCommandCtx {
                             if !key_is_expired(ttl) {
                                 return Ok(0);
                             }
+
                             let version = KeyDecoder::decode_key_version(&meta_value);
-                            let bound_range =
-                                KEY_ENCODER.encode_txnkv_zset_data_key_range(&key, version);
-                            let iter = txn.scan(bound_range, u32::MAX).await?;
-                            for kv in iter {
-                                // kv.0 is member key
-                                // kv.1 is score
-                                // decode the score vec to i64
-                                let score = KeyDecoder::decode_key_zset_data_value(&kv.1);
 
-                                // decode member from data key
-                                let member_vec = KeyDecoder::decode_key_zset_member_from_datakey(
-                                    &key,
-                                    kv.0.clone(),
-                                );
-                                let member = String::from_utf8_lossy(&member_vec);
+                            drop(txn);
+                            let size = self.txnkv_sum_key_size(&key, version).await?;
+                            txn = txn_rc.lock().await;
 
-                                // remove member and score key
-                                let score_key = KEY_ENCODER
-                                    .encode_txnkv_zset_score_key(&key, score, &member, version);
-                                txn.delete(kv.0).await?;
-                                txn.delete(score_key).await?;
+                            if size > async_expire_zset_threshold_or_default() as i64 {
+                                // async del zset
+                                txn.delete(meta_key).await?;
+
+                                let gc_key = KEY_ENCODER.encode_txnkv_gc_key(&key);
+                                txn.put(gc_key, version.to_be_bytes()).await?;
+
+                                let gc_version_key =
+                                    KEY_ENCODER.encode_txnkv_gc_version_key(&key, version);
+                                txn.put(
+                                    gc_version_key,
+                                    vec![KEY_ENCODER.get_type_bytes(DataType::Zset)],
+                                )
+                                .await?;
+                            } else {
+                                let bound_range =
+                                    KEY_ENCODER.encode_txnkv_zset_data_key_range(&key, version);
+                                let iter = txn.scan(bound_range, u32::MAX).await?;
+                                for kv in iter {
+                                    // kv.0 is member key
+                                    // kv.1 is score
+                                    // decode the score vec to i64
+                                    let score = KeyDecoder::decode_key_zset_data_value(&kv.1);
+
+                                    // decode member from data key
+                                    let member_vec =
+                                        KeyDecoder::decode_key_zset_member_from_datakey(
+                                            &key,
+                                            kv.0.clone(),
+                                        );
+                                    let member = String::from_utf8_lossy(&member_vec);
+
+                                    // remove member and score key
+                                    let score_key = KEY_ENCODER
+                                        .encode_txnkv_zset_score_key(&key, score, &member, version);
+                                    txn.delete(kv.0).await?;
+                                    txn.delete(score_key).await?;
+                                }
+
+                                // delete all sub meta keys
+                                let bound_range =
+                                    KEY_ENCODER.encode_txnkv_sub_meta_key_range(&key, version);
+                                let iter = txn.scan_keys(bound_range, u32::MAX).await?;
+                                for k in iter {
+                                    txn.delete(k).await?;
+                                }
+                                txn.delete(meta_key).await?;
                             }
 
-                            // delete all sub meta keys
-                            let bound_range =
-                                KEY_ENCODER.encode_txnkv_sub_meta_key_range(&key, version);
-                            let iter = txn.scan_keys(bound_range, u32::MAX).await?;
-                            for k in iter {
-                                txn.delete(k).await?;
-                            }
-                            txn.delete(meta_key).await?;
                             REMOVED_EXPIRED_KEY_COUNTER
                                 .with_label_values(&["zset"])
                                 .inc();

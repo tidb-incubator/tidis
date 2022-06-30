@@ -72,7 +72,7 @@ impl GcMaster {
     pub async fn dispatch_task(&mut self, task: GcTask) -> AsyncResult<()> {
         // calculate task hash and dispatch to worker
         let idx = X25.checksum(&task.to_bytes()) as usize % self.workers.len();
-        debug!(LOGGER, "dispatch task to worker: {}", idx);
+        debug!(LOGGER, "dispatch task {:?} to worker: {}", task, idx);
         self.workers[idx].add_task(task).await
     }
 
@@ -169,16 +169,16 @@ impl GcWorker {
                                 "async delete hash key {} with version {}", user_key, version
                             );
                             // delete all sub meta key of this key and version
-                            let bound_range = KEY_ENCODER
-                                .encode_txnkv_sub_meta_key_range(&user_key, task.version);
+                            let bound_range =
+                                KEY_ENCODER.encode_txnkv_sub_meta_key_range(&user_key, version);
                             let iter = txn.scan_keys(bound_range, u32::MAX).await?;
                             for k in iter {
                                 txn.delete(k).await?;
                             }
 
                             // delete all data key of this key and version
-                            let bound_range = KEY_ENCODER
-                                .encode_txnkv_hash_data_key_range(&user_key, task.version);
+                            let bound_range =
+                                KEY_ENCODER.encode_txnkv_hash_data_key_range(&user_key, version);
                             let iter = txn.scan_keys(bound_range, u32::MAX).await?;
                             for k in iter {
                                 txn.delete(k).await?;
@@ -190,8 +190,8 @@ impl GcWorker {
                                 "async delete list key {} with version {}", user_key, version
                             );
                             // delete all data key of this key and version
-                            let bound_range = KEY_ENCODER
-                                .encode_txnkv_list_data_key_range(&user_key, task.version);
+                            let bound_range =
+                                KEY_ENCODER.encode_txnkv_list_data_key_range(&user_key, version);
                             let iter = txn.scan_keys(bound_range, u32::MAX).await?;
                             for k in iter {
                                 txn.delete(k).await?;
@@ -203,15 +203,15 @@ impl GcWorker {
                                 "async delete set key {} with version {}", user_key, version
                             );
                             // delete all sub meta key of this key and version
-                            let bound_range = KEY_ENCODER
-                                .encode_txnkv_sub_meta_key_range(&user_key, task.version);
+                            let bound_range =
+                                KEY_ENCODER.encode_txnkv_sub_meta_key_range(&user_key, version);
                             let iter = txn.scan_keys(bound_range, u32::MAX).await?;
                             for k in iter {
                                 txn.delete(k).await?;
                             }
                             // delete all data key of this key and version
-                            let bound_range = KEY_ENCODER
-                                .encode_txnkv_set_data_key_range(&user_key, task.version);
+                            let bound_range =
+                                KEY_ENCODER.encode_txnkv_set_data_key_range(&user_key, version);
                             let iter = txn.scan_keys(bound_range, u32::MAX).await?;
                             for k in iter {
                                 txn.delete(k).await?;
@@ -223,8 +223,8 @@ impl GcWorker {
                                 "async delete zset key {} with version {}", user_key, version
                             );
                             // delete all sub meta key of this key and version
-                            let bound_range = KEY_ENCODER
-                                .encode_txnkv_sub_meta_key_range(&user_key, task.version);
+                            let bound_range =
+                                KEY_ENCODER.encode_txnkv_sub_meta_key_range(&user_key, version);
                             let iter = txn.scan_keys(bound_range, u32::MAX).await?;
                             for k in iter {
                                 txn.delete(k).await?;
@@ -241,8 +241,8 @@ impl GcWorker {
                             }
 
                             // delete all data key of this key and version
-                            let bound_range = KEY_ENCODER
-                                .encode_txnkv_zset_data_key_range(&user_key, task.version);
+                            let bound_range =
+                                KEY_ENCODER.encode_txnkv_zset_data_key_range(&user_key, version);
                             let iter = txn.scan_keys(bound_range, u32::MAX).await?;
                             for k in iter {
                                 txn.delete(k).await?;
@@ -255,15 +255,15 @@ impl GcWorker {
 
                     // delete gc version key
                     let gc_version_key =
-                        KEY_ENCODER.encode_txnkv_gc_version_key(&user_key, task.version);
+                        KEY_ENCODER.encode_txnkv_gc_version_key(&user_key, version);
                     txn.delete(gc_version_key).await?;
 
                     // also delete gc key if version in gc key is same as task.version
                     let gc_key = KEY_ENCODER.encode_txnkv_gc_key(&user_key);
                     match txn.get(gc_key.clone()).await? {
                         Some(v) => {
-                            let version = u16::from_be_bytes(v[..2].try_into().unwrap());
-                            if version == task.version {
+                            let ver = u16::from_be_bytes(v[..2].try_into().unwrap());
+                            if ver == version {
                                 debug!(LOGGER, "clean gc key for user key {}", user_key);
                                 txn.delete(gc_key).await?;
                             }
@@ -290,6 +290,7 @@ impl GcWorker {
                     }
                 }
             }
+            info!(LOGGER, "gc worker thread exit: {}", self.id);
         });
     }
 }

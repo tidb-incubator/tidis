@@ -178,4 +178,13 @@ impl Cluster {
         );
         resp_bulk(str.into_bytes())
     }
+
+    pub fn myself_owned_slots(&self) -> (usize, usize) {
+        let nodes_guard = self.nodes.read().unwrap();
+        let myself = nodes_guard
+            .iter()
+            .find(|node| node.flags.is_some())
+            .unwrap();
+        (myself.slot_start, myself.slot_end)
+    }
 }

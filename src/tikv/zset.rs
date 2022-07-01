@@ -621,13 +621,12 @@ impl ZsetCommandCtx {
                             }
                             let mut poped_count = 0;
                             let mut resp = vec![];
+                            let bound_range =
+                                KEY_ENCODER.encode_txnkv_zset_score_key_range(&key, version);
                             if from_min {
-                                let bound_range =
-                                    KEY_ENCODER.encode_txnkv_zset_score_key_range(&key, version);
                                 let iter = txn
                                     .scan_keys(bound_range, count.try_into().unwrap())
                                     .await?;
-
                                 for k in iter {
                                     let member = KeyDecoder::decode_key_zset_member_from_scorekey(
                                         &key,
@@ -653,7 +652,33 @@ impl ZsetCommandCtx {
                                     poped_count += 1;
                                 }
                             } else {
-                                // TODO not supported yet
+                                let iter = txn
+                                    .scan_keys_reverse(bound_range, count.try_into().unwrap())
+                                    .await?;
+                                for k in iter {
+                                    let member = KeyDecoder::decode_key_zset_member_from_scorekey(
+                                        &key,
+                                        k.clone(),
+                                    );
+                                    let data_key = KEY_ENCODER.encode_txnkv_zset_data_key(
+                                        &key,
+                                        &String::from_utf8_lossy(&member),
+                                        version,
+                                    );
+
+                                    // push member to resp
+                                    resp.push(resp_bulk(member));
+                                    // push score to resp
+                                    let score = KeyDecoder::decode_key_zset_score_from_scorekey(
+                                        &key,
+                                        k.clone(),
+                                    );
+                                    resp.push(resp_bulk(score.to_string().as_bytes().to_vec()));
+
+                                    txn.delete(data_key).await?;
+                                    txn.delete(k).await?;
+                                    poped_count += 1;
+                                }
                             }
 
                             drop(txn);

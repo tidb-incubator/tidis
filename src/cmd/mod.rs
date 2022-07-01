@@ -285,6 +285,7 @@ pub enum Command {
     Zrevrangebyscore(Zrangebyscore),
     Zcount(Zcount),
     Zpopmin(Zpop),
+    Zpopmax(Zpop),
     Zrank(Zrank),
     Zincryby(Zincrby),
 
@@ -501,6 +502,9 @@ impl Command {
             "zpopmin" => {
                 Command::Zpopmin(transform_parse(Zpop::parse_frames(&mut parse), &mut parse))
             }
+            "zpopmax" => {
+                Command::Zpopmax(transform_parse(Zpop::parse_frames(&mut parse), &mut parse))
+            }
             "zrank" => Command::Zrank(transform_parse(Zrank::parse_frames(&mut parse), &mut parse)),
             "zincrby" => Command::Zincryby(transform_parse(
                 Zincrby::parse_frames(&mut parse),
@@ -612,6 +616,7 @@ impl Command {
             "zrevrangebyscore" => Command::Zrevrangebyscore(Zrangebyscore::parse_argv(argv)?),
             "zcount" => Command::Zcount(Zcount::parse_argv(argv)?),
             "zpopmin" => Command::Zpopmin(Zpop::parse_argv(argv)?),
+            "zpopmax" => Command::Zpopmax(Zpop::parse_argv(argv)?),
             "zrank" => Command::Zrank(Zrank::parse_argv(argv)?),
             "zincrby" => Command::Zincryby(Zincrby::parse_argv(argv)?),
             _ => {
@@ -707,6 +712,7 @@ impl Command {
             Zrevrangebyscore(cmd) => cmd.apply(dst, true).await,
             Zcount(cmd) => cmd.apply(dst).await,
             Zpopmin(cmd) => cmd.apply(dst, true).await,
+            Zpopmax(cmd) => cmd.apply(dst, false).await,
             Zrank(cmd) => cmd.apply(dst).await,
             Zincryby(cmd) => cmd.apply(dst).await,
 
@@ -799,6 +805,7 @@ impl Command {
             Command::Zrevrangebyscore(_) => "zrevrangebyscore",
             Command::Zcount(_) => "zcount",
             Command::Zpopmin(_) => "zpopmin",
+            Command::Zpopmax(_) => "zpopmax",
             Command::Zrank(_) => "zrank",
             Command::Zincryby(_) => "zincrby",
             Command::Auth(_) => "auth",

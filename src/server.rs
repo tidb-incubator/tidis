@@ -215,7 +215,7 @@ pub async fn run(
         expire: config_cluster_topology_expire_or_default(),
     };
 
-    let mut gc_master = GcMaster::new(async_gc_worker_number_or_default());
+    let mut gc_master = GcMaster::new(async_gc_worker_number_or_default(), topo_holder.clone());
     gc_master.start_workers().await;
 
     if tcp_enabled && !tls_enabled {

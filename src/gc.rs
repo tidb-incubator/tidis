@@ -7,8 +7,9 @@ use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::Mutex;
 use tokio::time::{self, Duration, MissedTickBehavior};
 
-use crc::{Crc, CRC_16_IBM_SDLC};
+use crc::{Crc, CRC_16_XMODEM};
 
+use crate::cluster::Cluster;
 use crate::config::LOGGER;
 use crate::metrics::GC_TASK_QUEUE_COUNTER;
 use crate::tikv::encoding::{DataType, KeyDecoder};
@@ -16,7 +17,7 @@ use crate::tikv::errors::{AsyncResult, RTError};
 use crate::tikv::{get_txn_client, KEY_ENCODER};
 use crate::{async_gc_interval_or_default, async_gc_worker_queue_size_or_default};
 
-const X25: Crc<u16> = Crc::<u16>::new(&CRC_16_IBM_SDLC);
+const CRC16: Crc<u16> = Crc::<u16>::new(&CRC_16_XMODEM);
 
 #[derive(Debug, Clone)]
 pub struct GcTask {
@@ -46,10 +47,11 @@ impl GcTask {
 #[derive(Debug)]
 pub struct GcMaster {
     workers: Vec<GcWorker>,
+    topo: Cluster,
 }
 
 impl GcMaster {
-    pub fn new(worker_num: usize) -> Self {
+    pub fn new(worker_num: usize, topo: Cluster) -> Self {
         let mut workers = Vec::with_capacity(worker_num);
 
         // create workers pool
@@ -59,7 +61,7 @@ impl GcMaster {
             workers.push(worker);
         }
 
-        GcMaster { workers }
+        GcMaster { workers, topo }
     }
 
     pub async fn start_workers(&self) {
@@ -73,7 +75,7 @@ impl GcMaster {
     // dispatch task to a worker
     pub async fn dispatch_task(&mut self, task: GcTask) -> AsyncResult<()> {
         // calculate task hash and dispatch to worker
-        let idx = X25.checksum(&task.to_bytes()) as usize % self.workers.len();
+        let idx = CRC16.checksum(&task.to_bytes()) as usize % self.workers.len();
         debug!(LOGGER, "[GC] dispatch task {:?} to worker: {}", task, idx);
         self.workers[idx].add_task(task).await
     }
@@ -96,6 +98,33 @@ impl GcMaster {
 
             for kv in iter {
                 let (user_key, version) = KeyDecoder::decode_key_gc_userkey_version(kv.0);
+
+                let (slot_range_left, slot_range_right) = self.topo.myself_owned_slots();
+                // crc16 to user key with hashtag `{}` support
+                // check if user key contains valid hashtag
+                let mut left_tag_idx = usize::MAX;
+                let mut right_tag_idx = usize::MAX;
+                for (idx, byte) in user_key.iter().enumerate() {
+                    if byte == &b'{' {
+                        left_tag_idx = idx;
+                    }
+                    if left_tag_idx != usize::MAX && byte == &b'}' {
+                        right_tag_idx = idx;
+                        break;
+                    }
+                }
+                let user_key_hash: usize =
+                    if right_tag_idx != usize::MAX && right_tag_idx - left_tag_idx > 1 {
+                        // we have a valid hashtag, do crc16 to string to the content in hashtag
+                        (CRC16.checksum(&user_key[left_tag_idx + 1..right_tag_idx]) & 0x3FFF).into()
+                    } else {
+                        (CRC16.checksum(&user_key) & 0x3FFF).into()
+                    };
+
+                // skip if user key is not owned by myself
+                if user_key_hash < slot_range_left || user_key_hash > slot_range_right {
+                    continue;
+                }
                 let key_type = match kv.1[0] {
                     0 => DataType::String,
                     1 => DataType::Hash,

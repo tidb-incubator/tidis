@@ -136,6 +136,7 @@ impl<'a> LuaCommandCtx<'a> {
                     Command::Zrevrangebyscore(cmd) => cmd.zrangebyscore(txn_rc.clone(), true).await,
                     Command::Zcount(cmd) => cmd.zcount(txn_rc.clone()).await,
                     Command::Zpopmin(cmd) => cmd.zpop(txn_rc.clone(), true).await,
+                    Command::Zpopmax(cmd) => cmd.zpop(txn_rc.clone(), false).await,
                     Command::Zrank(cmd) => cmd.zrank(txn_rc.clone()).await,
                     Command::Zincryby(cmd) => cmd.zincrby(txn_rc.clone()).await,
                     _ => Ok(resp_invalid_arguments()),

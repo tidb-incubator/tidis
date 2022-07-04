@@ -135,6 +135,10 @@ class ZsetTest(unittest.TestCase):
         self.assertEqual(self.r.zadd(self.k1, {self.v1: 1, self.v2: 2}), 2)
         self.assertListEqual(self.r.zpopmin(self.k1), [(self.v1, 1)])
 
+    def test_zpopmax(self):
+        self.assertEqual(self.r.zadd(self.k1, {self.v1: 1, self.v2: 2}), 2)
+        self.assertListEqual(self.r.zpopmax(self.k1), [(self.v2, 2)])
+
     def test_zincrby(self):
         self.assertEqual(self.r.zadd(self.k1, {self.v1: 1, self.v2: 2}), 2)
         self.assertListEqual(self.r.zrange(self.k1, 0, -1, False, True), [(self.v1, 1), (self.v2, 2)])

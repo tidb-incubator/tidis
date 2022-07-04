@@ -500,6 +500,10 @@ class LuaTest(unittest.TestCase):
         self.assertEqual(self.execute_eval('zadd', self.k1, 1, self.v1, 2, self.v2), 2)
         self.assertListEqual(self.execute_eval('zpopmin', self.k1), [self.v1, '1'])
 
+    def test_zpopmax(self):
+        self.assertEqual(self.execute_eval('zadd', self.k1, 1, self.v1, 2, self.v2), 2)
+        self.assertListEqual(self.execute_eval('zpopmax', self.k1), [self.v2, '2'])
+
     def test_zincrby(self):
         self.assertEqual(self.execute_eval('zadd', self.k1, 1, self.v1, 2, self.v2), 2)
         self.assertListEqual(self.execute_eval('zrange', self.k1, 0, -1, 'withscores'), [self.v1, '1', self.v2, '2'])

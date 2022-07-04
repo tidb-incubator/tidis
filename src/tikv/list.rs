@@ -730,7 +730,7 @@ impl<'a> ListCommandCtx {
         mut self,
         key: &str,
         count: usize,
-        _from_head: bool,
+        from_head: bool,
         ele: &Bytes,
     ) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
@@ -783,7 +783,7 @@ impl<'a> ListCommandCtx {
                                 });
 
                             // hole saves the elements to be removed in order
-                            let hole: Vec<u64> = iter
+                            let mut hole: Vec<u64> = iter
                                 .map(|kv| KeyDecoder::decode_key_list_idx_from_datakey(&key, kv.0))
                                 .collect();
 
@@ -792,51 +792,102 @@ impl<'a> ListCommandCtx {
                                 return Ok(0);
                             }
 
-                            let mut removed_count = 0;
-
-                            let iter = txn.scan(bound_range, u32::MAX).await?;
-
-                            for kv in iter {
-                                let key_idx = KeyDecoder::decode_key_list_idx_from_datakey(
-                                    &key,
-                                    kv.0.clone(),
-                                );
-                                if hole.is_empty()
-                                    || (count > 0 && removed_count == count)
-                                    || removed_count == hole.len()
-                                {
-                                    break;
-                                }
-
-                                if hole[removed_count] == key_idx {
-                                    txn.delete(kv.0).await?;
-                                    removed_count += 1;
-                                    continue;
-                                }
-
-                                // check if key idx need to be backward move
-                                if removed_count > 0 {
-                                    let new_data_key = KEY_ENCODER.encode_txnkv_list_data_key(
-                                        &key,
-                                        key_idx - removed_count as u64,
-                                        version,
-                                    );
-                                    // just override the stale element
-                                    txn.put(new_data_key, kv.1).await?;
-                                }
+                            if !from_head {
+                                hole.reverse();
                             }
 
-                            // update meta key or delete it if no element left
-                            if len == removed_count as u64 {
-                                txn.delete(meta_key).await?;
+                            let mut removed_count = 0;
+
+                            if from_head {
+                                let iter = txn.scan(bound_range, u32::MAX).await?;
+
+                                for kv in iter {
+                                    let key_idx = KeyDecoder::decode_key_list_idx_from_datakey(
+                                        &key,
+                                        kv.0.clone(),
+                                    );
+                                    if hole.is_empty() {
+                                        break;
+                                    }
+
+                                    if !((count > 0 && removed_count == count)
+                                        || removed_count == hole.len())
+                                        && hole[removed_count] == key_idx
+                                    {
+                                        txn.delete(kv.0).await?;
+                                        removed_count += 1;
+                                        continue;
+                                    }
+
+                                    // check if key idx need to be backward move
+                                    if removed_count > 0 {
+                                        let new_data_key = KEY_ENCODER.encode_txnkv_list_data_key(
+                                            &key,
+                                            key_idx - removed_count as u64,
+                                            version,
+                                        );
+                                        txn.put(new_data_key, kv.1).await?;
+                                        txn.delete(kv.0).await?;
+                                    }
+                                }
+
+                                // update meta key or delete it if no element left
+                                if len == removed_count as u64 {
+                                    txn.delete(meta_key).await?;
+                                } else {
+                                    let new_meta_value = KEY_ENCODER.encode_txnkv_list_meta_value(
+                                        ttl,
+                                        version,
+                                        left,
+                                        right - removed_count as u64,
+                                    );
+                                    txn.put(meta_key, new_meta_value).await?;
+                                }
                             } else {
-                                let new_meta_value = KEY_ENCODER.encode_txnkv_list_meta_value(
-                                    ttl,
-                                    version,
-                                    left,
-                                    right - removed_count as u64,
-                                );
-                                txn.put(meta_key, new_meta_value).await?;
+                                let iter = txn.scan_reverse(bound_range, u32::MAX).await?;
+
+                                for kv in iter {
+                                    let key_idx = KeyDecoder::decode_key_list_idx_from_datakey(
+                                        &key,
+                                        kv.0.clone(),
+                                    );
+                                    if hole.is_empty() {
+                                        break;
+                                    }
+
+                                    if !((count > 0 && removed_count == count)
+                                        || removed_count == hole.len())
+                                        && hole[removed_count] == key_idx
+                                    {
+                                        txn.delete(kv.0).await?;
+                                        removed_count += 1;
+                                        continue;
+                                    }
+
+                                    // check if key idx need to be forward move
+                                    if removed_count > 0 {
+                                        let new_data_key = KEY_ENCODER.encode_txnkv_list_data_key(
+                                            &key,
+                                            key_idx + removed_count as u64,
+                                            version,
+                                        );
+                                        txn.put(new_data_key, kv.1).await?;
+                                        txn.delete(kv.0).await?;
+                                    }
+                                }
+
+                                // update meta key or delete it if no element left
+                                if len == removed_count as u64 {
+                                    txn.delete(meta_key).await?;
+                                } else {
+                                    let new_meta_value = KEY_ENCODER.encode_txnkv_list_meta_value(
+                                        ttl,
+                                        version,
+                                        left + removed_count as u64,
+                                        right,
+                                    );
+                                    txn.put(meta_key, new_meta_value).await?;
+                                }
                             }
                             Ok(removed_count as i64)
                         }

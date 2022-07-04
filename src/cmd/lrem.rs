@@ -76,12 +76,14 @@ impl Lrem {
             return Ok(resp_invalid_arguments());
         }
         if is_use_txn_api() {
-            // not support reverse scan right now
+            let mut from_head = true;
+            let mut count = self.count;
             if self.count < 0 {
-                return Ok(resp_err(REDIS_NOT_SUPPORTED_ERR));
+                from_head = false;
+                count = -count;
             }
             ListCommandCtx::new(txn)
-                .do_async_txnkv_lrem(&self.key, self.count as usize, true, &self.element)
+                .do_async_txnkv_lrem(&self.key, count as usize, from_head, &self.element)
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))

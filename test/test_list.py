@@ -91,6 +91,8 @@ class ListTest(unittest.TestCase):
         self.assertEqual(self.r.lrem(self.k1, 5, 11), 5)
         # remove not exists elements
         self.assertEqual(self.r.lrem(self.k1, 0, 100), 0)
+        # remove same elements at most 6 times from right
+        self.assertEqual(self.r.lrem(self.k1, -6, 20), 6)
 
     def test_linsert(self):
         for i in range(100):

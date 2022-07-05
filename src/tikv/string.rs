@@ -18,7 +18,9 @@ use tokio::sync::Mutex;
 use super::errors::*;
 use super::{get_client, get_txn_client};
 use super::{hash::HashCommandCtx, list::ListCommandCtx, set::SetCommandCtx, zset::ZsetCommandCtx};
-use crate::utils::{key_is_expired, resp_err, resp_int, resp_ok_ignore, sleep, ttl_from_timestamp};
+use crate::utils::{
+    key_is_expired, resp_err, resp_int, resp_ok_ignore, resp_str, sleep, ttl_from_timestamp,
+};
 use bytes::Bytes;
 
 use crate::metrics::REMOVED_EXPIRED_KEY_COUNTER;
@@ -70,6 +72,41 @@ impl StringCommandCtx {
                 Ok(resp_bulk(data))
             }
             None => Ok(resp_nil()),
+        }
+    }
+
+    pub async fn do_async_rawkv_type(&self, key: &str) -> AsyncResult<Frame> {
+        let client = get_client()?;
+        let ekey = KEY_ENCODER.encode_rawkv_string(key);
+
+        match client.get(ekey).await? {
+            Some(val) => Ok(resp_str(&KeyDecoder::decode_key_type(&val).to_string())),
+            None => Ok(resp_str(&DataType::Null.to_string())),
+        }
+    }
+
+    pub async fn do_async_txnkv_type(self, key: &str) -> AsyncResult<Frame> {
+        let client = get_txn_client()?;
+        let ekey = KEY_ENCODER.encode_txnkv_string(key);
+
+        let mut ss = match self.txn.clone() {
+            Some(txn) => client.snapshot_from_txn(txn).await,
+            None => client.newest_snapshot().await,
+        };
+
+        match ss.get(ekey).await? {
+            Some(val) => {
+                let ttl = KeyDecoder::decode_key_ttl(&val);
+                if key_is_expired(ttl) {
+                    // delete key
+                    self.do_async_txnkv_string_expire_if_needed(key).await?;
+                    return Ok(resp_str(&DataType::Null.to_string()));
+                }
+
+                let dt = KeyDecoder::decode_key_type(&val);
+                Ok(resp_str(&dt.to_string()))
+            }
+            None => Ok(resp_str(&DataType::Null.to_string())),
         }
     }
 

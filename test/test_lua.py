@@ -5,7 +5,7 @@ import unittest
 from functools import reduce
 
 from rediswrap import RedisWrapper
-from test_util import msec_ts_after_five_secs, sec_ts_after_five_secs, NOT_EXISTS_LITERAL
+from test_util import msec_ts_after_five_secs, sec_ts_after_five_secs, NOT_EXISTS_LITERAL, CmdType
 
 
 class LuaTest(unittest.TestCase):
@@ -293,23 +293,31 @@ class LuaTest(unittest.TestCase):
             self.assertTrue(self.execute_eval('rpush', self.k1, str(i)))
         llen = self.execute_eval('llen', self.k1)
         # test insert before the first element
-        self.assertEqual(self.execute_eval('linsert', self.k1, 'before', '0', 'hello1'), llen+1)
+        self.assertEqual(self.execute_eval('linsert', self.k1, 'before', '0', 'hello1'), llen + 1)
         self.assertListEqual(self.execute_eval('lrange', self.k1, 0, -1), ['hello1'] + [str(i) for i in range(0, 100)])
         # test insert after the first element
-        self.assertEqual(self.execute_eval('linsert', self.k1, 'after', 'hello1', 'hello2'), llen+2)
-        self.assertListEqual(self.execute_eval('lrange', self.k1, 0, -1), ['hello1', 'hello2'] + [str(i) for i in range(0, 100)])
+        self.assertEqual(self.execute_eval('linsert', self.k1, 'after', 'hello1', 'hello2'), llen + 2)
+        self.assertListEqual(self.execute_eval('lrange', self.k1, 0, -1),
+                             ['hello1', 'hello2'] + [str(i) for i in range(0, 100)])
         # test insert in the middle
-        self.assertEqual(self.execute_eval('linsert', self.k1, 'before', '50', 'hello3'), llen+3)
-        self.assertListEqual(self.execute_eval('lrange', self.k1, 0 ,-1), ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3'] + [str(i) for i in range(50, 100)])
-        self.assertEqual(self.execute_eval('linsert', self.k1, 'after', '50', 'hello4'), llen+4)
-        self.assertListEqual(self.execute_eval('lrange', self.k1, 0, -1), ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3', '50', 'hello4'] + [str(i) for i in range(51, 100)])
+        self.assertEqual(self.execute_eval('linsert', self.k1, 'before', '50', 'hello3'), llen + 3)
+        self.assertListEqual(self.execute_eval('lrange', self.k1, 0, -1),
+                             ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3'] + [str(i) for i in
+                                                                                                   range(50, 100)])
+        self.assertEqual(self.execute_eval('linsert', self.k1, 'after', '50', 'hello4'), llen + 4)
+        self.assertListEqual(self.execute_eval('lrange', self.k1, 0, -1),
+                             ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3', '50', 'hello4'] + [
+                                 str(i) for i in range(51, 100)])
         # test insert before the last element
-        self.assertEqual(self.execute_eval('linsert', self.k1, 'before', '99', 'hello5'), llen+5)
-        self.assertListEqual(self.execute_eval('lrange', self.k1, 0, -1), ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3', '50', 'hello4'] + [str(i) for i in range(51, 99)] + ['hello5', '99'])
+        self.assertEqual(self.execute_eval('linsert', self.k1, 'before', '99', 'hello5'), llen + 5)
+        self.assertListEqual(self.execute_eval('lrange', self.k1, 0, -1),
+                             ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3', '50', 'hello4'] + [
+                                 str(i) for i in range(51, 99)] + ['hello5', '99'])
         # test insert after the last element
-        self.assertEqual(self.execute_eval('linsert', self.k1, 'after', '99', 'hello6'), llen+6)
-        self.assertListEqual(self.execute_eval('lrange', self.k1, 0, -1), ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3', '50', 'hello4'] + [str(i) for i in range(51, 99)] + ['hello5', '99', 'hello6'])
-
+        self.assertEqual(self.execute_eval('linsert', self.k1, 'after', '99', 'hello6'), llen + 6)
+        self.assertListEqual(self.execute_eval('lrange', self.k1, 0, -1),
+                             ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3', '50', 'hello4'] + [
+                                 str(i) for i in range(51, 99)] + ['hello5', '99', 'hello6'])
 
     # ================ set ================
     def test_sadd(self):
@@ -521,6 +529,32 @@ class LuaTest(unittest.TestCase):
         self.assertEqual(self.execute_eval('zscore', self.k1, NOT_EXISTS_LITERAL), '1.5')
 
     # ================ generic ================
+    def test_type(self):
+        for cmd_type in CmdType:
+            self.assertEqual(self.execute_eval('type', self.k1), CmdType.NULL.value)
+
+            if cmd_type is CmdType.STRING:
+                self.assertTrue(self.execute_eval('set', self.k1, self.v1))
+                self.assertEqual(self.execute_eval('type', self.k1), CmdType.STRING.value)
+            elif cmd_type is CmdType.HASH:
+                self.assertEqual(self.execute_eval('hset', self.k1, self.f1, self.v1), 1)
+                self.assertEqual(self.execute_eval('type', self.k1), CmdType.HASH.value)
+            elif cmd_type is CmdType.LIST:
+                self.assertTrue(self.execute_eval('lpush', self.k1, self.v1))
+                self.assertEqual(self.execute_eval('type', self.k1), CmdType.LIST.value)
+            elif cmd_type is CmdType.SET:
+                self.assertEqual(self.execute_eval('sadd', self.k1, self.v1), 1)
+                self.assertEqual(self.execute_eval('type', self.k1), CmdType.SET.value)
+            elif cmd_type is CmdType.ZSET:
+                self.assertEqual(self.execute_eval('zadd', self.k1, 1, self.v1), 1)
+                self.assertEqual(self.execute_eval('type', self.k1), CmdType.ZSET.value)
+            elif cmd_type is CmdType.NULL:
+                self.assertEqual(self.execute_eval('type', self.k2), CmdType.NULL.value)
+            else:
+                raise Exception("there is an uncovered command type: " + cmd_type.name)
+
+            if cmd_type is not CmdType.NULL:
+                self.assertTrue(self.execute_eval('del', self.k1))
 
     def test_persist(self):
         self.assertTrue(self.execute_eval('set', self.k1, self.v1))

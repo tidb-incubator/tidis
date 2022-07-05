@@ -3,7 +3,7 @@ import time
 import unittest
 
 from rediswrap import RedisWrapper
-from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs, NOT_EXISTS_LITERAL
+from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs, NOT_EXISTS_LITERAL, CmdType
 
 
 class SetTest(unittest.TestCase):
@@ -31,6 +31,11 @@ class SetTest(unittest.TestCase):
         for i in range(200):
             self.assertEqual(self.r.sadd(self.k1, str(i)), 0)
         self.assertEqual(self.r.scard(self.k1), 200)
+
+    def test_type(self):
+        self.assertEqual(self.r.type(self.k1), CmdType.NULL.value)
+        self.assertEqual(self.r.sadd(self.k1, self.v1), 1)
+        self.assertEqual(self.r.type(self.k1), CmdType.SET.value)
 
     def test_scard(self):
         self.assertEqual(self.r.scard(self.k1), 0)

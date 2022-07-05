@@ -2,7 +2,7 @@ import time
 import unittest
 
 from rediswrap import RedisWrapper
-from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs, NOT_EXISTS_LITERAL
+from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs, NOT_EXISTS_LITERAL, CmdType
 
 
 class ZsetTest(unittest.TestCase):
@@ -54,6 +54,11 @@ class ZsetTest(unittest.TestCase):
         self.assertEqual(self.r.zadd(self.k2, {self.v1: 2, self.v2: 2, 'new_ele': 2}, ch=True), 2)
 
         # zadd lt, gt, incr are pending
+
+    def test_type(self):
+        self.assertEqual(self.r.type(self.k1), CmdType.NULL.value)
+        self.assertEqual(self.r.zadd(self.k1, {self.v1: 1}), 1)
+        self.assertEqual(self.r.type(self.k1), CmdType.ZSET.value)
 
     def test_zcard(self):
         self.assertEqual(self.r.zcard(self.k1), 0)

@@ -1,10 +1,20 @@
 import random
 import string
 import time
+from enum import Enum
 from math import floor
 
 NaN = float('nan')
 NOT_EXISTS_LITERAL = "__not_exists__"
+
+
+class CmdType(Enum):
+    STRING = "string"
+    HASH = "hash"
+    LIST = "list"
+    SET = "set"
+    ZSET = "zset"
+    NULL = "none"
 
 
 def current_sec_ts():

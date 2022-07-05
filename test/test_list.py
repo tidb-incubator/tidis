@@ -2,7 +2,7 @@ import time
 import unittest
 
 from rediswrap import RedisWrapper
-from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs
+from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs, CmdType
 
 
 class ListTest(unittest.TestCase):
@@ -45,6 +45,11 @@ class ListTest(unittest.TestCase):
         for i in range(200):
             self.assertEqual(self.r.lpop(self.k1), str(i))
 
+    def test_type(self):
+        self.assertEqual(self.r.type(self.k1), CmdType.NULL.value)
+        self.assertTrue(self.r.lpush(self.k1, self.v1))
+        self.assertEqual(self.r.type(self.k1), CmdType.LIST.value)
+
     def test_llen(self):
         for i in range(200):
             self.assertTrue(self.r.rpush(self.k1, str(i)))
@@ -79,7 +84,7 @@ class ListTest(unittest.TestCase):
         self.assertTrue(self.r.ltrim(self.k1, 0, 99))
         self.assertEqual(100, self.r.llen(self.k1))
         self.assertListEqual([str(i) for i in range(0, 100)], self.r.lrange(self.k1, 0, -1))
-    
+
     def test_lrem(self):
         for i in range(50):
             for j in range(i):
@@ -99,23 +104,30 @@ class ListTest(unittest.TestCase):
             self.assertTrue(self.r.rpush(self.k1, str(i)))
         llen = self.r.llen(self.k1)
         # test insert before the first element
-        self.assertEqual(self.r.linsert(self.k1, 'before', '0', 'hello1'), llen+1)
+        self.assertEqual(self.r.linsert(self.k1, 'before', '0', 'hello1'), llen + 1)
         self.assertListEqual(self.r.lrange(self.k1, 0, -1), ['hello1'] + [str(i) for i in range(0, 100)])
         # test insert after the first element
-        self.assertEqual(self.r.linsert(self.k1, 'after', 'hello1', 'hello2'), llen+2)
+        self.assertEqual(self.r.linsert(self.k1, 'after', 'hello1', 'hello2'), llen + 2)
         self.assertListEqual(self.r.lrange(self.k1, 0, -1), ['hello1', 'hello2'] + [str(i) for i in range(0, 100)])
         # test insert in the middle
-        self.assertEqual(self.r.linsert(self.k1, 'before', '50', 'hello3'), llen+3)
-        self.assertListEqual(self.r.lrange(self.k1, 0 ,-1), ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3'] + [str(i) for i in range(50, 100)])
-        self.assertEqual(self.r.linsert(self.k1, 'after', '50', 'hello4'), llen+4)
-        self.assertListEqual(self.r.lrange(self.k1, 0, -1), ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3', '50', 'hello4'] + [str(i) for i in range(51, 100)])
+        self.assertEqual(self.r.linsert(self.k1, 'before', '50', 'hello3'), llen + 3)
+        self.assertListEqual(self.r.lrange(self.k1, 0, -1),
+                             ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3'] + [str(i) for i in
+                                                                                                   range(50, 100)])
+        self.assertEqual(self.r.linsert(self.k1, 'after', '50', 'hello4'), llen + 4)
+        self.assertListEqual(self.r.lrange(self.k1, 0, -1),
+                             ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3', '50', 'hello4'] + [
+                                 str(i) for i in range(51, 100)])
         # test insert before the last element
-        self.assertEqual(self.r.linsert(self.k1, 'before', '99', 'hello5'), llen+5)
-        self.assertListEqual(self.r.lrange(self.k1, 0, -1), ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3', '50', 'hello4'] + [str(i) for i in range(51, 99)] + ['hello5', '99'])
+        self.assertEqual(self.r.linsert(self.k1, 'before', '99', 'hello5'), llen + 5)
+        self.assertListEqual(self.r.lrange(self.k1, 0, -1),
+                             ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3', '50', 'hello4'] + [
+                                 str(i) for i in range(51, 99)] + ['hello5', '99'])
         # test insert after the last element
-        self.assertEqual(self.r.linsert(self.k1, 'after', '99', 'hello6'), llen+6)
-        self.assertListEqual(self.r.lrange(self.k1, 0, -1), ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3', '50', 'hello4'] + [str(i) for i in range(51, 99)] + ['hello5', '99', 'hello6'])
-
+        self.assertEqual(self.r.linsert(self.k1, 'after', '99', 'hello6'), llen + 6)
+        self.assertListEqual(self.r.lrange(self.k1, 0, -1),
+                             ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3', '50', 'hello4'] + [
+                                 str(i) for i in range(51, 99)] + ['hello5', '99', 'hello6'])
 
     def test_del(self):
         self.assertTrue(self.r.rpush(self.k1, self.v1))

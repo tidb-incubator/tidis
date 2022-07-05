@@ -2,7 +2,7 @@ import time
 import unittest
 
 from rediswrap import RedisWrapper
-from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs
+from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs, CmdType
 
 
 class HashTest(unittest.TestCase):
@@ -40,6 +40,11 @@ class HashTest(unittest.TestCase):
         self.assertEqual(self.r.hset(self.k1, mapping={self.f3: self.v3, self.f4: self.v4}), 2)
         self.assertEqual(self.v3, self.r.hget(self.k1, self.f3))
         self.assertEqual(self.v4, self.r.hget(self.k1, self.f4))
+
+    def test_type(self):
+        self.assertEqual(self.r.type(self.k1), CmdType.NULL.value)
+        self.assertEqual(self.r.hset(self.k1, self.f1, self.v1), 1)
+        self.assertEqual(self.r.type(self.k1), CmdType.HASH.value)
 
     def test_hexists(self):
         self.assertEqual(self.r.hset(self.k1, self.f1, self.v1), 1)

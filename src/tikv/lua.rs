@@ -87,6 +87,7 @@ impl<'a> LuaCommandCtx<'a> {
                     Command::SetEX(cmd) => cmd.setex(txn_rc.clone()).await,
                     Command::Mget(cmd) => cmd.batch_get(txn_rc.clone()).await,
                     Command::Mset(cmd) => cmd.batch_put(txn_rc.clone()).await,
+                    Command::Type(cmd) => cmd.cmd_type(txn_rc.clone()).await,
                     Command::TTL(cmd) => cmd.ttl(false, txn_rc.clone()).await,
                     Command::PTTL(cmd) => cmd.ttl(true, txn_rc.clone()).await,
                     Command::Expire(cmd) => cmd.expire(false, false, txn_rc.clone()).await,

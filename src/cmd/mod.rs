@@ -30,6 +30,9 @@ pub use setex::SetEX;
 mod ttl;
 pub use ttl::TTL;
 
+mod cmdtype;
+pub use cmdtype::Type;
+
 mod subscribe;
 pub use subscribe::{Subscribe, Unsubscribe};
 
@@ -225,6 +228,7 @@ pub enum Command {
     Subscribe(Subscribe),
     Unsubscribe(Unsubscribe),
     Ping(Ping),
+    Type(Type),
     TTL(TTL),
     PTTL(TTL),
     Expire(Expire),
@@ -348,6 +352,7 @@ impl Command {
                 &mut parse,
             )),
             "ping" => Command::Ping(transform_parse(Ping::parse_frames(&mut parse), &mut parse)),
+            "type" => Command::Type(transform_parse(Type::parse_frames(&mut parse), &mut parse)),
             "mget" => Command::Mget(transform_parse(Mget::parse_frames(&mut parse), &mut parse)),
             "mset" => Command::Mset(transform_parse(Mset::parse_frames(&mut parse), &mut parse)),
             "ttl" => Command::TTL(transform_parse(TTL::parse_frames(&mut parse), &mut parse)),
@@ -560,6 +565,7 @@ impl Command {
             "decrby" => Command::DecrBy(IncrDecr::parse_argv(argv, false)?),
             "strlen" => Command::Strlen(Strlen::parse_argv(argv)?),
             "del" => Command::Del(Del::parse_argv(argv)?),
+            "type" => Command::Type(Type::parse_argv(argv)?),
             "exists" => Command::Exists(Exists::parse_argv(argv)?),
             "get" => Command::Get(Get::parse_argv(argv)?),
             "set" => Command::Set(Set::parse_argv(argv)?),
@@ -652,6 +658,7 @@ impl Command {
             SetEX(cmd) => cmd.apply(dst).await,
             Subscribe(cmd) => cmd.apply(db, dst, shutdown).await,
             Ping(cmd) => cmd.apply(dst).await,
+            Type(cmd) => cmd.apply(dst).await,
             Mget(cmd) => cmd.apply(dst).await,
             Mset(cmd) => cmd.apply(dst).await,
             TTL(cmd) => cmd.apply(dst, false).await,
@@ -745,6 +752,7 @@ impl Command {
             Command::Subscribe(_) => "subscribe",
             Command::Unsubscribe(_) => "unsubscribe",
             Command::Ping(_) => "ping",
+            Command::Type(_) => "type",
             Command::Mget(_) => "mget",
             Command::Mset(_) => "mset",
             Command::TTL(_) => "ttl",

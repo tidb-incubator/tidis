@@ -2,7 +2,7 @@ import time
 import unittest
 
 from rediswrap import RedisWrapper
-from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs, NOT_EXISTS_LITERAL
+from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs, NOT_EXISTS_LITERAL, CmdType
 
 
 class StringTest(unittest.TestCase):
@@ -50,6 +50,11 @@ class StringTest(unittest.TestCase):
         self.assertIsNotNone(self.r.get(self.k2), "pttl = {}ms, but the key has expired".format(pttl))
         time.sleep(6)
         self.assertIsNone(self.r.get(self.k2))
+
+    def test_type(self):
+        self.assertEqual(self.r.type(self.k1), CmdType.NULL.value)
+        self.assertTrue(self.r.set(self.k1, self.v1))
+        self.assertEqual(self.r.type(self.k1), CmdType.STRING.value)
 
     def test_setex(self):
         self.assertTrue(self.r.setex(self.k1, 5, self.v1))

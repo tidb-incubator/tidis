@@ -66,26 +66,37 @@ pub fn lua_resp_to_redis_resp(resp: LuaValue) -> Frame {
         LuaValue::String(r) => resp_bulk(r.to_str().unwrap().as_bytes().to_vec()),
         LuaValue::Integer(r) => resp_int(r),
         LuaValue::Boolean(r) => {
-            let r_int: i64 = if !r { 0 } else { 1 };
-            resp_int(r_int)
+            if !r {
+                resp_nil()
+            } else {
+                resp_int(1)
+            }
         }
         LuaValue::Number(r) => resp_bulk(r.to_string().as_bytes().to_vec()),
         LuaValue::Table(r) => {
-            // check meta length exists __self_length__, this meta will be setted only in redis call function
-            let len: i64 = r
-                .raw_get::<&str, i64>("__self_length__")
-                .map_or(r.len().unwrap(), |v| v);
+            // handle error reply
+            let err_msg = r.raw_get::<&str, String>("err");
+            if err_msg.is_ok() {
+                return resp_err(RTError::Owned(err_msg.unwrap()));
+            }
+
+            // handle status reply
+            let status_msg = r.raw_get::<&str, String>("ok");
+            if status_msg.is_ok() {
+                return resp_str(&status_msg.unwrap());
+            }
+
+            // handle array reply
+            let len: i64 = r.len().unwrap();
             let mut arr = Vec::with_capacity(len.try_into().unwrap());
             for idx in 0..len {
                 // key is start from 1
-                // if key not exists in lua table, it means the value is nil
-                let key = idx + 1; //.to_string();
+                let key = idx + 1;
                 let v: LuaValue = r.raw_get(key).unwrap();
                 arr.push(lua_resp_to_redis_resp(v));
             }
             resp_array(arr)
         }
-        LuaValue::Nil => resp_nil(),
         LuaValue::Error(r) => resp_err(r.into()),
         _ => resp_err(REDIS_LUA_PANIC),
     }
@@ -93,36 +104,34 @@ pub fn lua_resp_to_redis_resp(resp: LuaValue) -> Frame {
 
 pub fn redis_resp_to_lua_resp(resp: Frame, lua: &Lua) -> LuaValue {
     match resp {
-        Frame::Simple(v) => LuaValue::String(lua.create_string(&v).unwrap()),
+        Frame::Simple(v) => {
+            let table = lua.create_table().unwrap();
+            table.raw_set("ok", v).unwrap();
+            LuaValue::Table(table)
+        }
         Frame::Bulk(v) => {
             let str = String::from_utf8_lossy(&v).to_string();
             LuaValue::String(lua.create_string(&str).unwrap())
         }
-        Frame::ErrorOwned(e) => LuaValue::Error(mlua::Error::RuntimeError(e)),
-        Frame::ErrorString(e) => LuaValue::Error(mlua::Error::RuntimeError(e.to_string())),
-        Frame::Integer(i) => LuaValue::Integer(i),
-        Frame::Null => LuaValue::Nil,
-        Frame::Array(arr) => {
-            let len = arr.len();
+        Frame::ErrorOwned(e) => {
             let table = lua.create_table().unwrap();
-            if len == 0 {
-                table
-                    .raw_set("__self_length__", LuaValue::Integer(len as i64))
-                    .unwrap();
-            }
+            table.raw_set("err", e).unwrap();
+            LuaValue::Table(table)
+        }
+        Frame::ErrorString(e) => {
+            let table = lua.create_table().unwrap();
+            table.raw_set("err", e).unwrap();
+            LuaValue::Table(table)
+        }
+        Frame::Integer(i) => LuaValue::Integer(i),
+        Frame::Null => LuaValue::Boolean(false),
+        Frame::Array(arr) => {
+            let table = lua.create_table().unwrap();
             for (idx, value) in arr.iter().enumerate() {
                 let v = redis_resp_to_lua_resp(value.clone(), lua);
-                // if v is nil, table set will remove the item in table, but we should save the the nil item in table
-                if v != LuaValue::Nil {
-                    let key = idx + 1; //.to_string();
-                    table.raw_set(key, v).unwrap();
-                }
-                // save the length of the redis array in table, but this will have side effect
-                table
-                    .raw_set("__self_length__", LuaValue::Integer(len as i64))
-                    .unwrap();
+                // nil will be convert to boolean false
+                table.raw_set(idx + 1, v).unwrap();
             }
-
             LuaValue::Table(table)
         }
     }

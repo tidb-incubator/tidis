@@ -97,7 +97,7 @@ class LuaTest(unittest.TestCase):
         with self.assertRaises(Exception) as cm:
             self.execute_eval("incr", self.k2)
         err = cm.exception
-        self.assertEqual(str(err), 'runtime error: ERR value is not an integer or out of range')
+        self.assertEqual(str(err), 'value is not an integer or out of range')
 
     def test_incrby(self):
         self.assertEqual(self.execute_eval('incrby', self.k1, 1), 1)
@@ -110,7 +110,7 @@ class LuaTest(unittest.TestCase):
         with self.assertRaises(Exception) as cm:
             self.assertEqual(self.execute_eval('incrby', self.k2, 1), 1)
         err = cm.exception
-        self.assertEqual(str(err), 'runtime error: ERR value is not an integer or out of range')
+        self.assertEqual(str(err), 'value is not an integer or out of range')
 
     def test_decr(self):
         self.assertEqual(self.execute_eval("decr", self.k1), -1)
@@ -120,7 +120,7 @@ class LuaTest(unittest.TestCase):
         with self.assertRaises(Exception) as cm:
             self.execute_eval("decr", self.k2)
         err = cm.exception
-        self.assertEqual(str(err), 'runtime error: ERR value is not an integer or out of range')
+        self.assertEqual(str(err), 'value is not an integer or out of range')
 
     def test_decrby(self):
         self.assertEqual(self.execute_eval('decrby', self.k1, 1), -1)
@@ -133,7 +133,7 @@ class LuaTest(unittest.TestCase):
         with self.assertRaises(Exception) as cm:
             self.assertEqual(self.execute_eval('decrby', self.k2, 1), 1)
         err = cm.exception
-        self.assertEqual(str(err), 'runtime error: ERR value is not an integer or out of range')
+        self.assertEqual(str(err), 'value is not an integer or out of range')
 
     def test_strlen(self):
         self.assertEqual(self.execute_eval('strlen', self.k1), 0)
@@ -263,7 +263,7 @@ class LuaTest(unittest.TestCase):
         with self.assertRaises(Exception) as cm:
             self.execute_eval('lset', self.k1, 0, self.v1)
         err = cm.exception
-        self.assertEqual(str(err), 'runtime error: ERR no such key')
+        self.assertEqual(str(err), 'no such key')
         for i in range(200):
             self.assertTrue(self.execute_eval('rpush', self.k1, str(i)))
         self.assertTrue(self.execute_eval('lset', self.k1, 100, 'hello'))

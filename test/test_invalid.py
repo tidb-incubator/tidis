@@ -126,7 +126,7 @@ class InvalidTest(unittest.TestCase):
     def test_ltrim(self):
         self.assertInvalid('ltrim', self.k1)
         self.assertInvalid('ltrim', self.k1, NaN, NaN)
-    
+
     def test_lrem(self):
         self.assertInvalid('lrem', self.k1, NaN, 'x')
         self.assertInvalid('lrem', self.k1, 0, 'x', 'x')
@@ -204,6 +204,9 @@ class InvalidTest(unittest.TestCase):
         self.assertError('value is not a valid float', 'zincrby', self.k1, NaN, self.f1)
 
     # ================ generic ================
+    def test_type(self):
+        self.assertInvalid('type', self.k1, self.v1)
+
     def test_persist(self):
         self.assertInvalid('persist', self.k1, self.v1, self.v2)
 

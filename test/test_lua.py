@@ -2,6 +2,7 @@ import operator
 import random
 import time
 import unittest
+import redis
 from functools import reduce
 
 from rediswrap import RedisWrapper
@@ -15,6 +16,7 @@ class LuaTest(unittest.TestCase):
 
         cls.k1 = '__lua1__'
         cls.k2 = '__lua2__'
+        cls.k3 = '__lua3__'
 
         cls.f1 = 'f1'
         cls.f2 = 'f2'
@@ -29,7 +31,170 @@ class LuaTest(unittest.TestCase):
     def setUp(self):
         self.r.execute_command('del', self.k1)
         self.r.execute_command('del', self.k2)
+        self.r.execute_command('del', self.k3)
         pass
+
+    def run_script(self, script="", num_keys=0, *args):
+        return self.r.execute_command('eval', script, num_keys, *args)
+
+    def test_type_conversion(self):
+        self.assertEqual(self.run_script("return 'hello'"), "hello")
+        self.assertEqual(self.run_script("return 100.5"), 100)
+        self.assertEqual(self.run_script("return true"), 1)
+        self.assertEqual(self.run_script("return false"), None)
+        self.assertEqual(self.run_script("return {ok='fine'}"), "fine")
+        with self.assertRaises(Exception) as cm:
+            self.run_script("return {err='ERR this is an error'}")
+        err = cm.exception
+        self.assertEqual(str(err), 'this is an error')
+        self.assertListEqual(self.run_script("return {1,2,3,'ciao',{1,2}}"), [1, 2, 3, "ciao", [1, 2]])
+
+    def test_args_populate(self):
+        self.assertEqual(self.run_script("return {KEYS[1],KEYS[2],ARGV[1],ARGV[2]}", 2, "key1", "key2", "arg1", "arg2"), ["key1", "key2", "arg1", "arg2"])
+    
+    def test_eval_sha(self):
+        sha = self.r.execute_command('script', 'load', 'return 1')
+        self.assertEqual(self.r.execute_command('evalsha', sha, 0), 1)
+        self.assertEqual(self.r.execute_command('evalsha', sha.upper(), 0), 1)
+        with self.assertRaisesRegex(Exception, "No matching script"):
+            self.r.execute_command('evalsha', 'not-exist-sha', 0)
+
+    def test_integer_conversion(self):
+        script = '''
+        redis.call('set', KEYS[1], 0)
+        local foo = redis.call('incr', KEYS[1])
+        return {type(foo), foo}
+        '''
+        self.assertEqual(self.run_script(script, 1, self.k1), ['number', 1])
+
+    def test_bulk_conversion(self):
+        script = '''
+        local res = redis.call('rpush', '__lua1__', 'a', 'b', 'c')
+        local foo = redis.call('lrange', '__lua1__', 0, -1)
+        return {type(foo), foo[1], foo[2], foo[3], # foo}
+        '''
+        #self.r.execute_command('rpush', self.k1, 'a', 'b', 'c')
+        self.assertEqual(self.run_script(script, 1, self.k1), ['table', 'a', 'b', 'c', 3])
+
+    def test_status_conversion(self):
+        script = '''
+        local foo = redis.call('set', KEYS[1], 'value')
+        return {type(foo), foo['ok']}
+        '''
+        self.assertEqual(self.run_script(script, 1, self.k1), ['table', 'OK'])
+
+    def test_error_conversion(self):
+        script = '''
+        redis.call('set', KEYS[1], 'a')
+        local foo = redis.call('incr', KEYS[1])
+        return {type(foo), foo['err']}
+        '''
+        self.assertEqual(self.run_script(script, 1, self.k1), ['table', 'ERR value is not an integer or out of range'])
+
+    def test_nil_conversion(self):
+        script = '''
+        local foo = redis.call('get', KEYS[1])
+        return {type(foo), foo == false}
+        '''
+        self.assertEqual(self.run_script(script, 1, self.k1), ['boolean', 1])
+
+    def test_no_args(self):
+        script = '''
+        redis.call()
+        '''
+        with self.assertRaises(Exception) as cm:
+            self.run_script(script)
+        err = cm.exception
+        self.assertTrue('one argument' in str(err))
+
+    def test_unknown_cmds(self):
+        script = '''
+        redis.call('nosuchcommand')
+        '''
+        with self.assertRaises(Exception) as cm:
+            self.run_script(script)
+        err = cm.exception
+        self.assertTrue('Invalid arguments' in str(err))
+
+    
+    def test_wrong_number_args(self):
+        script = '''
+        redis.call('get', 'a', 'b')
+        '''
+        with self.assertRaises(Exception) as cm:
+            self.run_script(script)
+        err = cm.exception
+        self.assertTrue('Invalid arguments' in str(err))
+
+    def test_type_error(self):
+        # TODO
+        script = '''
+        -- redis.call('set', KEYS[1], 'b')
+        return redis.call('lpush', KEYS[1], 'val')
+        '''
+        self.r.set(self.k1, 'a')
+        with self.assertRaises(Exception) as cm:
+            self.run_script(script, 1, self.k1)
+        err = cm.exception
+        self.assertTrue('wrong kind of value' in str(err))
+
+    def test_trailing_comments(self):
+        script = '''
+        return 1 --trailing comment
+        '''
+        self.assertEqual(self.run_script(script), 1)
+
+    def test_many_args_command(self):
+        script = '''
+        local i
+        local x={}
+        for i=1,100 do
+            table.insert(x,i)
+        end
+        redis.call('rpush', KEYS[1], unpack(x))
+        return redis.call('lrange',KEYS[1],0,-1)
+        '''
+        self.assertListEqual(self.run_script(script, 1, self.k1), [str(i) for i in range(1,101)])
+
+    # see redis issue https://github.com/redis/redis/issues/1118
+    # see also mlua issue https://github.com/khvzak/mlua/issues/183
+    def test_number_precision(self):
+        # FIXME waiting for issue fix, passby this test
+        pass
+
+        script = '''
+        local value = 9007199254740991;
+        redis.call('set', KEYS[1], value);
+        return redis.call('get', KEYS[1]);
+        '''
+        self.assertEqual(self.run_script(script, 1, self.k1), '9007199254740991')
+
+    def test_str_number_precision(self):
+        script = '''
+        redis.call('set', KEYS[1], '12039611435714932082');
+        return redis.call('get', KEYS[1]);
+        '''
+        self.assertEqual(self.run_script(script, 1, self.k1), '12039611435714932082')
+
+    def test_negtive_argument_count(self):
+        with self.assertRaises(Exception) as cm:
+            self.run_script("return 'hello'", -12)
+        err = cm.exception
+        self.assertTrue('Invalid arguments' in str(err))
+
+    # see issue https://github.com/redis/redis/issues/1939
+    def test_reuse_argv(self):
+        script = '''
+        for i = 0, 10 do
+            redis.call('set', KEYS[1], 'a')
+            redis.call('mget', KEYS[1], KEYS[2], KEYS[3])
+            redis.call('expire', KEYS[1], 0)
+            redis.call('get', KEYS[1])
+            redis.call('mget', KEYS[1], KEYS[2], KEYS[3])
+        end
+        return 0
+        '''
+        self.run_script(script, 3, self.k1, self.k2, self.k3)
 
     def execute_eval(self, cmd, *args):
         arg_str = ", ".join(list(map(lambda arg: "'{}'".format(arg), args)))
@@ -584,6 +749,7 @@ class LuaTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        cls.r.execute_command('script', 'flush')
         cls.r.execute_command('del', cls.k1)
         cls.r.execute_command('del', cls.k2)
-        print('test data cleaned up')
+        print('test scripts flush')

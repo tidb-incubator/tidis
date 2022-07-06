@@ -6,6 +6,7 @@ from math import floor
 
 NaN = float('nan')
 NOT_EXISTS_LITERAL = "__not_exists__"
+ASYNC_DEL_THRESHOLD = 1000
 
 
 class CmdType(Enum):
@@ -15,6 +16,10 @@ class CmdType(Enum):
     SET = "set"
     ZSET = "zset"
     NULL = "none"
+
+
+def trigger_async_del_size():
+    return random.randint(ASYNC_DEL_THRESHOLD + 1, ASYNC_DEL_THRESHOLD * 2)
 
 
 def current_sec_ts():

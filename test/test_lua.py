@@ -5,7 +5,8 @@ import unittest
 from functools import reduce
 
 from rediswrap import RedisWrapper
-from test_util import msec_ts_after_five_secs, sec_ts_after_five_secs, NOT_EXISTS_LITERAL, CmdType
+from test_util import msec_ts_after_five_secs, sec_ts_after_five_secs, NOT_EXISTS_LITERAL, CmdType, random_string, \
+    trigger_async_del_size
 
 
 class LuaTest(unittest.TestCase):
@@ -157,6 +158,14 @@ class LuaTest(unittest.TestCase):
         self.assertIsNone(self.execute_eval('get', self.k1))
         self.assertIsNone(self.execute_eval('get', self.k2))
 
+    def test_string_async_del(self):
+        v = random_string(trigger_async_del_size())
+        self.assertTrue(self.execute_eval('set', self.k1, v))
+        self.assertEqual(self.execute_eval('get', self.k1), v)
+        self.assertTrue(self.execute_eval('del', self.k1))
+        self.assertIsNone(self.execute_eval('get', self.k1))
+        self.assertTrue(self.execute_eval('set', self.k1, self.v1))
+
     # ================ hash ================
     def test_hget_hset(self):
         self.assertEqual(self.execute_eval('hset', self.k1, self.f1, self.v1), 1)
@@ -215,6 +224,16 @@ class LuaTest(unittest.TestCase):
         self.assertTrue(self.execute_eval('hmset', self.k1, self.f1, self.v1, self.f2, self.v2, self.f3, self.v3))
         self.assertEqual(self.execute_eval('hdel', self.k1, self.f1, self.f2), 2)
         self.assertEqual(self.execute_eval('hlen', self.k1), 1)
+
+    def test_hash_async_del(self):
+        size = trigger_async_del_size()
+        for i in range(size):
+            self.assertTrue(self.execute_eval('hset', self.k1, str(i), str(i)))
+        for i in range(size):
+            self.assertEqual(self.execute_eval('hget', self.k1, str(i)), str(i))
+        self.assertTrue(self.execute_eval('del', self.k1))
+        self.assertEqual(self.execute_eval('hlen', self.k1), 0)
+        self.assertTrue(self.execute_eval('hset', self.k1, self.f1, self.v1))
 
     # ================ list ================
     def test_lpop(self):
@@ -319,6 +338,16 @@ class LuaTest(unittest.TestCase):
                              ['hello1', 'hello2'] + [str(i) for i in range(0, 50)] + ['hello3', '50', 'hello4'] + [
                                  str(i) for i in range(51, 99)] + ['hello5', '99', 'hello6'])
 
+    def test_list_async_del(self):
+        size = trigger_async_del_size()
+        for i in range(size):
+            self.assertTrue(self.execute_eval('rpush', self.k1, str(i)))
+        for i in range(size):
+            self.assertEqual(self.execute_eval('lindex', self.k1, i), str(i))
+        self.assertTrue(self.execute_eval('del', self.k1))
+        self.assertEqual(self.execute_eval('llen', self.k1), 0)
+        self.assertTrue(self.execute_eval('rpush', self.k1, self.v1))
+
     # ================ set ================
     def test_sadd(self):
         for i in range(200):
@@ -389,6 +418,16 @@ class LuaTest(unittest.TestCase):
         for i in range(200):
             v = str(i)
             self.assertEqual(self.execute_eval('sismember', self.k1, v), 0 if v in popped_values else 1)
+
+    def test_set_async_del(self):
+        size = trigger_async_del_size()
+        for i in range(size):
+            self.assertTrue(self.execute_eval('sadd', self.k1, str(i)))
+        for i in range(size):
+            self.assertTrue(self.execute_eval('sismember', self.k1, str(i)))
+        self.assertTrue(self.execute_eval('del', self.k1))
+        self.assertEqual(self.execute_eval('scard', self.k1), 0)
+        self.assertTrue(self.execute_eval('sadd', self.k1, self.v1))
 
     # ================ sorted set ================
     def test_zadd(self):
@@ -527,6 +566,16 @@ class LuaTest(unittest.TestCase):
         self.assertListEqual(self.execute_eval('zrange', self.k1, 0, -1, 'withscores'),
                              [NOT_EXISTS_LITERAL, '1.5', self.v1, '1.8', self.v2, '2'])
         self.assertEqual(self.execute_eval('zscore', self.k1, NOT_EXISTS_LITERAL), '1.5')
+
+    def test_zset_async_del(self):
+        size = trigger_async_del_size()
+        for i in range(size):
+            self.assertTrue(self.execute_eval('zadd', self.k1, i, str(i)))
+        for i in range(size):
+            self.assertEqual(int(self.execute_eval('zscore', self.k1, str(i))), i)
+        self.assertTrue(self.execute_eval('del', self.k1))
+        self.assertEqual(self.execute_eval('zcard', self.k1), 0)
+        self.assertTrue(self.execute_eval('zadd', self.k1, 1, self.v1))
 
     # ================ generic ================
     def test_type(self):

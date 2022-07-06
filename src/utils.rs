@@ -77,15 +77,13 @@ pub fn lua_resp_to_redis_resp(resp: LuaValue) -> Frame {
         LuaValue::Number(r) => resp_int(r.trunc() as i64),
         LuaValue::Table(r) => {
             // handle error reply
-            let err_msg = r.raw_get::<&str, String>("err");
-            if err_msg.is_ok() {
-                return resp_err(RTError::Owned(err_msg.unwrap()));
+            if let Ok(err_msg) = r.raw_get::<&str, String>("err") {
+                return resp_err(RTError::Owned(err_msg));
             }
 
             // handle status reply
-            let status_msg = r.raw_get::<&str, String>("ok");
-            if status_msg.is_ok() {
-                return resp_str(&status_msg.unwrap());
+            if let Ok(status_msg) = r.raw_get::<&str, String>("ok") {
+                return resp_str(&status_msg);
             }
 
             // handle array reply

@@ -70,7 +70,7 @@ impl<'a> LuaCommandCtx<'a> {
                 } else {
                     "".to_owned()
                 };
-                
+
                 let mut argv = vec![];
                 for arg in &args.as_slice()[1..] {
                     if let LuaValue::Integer(i) = arg {

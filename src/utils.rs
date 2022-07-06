@@ -72,7 +72,9 @@ pub fn lua_resp_to_redis_resp(resp: LuaValue) -> Frame {
                 resp_int(1)
             }
         }
-        LuaValue::Number(r) => resp_bulk(r.to_string().as_bytes().to_vec()),
+        // just return integer part of the float in redis
+        //LuaValue::Number(r) => resp_bulk(r.to_string().as_bytes().to_vec()),
+        LuaValue::Number(r) => resp_int(r.trunc() as i64),
         LuaValue::Table(r) => {
             // handle error reply
             let err_msg = r.raw_get::<&str, String>("err");

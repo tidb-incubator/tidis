@@ -370,137 +370,176 @@ impl<'a> ListCommandCtx {
     }
 
     pub async fn do_async_txnkv_lrange(
-        self,
+        mut self,
         key: &str,
         mut r_left: i64,
         mut r_right: i64,
     ) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
-        let mut ss = match self.txn.clone() {
-            Some(txn) => client.snapshot_from_txn(txn).await,
-            None => client.newest_snapshot().await,
-        };
-
+        let mut client = get_txn_client()?;
         let meta_key = KEY_ENCODER.encode_txnkv_meta_key(key);
+        let key = key.to_owned();
 
-        match ss.get(meta_key).await? {
-            Some(meta_value) => {
-                // check key type and ttl
-                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
-                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
-                }
-                let (ttl, version, left, right) = KeyDecoder::decode_key_list_meta(&meta_value);
-                if key_is_expired(ttl) {
-                    self.clone()
-                        .do_async_txnkv_list_expire_if_needed(key)
-                        .await?;
-                    return Ok(resp_array(vec![]));
-                }
+        client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
 
-                let llen: i64 = (right - left) as i64;
+                    let mut txn = txn_rc.lock().await;
+                    match txn.get(meta_key).await? {
+                        Some(meta_value) => {
+                            // check key type and ttl
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
+                                return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                            }
+                            let (ttl, version, left, right) =
+                                KeyDecoder::decode_key_list_meta(&meta_value);
+                            if key_is_expired(ttl) {
+                                drop(txn);
+                                self.clone()
+                                    .do_async_txnkv_list_expire_if_needed(&key)
+                                    .await?;
+                                return Ok(resp_array(vec![]));
+                            }
 
-                // convert negative index to positive index
-                if r_left < 0 {
-                    r_left += llen;
-                }
-                if r_right < 0 {
-                    r_right += llen;
-                }
-                if r_left > r_right || r_left > llen {
-                    return Ok(resp_array(vec![]));
-                }
+                            let llen: i64 = (right - left) as i64;
 
-                let real_left = r_left + left as i64;
-                let mut real_length = r_right - r_left + 1;
-                if real_length > llen {
-                    real_length = llen;
+                            // convert negative index to positive index
+                            if r_left < 0 {
+                                r_left += llen;
+                            }
+                            if r_right < 0 {
+                                r_right += llen;
+                            }
+                            if r_left > r_right || r_left > llen {
+                                return Ok(resp_array(vec![]));
+                            }
+
+                            let real_left = r_left + left as i64;
+                            let mut real_length = r_right - r_left + 1;
+                            if real_length > llen {
+                                real_length = llen;
+                            }
+
+                            let data_key_start = KEY_ENCODER.encode_txnkv_list_data_key(
+                                &key,
+                                real_left as u64,
+                                version,
+                            );
+                            let range: RangeFrom<Key> = data_key_start..;
+                            let from_range: BoundRange = range.into();
+                            let iter = txn
+                                .scan(from_range, real_length.try_into().unwrap())
+                                .await?;
+
+                            let resp = iter.map(|kv| resp_bulk(kv.1)).collect();
+                            Ok(resp_array(resp))
+                        }
+                        None => Ok(resp_array(vec![])),
+                    }
                 }
-
-                let data_key_start =
-                    KEY_ENCODER.encode_txnkv_list_data_key(key, real_left as u64, version);
-                let range: RangeFrom<Key> = data_key_start..;
-                let from_range: BoundRange = range.into();
-                let iter = ss.scan(from_range, real_length.try_into().unwrap()).await?;
-
-                let resp = iter.map(|kv| resp_bulk(kv.1)).collect();
-                Ok(resp_array(resp))
-            }
-            None => Ok(resp_array(vec![])),
-        }
+                .boxed()
+            })
+            .await
     }
 
-    pub async fn do_async_txnkv_llen(self, key: &str) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+    pub async fn do_async_txnkv_llen(mut self, key: &str) -> AsyncResult<Frame> {
+        let mut client = get_txn_client()?;
+        let key = key.to_owned();
 
-        let mut ss = match self.txn.clone() {
-            Some(txn) => client.snapshot_from_txn(txn).await,
-            None => client.newest_snapshot().await,
-        };
-        let meta_key = KEY_ENCODER.encode_txnkv_meta_key(key);
+        let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
 
-        match ss.get(meta_key).await? {
-            Some(meta_value) => {
-                // check type and ttl
-                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
-                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+        client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
+
+                    let mut txn = txn_rc.lock().await;
+                    match txn.get(meta_key).await? {
+                        Some(meta_value) => {
+                            // check type and ttl
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
+                                return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                            }
+                            let (ttl, _, left, right) =
+                                KeyDecoder::decode_key_list_meta(&meta_value);
+                            if key_is_expired(ttl) {
+                                drop(txn);
+                                self.clone()
+                                    .do_async_txnkv_list_expire_if_needed(&key)
+                                    .await?;
+                                return Ok(resp_int(0));
+                            }
+
+                            let llen: i64 = (right - left) as i64;
+                            Ok(resp_int(llen))
+                        }
+                        None => Ok(resp_int(0)),
+                    }
                 }
-                let (ttl, _, left, right) = KeyDecoder::decode_key_list_meta(&meta_value);
-                if key_is_expired(ttl) {
-                    self.clone()
-                        .do_async_txnkv_list_expire_if_needed(key)
-                        .await?;
-                    return Ok(resp_int(0));
-                }
-
-                let llen: i64 = (right - left) as i64;
-                Ok(resp_int(llen))
-            }
-            None => Ok(resp_int(0)),
-        }
+                .boxed()
+            })
+            .await
     }
 
-    pub async fn do_async_txnkv_lindex(self, key: &str, mut idx: i64) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
-
-        let mut ss = match self.txn.clone() {
-            Some(txn) => client.snapshot_from_txn(txn).await,
-            None => client.newest_snapshot().await,
-        };
+    pub async fn do_async_txnkv_lindex(mut self, key: &str, mut idx: i64) -> AsyncResult<Frame> {
+        let mut client = get_txn_client()?;
         let meta_key = KEY_ENCODER.encode_txnkv_meta_key(key);
+        let key = key.to_owned();
 
-        match ss.get(meta_key).await? {
-            Some(meta_value) => {
-                // check type and ttl
-                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
-                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
-                }
-                let (ttl, version, left, right) = KeyDecoder::decode_key_list_meta(&meta_value);
-                if key_is_expired(ttl) {
-                    self.clone()
-                        .do_async_txnkv_list_expire_if_needed(key)
-                        .await?;
-                    return Ok(resp_nil());
-                }
+        client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
 
-                let len = right - left;
-                // try convert idx to positive if needed
-                if idx < 0 {
-                    idx += len as i64;
-                }
+                    let mut txn = txn_rc.lock().await;
+                    match txn.get(meta_key).await? {
+                        Some(meta_value) => {
+                            // check type and ttl
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
+                                return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                            }
+                            let (ttl, version, left, right) =
+                                KeyDecoder::decode_key_list_meta(&meta_value);
+                            if key_is_expired(ttl) {
+                                drop(txn);
+                                self.clone()
+                                    .do_async_txnkv_list_expire_if_needed(&key)
+                                    .await?;
+                                return Ok(resp_nil());
+                            }
 
-                let real_idx = left as i64 + idx;
+                            let len = right - left;
+                            // try convert idx to positive if needed
+                            if idx < 0 {
+                                idx += len as i64;
+                            }
 
-                // get value from data key
-                let data_key =
-                    KEY_ENCODER.encode_txnkv_list_data_key(key, real_idx as u64, version);
-                if let Some(value) = ss.get(data_key).await? {
-                    Ok(resp_bulk(value))
-                } else {
-                    Ok(resp_nil())
+                            let real_idx = left as i64 + idx;
+
+                            // get value from data key
+                            let data_key = KEY_ENCODER.encode_txnkv_list_data_key(
+                                &key,
+                                real_idx as u64,
+                                version,
+                            );
+                            if let Some(value) = txn.get(data_key).await? {
+                                Ok(resp_bulk(value))
+                            } else {
+                                Ok(resp_nil())
+                            }
+                        }
+                        None => Ok(resp_nil()),
+                    }
                 }
-            }
-            None => Ok(resp_nil()),
-        }
+                .boxed()
+            })
+            .await
     }
 
     pub async fn do_async_txnkv_lset(

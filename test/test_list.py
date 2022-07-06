@@ -151,6 +151,17 @@ class ListTest(unittest.TestCase):
         self.assertEqual(self.r.llen(self.k1), 0)
         self.assertTrue(self.r.rpush(self.k1, self.v1))
 
+    def test_async_expire(self):
+        size = trigger_async_del_size()
+        for i in range(size):
+            self.assertTrue(self.r.rpush(self.k1, str(i)))
+        for i in range(size):
+            self.assertEqual(self.r.lindex(self.k1, i), str(i))
+        self.assertTrue(self.r.expire(self.k1, 1))
+        time.sleep(1)
+        self.assertEqual(self.r.llen(self.k1), 0)
+        self.assertTrue(self.r.rpush(self.k1, self.v1))
+
     def test_persist(self):
         self.assertTrue(self.r.lpush(self.k1, self.v1))
         # expire in 5s

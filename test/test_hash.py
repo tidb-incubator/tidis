@@ -117,6 +117,17 @@ class HashTest(unittest.TestCase):
         self.assertEqual(self.r.hlen(self.k1), 0)
         self.assertTrue(self.r.hset(self.k1, self.f1, self.v1))
 
+    def test_async_expire(self):
+        size = trigger_async_del_size()
+        for i in range(size):
+            self.assertTrue(self.r.hset(self.k1, str(i), str(i)))
+        for i in range(size):
+            self.assertEqual(self.r.hget(self.k1, str(i)), str(i))
+        self.assertTrue(self.r.expire(self.k1, 1))
+        time.sleep(1)
+        self.assertEqual(self.r.hlen(self.k1), 0)
+        self.assertTrue(self.r.hset(self.k1, self.f1, self.v1))
+
     def test_persist(self):
         self.assertTrue(self.r.hmset(self.k1, {self.f1: self.v1, self.f2: self.v2, self.f3: self.v3}))
         # set expire in 5s

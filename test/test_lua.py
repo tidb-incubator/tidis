@@ -166,6 +166,15 @@ class LuaTest(unittest.TestCase):
         self.assertIsNone(self.execute_eval('get', self.k1))
         self.assertTrue(self.execute_eval('set', self.k1, self.v1))
 
+    def test_string_async_expire(self):
+        v = random_string(trigger_async_del_size())
+        self.assertTrue(self.execute_eval('set', self.k1, v))
+        self.assertEqual(self.execute_eval('get', self.k1), v)
+        self.assertTrue(self.execute_eval('expire', self.k1, 1))
+        time.sleep(1)
+        self.assertIsNone(self.execute_eval('get', self.k1))
+        self.assertTrue(self.execute_eval('set', self.k1, self.v1))
+
     # ================ hash ================
     def test_hget_hset(self):
         self.assertEqual(self.execute_eval('hset', self.k1, self.f1, self.v1), 1)
@@ -232,6 +241,17 @@ class LuaTest(unittest.TestCase):
         for i in range(size):
             self.assertEqual(self.execute_eval('hget', self.k1, str(i)), str(i))
         self.assertTrue(self.execute_eval('del', self.k1))
+        self.assertEqual(self.execute_eval('hlen', self.k1), 0)
+        self.assertTrue(self.execute_eval('hset', self.k1, self.f1, self.v1))
+
+    def test_hash_async_expire(self):
+        size = trigger_async_del_size()
+        for i in range(size):
+            self.assertTrue(self.execute_eval('hset', self.k1, str(i), str(i)))
+        for i in range(size):
+            self.assertEqual(self.execute_eval('hget', self.k1, str(i)), str(i))
+        self.assertTrue(self.execute_eval('expire', self.k1, 1))
+        time.sleep(1)
         self.assertEqual(self.execute_eval('hlen', self.k1), 0)
         self.assertTrue(self.execute_eval('hset', self.k1, self.f1, self.v1))
 
@@ -344,6 +364,17 @@ class LuaTest(unittest.TestCase):
             self.assertTrue(self.execute_eval('rpush', self.k1, str(i)))
         for i in range(size):
             self.assertEqual(self.execute_eval('lindex', self.k1, i), str(i))
+        self.assertTrue(self.execute_eval('expire', self.k1, 1))
+        time.sleep(1)
+        self.assertEqual(self.execute_eval('llen', self.k1), 0)
+        self.assertTrue(self.execute_eval('rpush', self.k1, self.v1))
+
+    def test_list_async_expire(self):
+        size = trigger_async_del_size()
+        for i in range(size):
+            self.assertTrue(self.execute_eval('rpush', self.k1, str(i)))
+        for i in range(size):
+            self.assertEqual(self.execute_eval('lindex', self.k1, i), str(i))
         self.assertTrue(self.execute_eval('del', self.k1))
         self.assertEqual(self.execute_eval('llen', self.k1), 0)
         self.assertTrue(self.execute_eval('rpush', self.k1, self.v1))
@@ -426,6 +457,17 @@ class LuaTest(unittest.TestCase):
         for i in range(size):
             self.assertTrue(self.execute_eval('sismember', self.k1, str(i)))
         self.assertTrue(self.execute_eval('del', self.k1))
+        self.assertEqual(self.execute_eval('scard', self.k1), 0)
+        self.assertTrue(self.execute_eval('sadd', self.k1, self.v1))
+
+    def test_set_async_expire(self):
+        size = trigger_async_del_size()
+        for i in range(size):
+            self.assertTrue(self.execute_eval('sadd', self.k1, str(i)))
+        for i in range(size):
+            self.assertTrue(self.execute_eval('sismember', self.k1, str(i)))
+        self.assertTrue(self.execute_eval('expire', self.k1, 1))
+        time.sleep(1)
         self.assertEqual(self.execute_eval('scard', self.k1), 0)
         self.assertTrue(self.execute_eval('sadd', self.k1, self.v1))
 
@@ -574,6 +616,17 @@ class LuaTest(unittest.TestCase):
         for i in range(size):
             self.assertEqual(int(self.execute_eval('zscore', self.k1, str(i))), i)
         self.assertTrue(self.execute_eval('del', self.k1))
+        self.assertEqual(self.execute_eval('zcard', self.k1), 0)
+        self.assertTrue(self.execute_eval('zadd', self.k1, 1, self.v1))
+
+    def test_zset_async_expire(self):
+        size = trigger_async_del_size()
+        for i in range(size):
+            self.assertTrue(self.execute_eval('zadd', self.k1, i, str(i)))
+        for i in range(size):
+            self.assertEqual(int(self.execute_eval('zscore', self.k1, str(i))), i)
+        self.assertTrue(self.execute_eval('expire', self.k1, 1))
+        time.sleep(1)
         self.assertEqual(self.execute_eval('zcard', self.k1), 0)
         self.assertTrue(self.execute_eval('zadd', self.k1, 1, self.v1))
 

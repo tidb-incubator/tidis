@@ -182,6 +182,15 @@ class StringTest(unittest.TestCase):
         self.assertIsNone(self.r.get(self.k1))
         self.assertTrue(self.r.set(self.k1, self.v1))
 
+    def test_async_expire(self):
+        v = random_string(trigger_async_del_size())
+        self.assertTrue(self.r.set(self.k1, v))
+        self.assertEqual(self.r.get(self.k1), v)
+        self.assertTrue(self.r.expire(self.k1, 1))
+        time.sleep(1)
+        self.assertIsNone(self.r.get(self.k1))
+        self.assertTrue(self.r.set(self.k1, self.v1))
+
     def test_persist(self):
         self.assertTrue(self.r.set(self.k1, self.v1))
         # set expire in 5s

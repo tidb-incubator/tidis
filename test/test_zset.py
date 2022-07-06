@@ -183,6 +183,17 @@ class ZsetTest(unittest.TestCase):
         self.assertEqual(self.r.zcard(self.k1), 0)
         self.assertTrue(self.r.zadd(self.k1, {self.v1: 1}))
 
+    def test_async_expire(self):
+        size = trigger_async_del_size()
+        for i in range(size):
+            self.assertTrue(self.r.zadd(self.k1, {str(i): i}))
+        for i in range(size):
+            self.assertEqual(int(self.r.zscore(self.k1, str(i))), i)
+        self.assertTrue(self.r.expire(self.k1, 1))
+        time.sleep(1)
+        self.assertEqual(self.r.zcard(self.k1), 0)
+        self.assertTrue(self.r.zadd(self.k1, {self.v1: 1}))
+
     def test_persist(self):
         self.assertEqual(self.r.zadd(self.k1, {self.v1: 10}), 1)
         # expire in 5s

@@ -29,24 +29,49 @@ impl ZsetCommandCtx {
         ZsetCommandCtx { txn }
     }
 
-    async fn txnkv_sum_key_size(self, key: &str, version: u16) -> AsyncResult<i64> {
-        let client = get_txn_client()?;
+    async fn txnkv_sum_key_size(mut self, key: &str, version: u16) -> AsyncResult<i64> {
+        let mut client = get_txn_client()?;
+        let key = key.to_owned();
 
-        let mut ss = match self.txn {
-            Some(txn) => client.snapshot_from_txn(txn).await,
-            None => client.newest_snapshot().await,
-        };
+        client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
 
-        let bound_range = KEY_ENCODER.encode_txnkv_sub_meta_key_range(key, version);
+                    let mut txn = txn_rc.lock().await;
 
-        let iter = ss.scan(bound_range, u32::MAX).await?;
+                    // check if meta key exists or already expired
+                    let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
+                    match txn.get(meta_key).await? {
+                        Some(meta_value) => {
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Zset) {
+                                return Err(REDIS_WRONG_TYPE_ERR);
+                            }
+                            // already exists
+                            let ttl = KeyDecoder::decode_key_ttl(&meta_value);
+                            if key_is_expired(ttl) {
+                                return Ok(0);
+                            }
 
-        let sum = iter
-            .map(|kv| i64::from_be_bytes(kv.1.try_into().unwrap()))
-            .sum();
+                            let bound_range =
+                                KEY_ENCODER.encode_txnkv_sub_meta_key_range(&key, version);
+                            let iter = txn.scan(bound_range, u32::MAX).await?;
 
-        assert!(sum >= 0);
-        Ok(sum)
+                            let sum = iter
+                                .map(|kv| i64::from_be_bytes(kv.1.try_into().unwrap()))
+                                .sum();
+
+                            assert!(sum > 0);
+                            Ok(sum)
+                        }
+                        None => Ok(0),
+                    }
+                }
+                .boxed()
+            })
+            .await
     }
 
     pub async fn do_async_txnkv_zadd(

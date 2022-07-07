@@ -51,6 +51,9 @@ impl Eval {
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Eval> {
         let script = parse.next_string()?;
         let numkeys = parse.next_int()?;
+        if numkeys < 0 {
+            return Ok(Self::new_invalid());
+        }
         let mut eval = Eval::new(&script, numkeys);
 
         for _ in 0..eval.numkeys {

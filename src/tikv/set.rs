@@ -34,24 +34,48 @@ impl SetCommandCtx {
         SetCommandCtx { txn }
     }
 
-    async fn txnkv_sum_key_size(self, key: &str, version: u16) -> AsyncResult<i64> {
-        let client = get_txn_client()?;
+    async fn txnkv_sum_key_size(mut self, key: &str, version: u16) -> AsyncResult<i64> {
+        let mut client = get_txn_client()?;
+        let key = key.to_owned();
 
-        let mut ss = match self.txn {
-            Some(txn) => client.snapshot_from_txn(txn).await,
-            None => client.newest_snapshot().await,
-        };
+        client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
 
-        let bound_range = KEY_ENCODER.encode_txnkv_sub_meta_key_range(key, version);
+                    let mut txn = txn_rc.lock().await;
 
-        let iter = ss.scan(bound_range, u32::MAX).await?;
+                    // check if meta key exists or already expired
+                    let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
+                    match txn.get(meta_key).await? {
+                        Some(meta_value) => {
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Set) {
+                                return Err(REDIS_WRONG_TYPE_ERR);
+                            }
+                            let ttl = KeyDecoder::decode_key_ttl(&meta_value);
+                            if key_is_expired(ttl) {
+                                return Ok(0);
+                            }
 
-        let sum = iter
-            .map(|kv| i64::from_be_bytes(kv.1.try_into().unwrap()))
-            .sum();
+                            let bound_range =
+                                KEY_ENCODER.encode_txnkv_sub_meta_key_range(&key, version);
+                            let iter = txn.scan(bound_range, u32::MAX).await?;
 
-        assert!(sum > 0);
-        Ok(sum)
+                            let sum = iter
+                                .map(|kv| i64::from_be_bytes(kv.1.try_into().unwrap()))
+                                .sum();
+
+                            assert!(sum > 0);
+                            Ok(sum)
+                        }
+                        None => Ok(0),
+                    }
+                }
+                .boxed()
+            })
+            .await
     }
 
     pub async fn do_async_txnkv_sadd(
@@ -108,7 +132,7 @@ impl SetCommandCtx {
                             let sub_meta_key =
                                 KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, rand_idx);
                             let new_sub_meta_value =
-                                txn.get_for_update(sub_meta_key.clone()).await?.map_or_else(
+                                txn.get(sub_meta_key.clone()).await?.map_or_else(
                                     || added,
                                     |value| {
                                         let old_sub_meta_value =
@@ -167,236 +191,285 @@ impl SetCommandCtx {
         }
     }
 
-    pub async fn do_async_txnkv_scard(self, key: &str) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
-
-        let mut ss = match self.txn.clone() {
-            Some(txn) => client.snapshot_from_txn(txn).await,
-            None => client.newest_snapshot().await,
-        };
-
+    pub async fn do_async_txnkv_scard(mut self, key: &str) -> AsyncResult<Frame> {
+        let mut client = get_txn_client()?;
         let meta_key = KEY_ENCODER.encode_txnkv_meta_key(key);
+        let key = key.to_owned();
 
-        match ss.get(meta_key).await? {
-            Some(meta_value) => {
-                // check key type and ttl
-                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Set) {
-                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+        client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
+
+                    let mut txn = txn_rc.lock().await;
+
+                    match txn.get(meta_key).await? {
+                        Some(meta_value) => {
+                            // check key type and ttl
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Set) {
+                                return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                            }
+
+                            drop(txn);
+                            let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
+                            if key_is_expired(ttl) {
+                                self.clone()
+                                    .do_async_txnkv_set_expire_if_needed(&key)
+                                    .await?;
+                                return Ok(resp_int(0));
+                            }
+
+                            let size = self.txnkv_sum_key_size(&key, version).await?;
+                            Ok(resp_int(size))
+                        }
+                        None => Ok(resp_int(0)),
+                    }
                 }
-
-                let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
-                if key_is_expired(ttl) {
-                    self.clone()
-                        .do_async_txnkv_set_expire_if_needed(key)
-                        .await?;
-                    return Ok(resp_int(0));
-                }
-
-                let size = self.txnkv_sum_key_size(key, version).await?;
-                Ok(resp_int(size))
-            }
-            None => Ok(resp_int(0)),
-        }
+                .boxed()
+            })
+            .await
     }
 
     // return interger reply if members.len() == 1, else arrary
     // called by SISMEMBER and SMISMEMBER
     pub async fn do_async_txnkv_sismember(
-        self,
+        mut self,
         key: &str,
         members: &Vec<String>,
         resp_in_arr: bool,
     ) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let member_len = members.len();
 
-        let mut ss = match self.txn.clone() {
-            Some(txn) => client.snapshot_from_txn(txn).await,
-            None => client.newest_snapshot().await,
-        };
-
         let meta_key = KEY_ENCODER.encode_txnkv_meta_key(key);
-        match ss.get(meta_key).await? {
-            Some(meta_value) => {
-                // check key type and ttl
-                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Set) {
-                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
-                }
+        let key = key.to_owned();
+        let members = members.to_owned();
 
-                let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
-                if key_is_expired(ttl) {
-                    self.clone()
-                        .do_async_txnkv_set_expire_if_needed(key)
-                        .await?;
-                    if !resp_in_arr {
-                        return Ok(resp_int(0));
-                    } else {
-                        return Ok(resp_array(vec![resp_int(0); member_len]));
+        client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
                     }
-                }
 
-                if !resp_in_arr {
-                    let data_key = KEY_ENCODER.encode_txnkv_set_data_key(key, &members[0], version);
-                    if ss.key_exists(data_key).await? {
-                        Ok(resp_int(1))
-                    } else {
-                        Ok(resp_int(0))
-                    }
-                } else {
-                    let mut resp = vec![];
-                    for m in members {
-                        let data_key = KEY_ENCODER.encode_txnkv_set_data_key(key, m, version);
-                        if ss.key_exists(data_key).await? {
-                            resp.push(resp_int(1));
-                        } else {
-                            resp.push(resp_int(0));
+                    let mut txn = txn_rc.lock().await;
+
+                    match txn.get(meta_key).await? {
+                        Some(meta_value) => {
+                            // check key type and ttl
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Set) {
+                                return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                            }
+
+                            let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
+                            if key_is_expired(ttl) {
+                                drop(txn);
+                                self.clone()
+                                    .do_async_txnkv_set_expire_if_needed(&key)
+                                    .await?;
+                                if !resp_in_arr {
+                                    return Ok(resp_int(0));
+                                } else {
+                                    return Ok(resp_array(vec![resp_int(0); member_len]));
+                                }
+                            }
+
+                            if !resp_in_arr {
+                                let data_key = KEY_ENCODER.encode_txnkv_set_data_key(
+                                    &key,
+                                    &members[0],
+                                    version,
+                                );
+                                if txn.key_exists(data_key).await? {
+                                    Ok(resp_int(1))
+                                } else {
+                                    Ok(resp_int(0))
+                                }
+                            } else {
+                                let mut resp = vec![];
+                                for m in &members {
+                                    let data_key =
+                                        KEY_ENCODER.encode_txnkv_set_data_key(&key, m, version);
+                                    if txn.key_exists(data_key).await? {
+                                        resp.push(resp_int(1));
+                                    } else {
+                                        resp.push(resp_int(0));
+                                    }
+                                }
+                                Ok(resp_array(resp))
+                            }
+                        }
+                        None => {
+                            if !resp_in_arr {
+                                Ok(resp_int(0))
+                            } else {
+                                Ok(resp_array(vec![resp_int(0); member_len]))
+                            }
                         }
                     }
-                    Ok(resp_array(resp))
                 }
-            }
-            None => {
-                if !resp_in_arr {
-                    Ok(resp_int(0))
-                } else {
-                    Ok(resp_array(vec![resp_int(0); member_len]))
-                }
-            }
-        }
+                .boxed()
+            })
+            .await
     }
 
     // The rand is a fake algirithm for performance, the members will be random
     // get from first 100 elements, if count is above 100, `count` members will be
     // returned, so client should not be strongly rely on the random behavior
     pub async fn do_async_txnkv_srandmemeber(
-        self,
+        mut self,
         key: &str,
         count: i64,
         repeatable: bool,
         array_resp: bool,
     ) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let meta_key = KEY_ENCODER.encode_txnkv_meta_key(key);
-        let mut ss = match self.txn.clone() {
-            Some(txn) => client.snapshot_from_txn(txn).await,
-            None => client.newest_snapshot().await,
-        };
+        let key = key.to_owned();
 
-        match ss.get(meta_key).await? {
-            Some(meta_value) => {
-                // check key type and ttl
-                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Set) {
-                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+        client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
+
+                    let mut txn = txn_rc.lock().await;
+
+                    match txn.get(meta_key).await? {
+                        Some(meta_value) => {
+                            // check key type and ttl
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Set) {
+                                return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                            }
+
+                            let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
+                            if key_is_expired(ttl) {
+                                drop(txn);
+                                self.clone()
+                                    .do_async_txnkv_set_expire_if_needed(&key)
+                                    .await?;
+                                return Ok(resp_array(vec![]));
+                            }
+
+                            // create random
+                            let mut rng = SmallRng::from_entropy();
+
+                            let mut ele_count = RANDOM_BASE;
+                            if count > RANDOM_BASE {
+                                ele_count = count;
+                            }
+
+                            let bound_range =
+                                KEY_ENCODER.encode_txnkv_set_data_key_range(&key, version);
+                            let iter = txn
+                                .scan_keys(bound_range, ele_count.try_into().unwrap())
+                                .await?;
+
+                            let mut resp: Vec<Frame> = iter
+                                .map(|k| {
+                                    // decode member from data key
+                                    let user_key =
+                                        KeyDecoder::decode_key_set_member_from_datakey(&key, k);
+                                    resp_bulk(user_key)
+                                })
+                                .collect();
+
+                            // shuffle the resp vector
+                            resp.shuffle(&mut rng);
+
+                            let resp_len = resp.len();
+
+                            if !array_resp {
+                                assert!(count == 1);
+
+                                // called with no count argument, return bulk reply
+                                // choose a random from resp
+                                let rand_idx = rng.gen_range(0..resp_len);
+                                return Ok(resp[rand_idx].clone());
+                            }
+
+                            // check resp is enough when repeatable is set, fill it with random element in resp vector
+                            while repeatable && (resp.len() as i64) < count {
+                                let rand_idx = rng.gen_range(0..resp_len);
+                                resp.push(resp[rand_idx].clone());
+                            }
+
+                            // if count is less than resp.len(), truncate it
+                            if count < resp_len as i64 {
+                                resp.truncate(count.try_into().unwrap());
+                            }
+
+                            Ok(resp_array(resp))
+                        }
+                        None => {
+                            if array_resp {
+                                Ok(resp_array(vec![]))
+                            } else {
+                                assert!(count == 1);
+                                Ok(resp_nil())
+                            }
+                        }
+                    }
                 }
-
-                let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
-                if key_is_expired(ttl) {
-                    self.clone()
-                        .do_async_txnkv_set_expire_if_needed(key)
-                        .await?;
-                    return Ok(resp_array(vec![]));
-                }
-
-                // create random
-                let mut rng = SmallRng::from_entropy();
-
-                let mut ele_count = RANDOM_BASE;
-                if count > RANDOM_BASE {
-                    ele_count = count;
-                }
-
-                let bound_range = KEY_ENCODER.encode_txnkv_set_data_key_range(key, version);
-                let iter = ss
-                    .scan_keys(bound_range, ele_count.try_into().unwrap())
-                    .await?;
-
-                let mut resp: Vec<Frame> = iter
-                    .map(|k| {
-                        // decode member from data key
-                        let user_key = KeyDecoder::decode_key_set_member_from_datakey(key, k);
-                        resp_bulk(user_key)
-                    })
-                    .collect();
-
-                // shuffle the resp vector
-                resp.shuffle(&mut rng);
-
-                let resp_len = resp.len();
-
-                if !array_resp {
-                    assert!(count == 1);
-
-                    // called with no count argument, return bulk reply
-                    // choose a random from resp
-                    let rand_idx = rng.gen_range(0..resp_len);
-                    return Ok(resp[rand_idx].clone());
-                }
-
-                // check resp is enough when repeatable is set, fill it with random element in resp vector
-                while repeatable && (resp.len() as i64) < count {
-                    let rand_idx = rng.gen_range(0..resp_len);
-                    resp.push(resp[rand_idx].clone());
-                }
-
-                // if count is less than resp.len(), truncate it
-                if count < resp_len as i64 {
-                    resp.truncate(count.try_into().unwrap());
-                }
-
-                Ok(resp_array(resp))
-            }
-            None => {
-                if array_resp {
-                    Ok(resp_array(vec![]))
-                } else {
-                    assert!(count == 1);
-                    Ok(resp_nil())
-                }
-            }
-        }
+                .boxed()
+            })
+            .await
     }
 
-    pub async fn do_async_txnkv_smembers(self, key: &str) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
-
+    pub async fn do_async_txnkv_smembers(mut self, key: &str) -> AsyncResult<Frame> {
+        let mut client = get_txn_client()?;
         let meta_key = KEY_ENCODER.encode_txnkv_meta_key(key);
+        let key = key.to_owned();
 
-        let mut ss = match self.txn.clone() {
-            Some(txn) => client.snapshot_from_txn(txn).await,
-            None => client.newest_snapshot().await,
-        };
+        client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
 
-        match ss.get(meta_key).await? {
-            Some(meta_value) => {
-                // check key type and ttl
-                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Set) {
-                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                    let mut txn = txn_rc.lock().await;
+                    match txn.get(meta_key).await? {
+                        Some(meta_value) => {
+                            // check key type and ttl
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Set) {
+                                return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                            }
+
+                            let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
+                            if key_is_expired(ttl) {
+                                drop(txn);
+                                self.clone()
+                                    .do_async_txnkv_set_expire_if_needed(&key)
+                                    .await?;
+                                return Ok(resp_array(vec![]));
+                            }
+
+                            let bound_range =
+                                KEY_ENCODER.encode_txnkv_set_data_key_range(&key, version);
+
+                            let iter = txn.scan_keys(bound_range, u32::MAX).await?;
+
+                            let resp = iter
+                                .map(|k| {
+                                    // decode member from data key
+                                    let user_key =
+                                        KeyDecoder::decode_key_set_member_from_datakey(&key, k);
+                                    resp_bulk(user_key)
+                                })
+                                .collect();
+
+                            Ok(resp_array(resp))
+                        }
+                        None => Ok(resp_array(vec![])),
+                    }
                 }
-
-                let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
-                if key_is_expired(ttl) {
-                    self.clone()
-                        .do_async_txnkv_set_expire_if_needed(key)
-                        .await?;
-                    return Ok(resp_array(vec![]));
-                }
-
-                let bound_range = KEY_ENCODER.encode_txnkv_set_data_key_range(key, version);
-
-                let iter = ss.scan_keys(bound_range, u32::MAX).await?;
-
-                let resp = iter
-                    .map(|k| {
-                        // decode member from data key
-                        let user_key = KeyDecoder::decode_key_set_member_from_datakey(key, k);
-                        resp_bulk(user_key)
-                    })
-                    .collect();
-
-                Ok(resp_array(resp))
-            }
-            None => Ok(resp_array(vec![])),
-        }
+                .boxed()
+            })
+            .await
     }
 
     pub async fn do_async_txnkv_srem(
@@ -463,7 +536,7 @@ impl SetCommandCtx {
                                 let sub_meta_key =
                                     KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, rand_idx);
                                 let new_sub_meta_value =
-                                    txn.get_for_update(sub_meta_key.clone()).await?.map_or_else(
+                                    txn.get(sub_meta_key.clone()).await?.map_or_else(
                                         || -removed,
                                         |v| {
                                             let old_sub_meta_value =
@@ -563,7 +636,7 @@ impl SetCommandCtx {
                                 let sub_meta_key =
                                     KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, rand_idx);
                                 let new_sub_meta_value =
-                                    txn.get_for_update(sub_meta_key.clone()).await?.map_or_else(
+                                    txn.get(sub_meta_key.clone()).await?.map_or_else(
                                         || -poped_count,
                                         |v| {
                                             let old_sub_meta_value =
@@ -612,7 +685,7 @@ impl SetCommandCtx {
                     }
 
                     let mut txn = txn_rc.lock().await;
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             let version = KeyDecoder::decode_key_version(&meta_value);
 
@@ -677,7 +750,7 @@ impl SetCommandCtx {
                     }
 
                     let mut txn = txn_rc.lock().await;
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
                             if !key_is_expired(ttl) {

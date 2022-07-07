@@ -32,24 +32,48 @@ impl<'a> HashCommandCtx {
         HashCommandCtx { txn }
     }
 
-    async fn txnkv_sum_key_size(self, key: &str, version: u16) -> AsyncResult<i64> {
-        let client = get_txn_client()?;
+    async fn txnkv_sum_key_size(mut self, key: &str, version: u16) -> AsyncResult<i64> {
+        let mut client = get_txn_client()?;
+        let key = key.to_owned();
 
-        let mut ss = match self.txn {
-            Some(txn) => client.snapshot_from_txn(txn).await,
-            None => client.newest_snapshot().await,
-        };
+        client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
 
-        let bound_range = KEY_ENCODER.encode_txnkv_sub_meta_key_range(key, version);
+                    let mut txn = txn_rc.lock().await;
 
-        let iter = ss.scan(bound_range, u32::MAX).await?;
+                    // check if meta key exists or already expired
+                    let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
+                    match txn.get(meta_key).await? {
+                        Some(meta_value) => {
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
+                                return Err(REDIS_WRONG_TYPE_ERR);
+                            }
+                            let ttl = KeyDecoder::decode_key_ttl(&meta_value);
+                            if key_is_expired(ttl) {
+                                return Ok(0);
+                            }
 
-        let sum = iter
-            .map(|kv| i64::from_be_bytes(kv.1.try_into().unwrap()))
-            .sum();
+                            let bound_range =
+                                KEY_ENCODER.encode_txnkv_sub_meta_key_range(&key, version);
+                            let iter = txn.scan(bound_range, u32::MAX).await?;
 
-        assert!(sum > 0);
-        Ok(sum)
+                            let sum = iter
+                                .map(|kv| i64::from_be_bytes(kv.1.try_into().unwrap()))
+                                .sum();
+
+                            assert!(sum > 0);
+                            Ok(sum)
+                        }
+                        None => Ok(0),
+                    }
+                }
+                .boxed()
+            })
+            .await
     }
 
     pub async fn do_async_txnkv_hset(
@@ -116,7 +140,7 @@ impl<'a> HashCommandCtx {
                                 KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, idx);
                             // create or update it
                             let new_sub_meta_value =
-                                txn.get_for_update(sub_meta_key.clone()).await?.map_or_else(
+                                txn.get(sub_meta_key.clone()).await?.map_or_else(
                                     || added_count.to_be_bytes().to_vec(),
                                     |sub_meta_value| {
                                         let sub_size =
@@ -188,247 +212,326 @@ impl<'a> HashCommandCtx {
         }
     }
 
-    pub async fn do_async_txnkv_hget(self, key: &str, field: &str) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+    pub async fn do_async_txnkv_hget(mut self, key: &str, field: &str) -> AsyncResult<Frame> {
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
         let field = field.to_owned();
         let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
 
-        let mut ss = match self.txn.clone() {
-            Some(txn) => client.snapshot_from_txn(txn).await,
-            None => client.newest_snapshot().await,
-        };
-        match ss.get(meta_key.to_owned()).await? {
-            Some(meta_value) => {
-                // check key type and ttl
-                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
-                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+        client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
+
+                    let mut txn = txn_rc.lock().await;
+                    match txn.get(meta_key.to_owned()).await? {
+                        Some(meta_value) => {
+                            // check key type and ttl
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
+                                return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                            }
+
+                            let (ttl, version, _meta_size) =
+                                KeyDecoder::decode_key_meta(&meta_value);
+
+                            if key_is_expired(ttl) {
+                                drop(txn);
+                                self.clone()
+                                    .do_async_txnkv_hash_expire_if_needed(&key)
+                                    .await?;
+                                return Ok(resp_nil());
+                            }
+
+                            let data_key =
+                                KEY_ENCODER.encode_txnkv_hash_data_key(&key, &field, version);
+
+                            txn.get(data_key)
+                                .await?
+                                .map_or_else(|| Ok(resp_nil()), |data| Ok(resp_bulk(data)))
+                        }
+                        None => Ok(resp_nil()),
+                    }
                 }
-
-                let (ttl, version, _meta_size) = KeyDecoder::decode_key_meta(&meta_value);
-
-                if key_is_expired(ttl) {
-                    self.clone()
-                        .do_async_txnkv_hash_expire_if_needed(&key)
-                        .await?;
-                    return Ok(resp_nil());
-                }
-
-                let data_key = KEY_ENCODER.encode_txnkv_hash_data_key(&key, &field, version);
-
-                ss.get(data_key)
-                    .await?
-                    .map_or_else(|| Ok(resp_nil()), |data| Ok(resp_bulk(data)))
-            }
-            None => Ok(resp_nil()),
-        }
+                .boxed()
+            })
+            .await
     }
 
-    pub async fn do_async_txnkv_hstrlen(self, key: &str, field: &str) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+    pub async fn do_async_txnkv_hstrlen(mut self, key: &str, field: &str) -> AsyncResult<Frame> {
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
         let field = field.to_owned();
         let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
 
-        let mut ss = match self.txn.clone() {
-            Some(txn) => client.snapshot_from_txn(txn).await,
-            None => client.newest_snapshot().await,
-        };
-        match ss.get(meta_key.to_owned()).await? {
-            Some(meta_value) => {
-                // check key type and ttl
-                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
-                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+        client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
+
+                    let mut txn = txn_rc.lock().await;
+
+                    match txn.get(meta_key.to_owned()).await? {
+                        Some(meta_value) => {
+                            // check key type and ttl
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
+                                return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                            }
+
+                            let (ttl, version, _meta_size) =
+                                KeyDecoder::decode_key_meta(&meta_value);
+                            if key_is_expired(ttl) {
+                                drop(txn);
+                                self.clone()
+                                    .do_async_txnkv_hash_expire_if_needed(&key)
+                                    .await?;
+                                return Ok(resp_int(0));
+                            }
+
+                            let data_key =
+                                KEY_ENCODER.encode_txnkv_hash_data_key(&key, &field, version);
+
+                            txn.get(data_key).await?.map_or_else(
+                                || Ok(resp_int(0)),
+                                |data| Ok(resp_int(data.len() as i64)),
+                            )
+                        }
+                        None => Ok(resp_int(0)),
+                    }
                 }
-
-                let (ttl, version, _meta_size) = KeyDecoder::decode_key_meta(&meta_value);
-                if key_is_expired(ttl) {
-                    self.clone()
-                        .do_async_txnkv_hash_expire_if_needed(&key)
-                        .await?;
-                    return Ok(resp_int(0));
-                }
-
-                let data_key = KEY_ENCODER.encode_txnkv_hash_data_key(&key, &field, version);
-
-                ss.get(data_key)
-                    .await?
-                    .map_or_else(|| Ok(resp_int(0)), |data| Ok(resp_int(data.len() as i64)))
-            }
-            None => Ok(resp_int(0)),
-        }
+                .boxed()
+            })
+            .await
     }
 
-    pub async fn do_async_txnkv_hexists(self, key: &str, field: &str) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+    pub async fn do_async_txnkv_hexists(mut self, key: &str, field: &str) -> AsyncResult<Frame> {
+        let mut client = get_txn_client()?;
         let key = key.to_owned();
         let field = field.to_owned();
         let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
 
-        let mut ss = match self.txn.clone() {
-            Some(txn) => client.snapshot_from_txn(txn).await,
-            None => client.newest_snapshot().await,
-        };
-        match ss.get(meta_key.to_owned()).await? {
-            Some(meta_value) => {
-                // check key type and ttl
-                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
-                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
-                }
+        client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
 
-                let (ttl, version, _meta_size) = KeyDecoder::decode_key_meta(&meta_value);
-                if key_is_expired(ttl) {
-                    self.clone()
-                        .do_async_txnkv_hash_expire_if_needed(&key)
-                        .await?;
-                    return Ok(resp_int(0));
-                }
+                    let mut txn = txn_rc.lock().await;
 
-                let data_key = KEY_ENCODER.encode_txnkv_hash_data_key(&key, &field, version);
+                    match txn.get(meta_key.to_owned()).await? {
+                        Some(meta_value) => {
+                            // check key type and ttl
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
+                                return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                            }
 
-                if ss.key_exists(data_key).await? {
-                    Ok(resp_int(1))
-                } else {
-                    Ok(resp_int(0))
+                            let (ttl, version, _meta_size) =
+                                KeyDecoder::decode_key_meta(&meta_value);
+                            if key_is_expired(ttl) {
+                                drop(txn);
+                                self.clone()
+                                    .do_async_txnkv_hash_expire_if_needed(&key)
+                                    .await?;
+                                return Ok(resp_int(0));
+                            }
+
+                            let data_key =
+                                KEY_ENCODER.encode_txnkv_hash_data_key(&key, &field, version);
+
+                            if txn.key_exists(data_key).await? {
+                                Ok(resp_int(1))
+                            } else {
+                                Ok(resp_int(0))
+                            }
+                        }
+                        None => Ok(resp_int(0)),
+                    }
                 }
-            }
-            None => Ok(resp_int(0)),
-        }
+                .boxed()
+            })
+            .await
     }
 
-    pub async fn do_async_txnkv_hmget(self, key: &str, fields: &[String]) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+    pub async fn do_async_txnkv_hmget(
+        mut self,
+        key: &str,
+        fields: &[String],
+    ) -> AsyncResult<Frame> {
+        let mut client = get_txn_client()?;
         let meta_key = KEY_ENCODER.encode_txnkv_meta_key(key);
-        let mut ss = match self.txn.clone() {
-            Some(txn) => client.snapshot_from_txn(txn).await,
-            None => client.newest_snapshot().await,
-        };
+        let key = key.to_owned();
+        let fields = fields.to_owned();
 
         let mut resp = Vec::with_capacity(fields.len());
 
-        match ss.get(meta_key.to_owned()).await? {
-            Some(meta_value) => {
-                // check key type and ttl
-                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
-                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
-                }
-                let (ttl, version, _meta_size) = KeyDecoder::decode_key_meta(&meta_value);
-                if key_is_expired(ttl) {
-                    self.clone()
-                        .do_async_txnkv_hash_expire_if_needed(key)
-                        .await?;
-                    return Ok(resp_array(vec![]));
-                }
+        client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
 
-                for field in fields {
-                    let data_key = KEY_ENCODER.encode_txnkv_hash_data_key(key, field, version);
-                    match ss.get(data_key).await? {
-                        Some(data) => {
-                            resp.push(resp_bulk(data));
+                    let mut txn = txn_rc.lock().await;
+
+                    match txn.get(meta_key.to_owned()).await? {
+                        Some(meta_value) => {
+                            // check key type and ttl
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
+                                return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                            }
+                            let (ttl, version, _meta_size) =
+                                KeyDecoder::decode_key_meta(&meta_value);
+                            if key_is_expired(ttl) {
+                                drop(txn);
+                                self.clone()
+                                    .do_async_txnkv_hash_expire_if_needed(&key)
+                                    .await?;
+                                return Ok(resp_array(vec![]));
+                            }
+
+                            for field in &fields {
+                                let data_key =
+                                    KEY_ENCODER.encode_txnkv_hash_data_key(&key, field, version);
+                                match txn.get(data_key).await? {
+                                    Some(data) => {
+                                        resp.push(resp_bulk(data));
+                                    }
+                                    None => {
+                                        resp.push(resp_nil());
+                                    }
+                                }
+                            }
                         }
                         None => {
-                            resp.push(resp_nil());
+                            for _ in 0..fields.len() {
+                                resp.push(resp_nil());
+                            }
                         }
                     }
+                    Ok(resp_array(resp))
                 }
-            }
-            None => {
-                for _ in 0..fields.len() {
-                    resp.push(resp_nil());
-                }
-            }
-        }
-        Ok(resp_array(resp))
+                .boxed()
+            })
+            .await
     }
 
-    pub async fn do_async_txnkv_hlen(self, key: &str) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+    pub async fn do_async_txnkv_hlen(mut self, key: &str) -> AsyncResult<Frame> {
+        let mut client = get_txn_client()?;
         let meta_key = KEY_ENCODER.encode_txnkv_meta_key(key);
-        let mut ss = match self.txn.clone() {
-            Some(txn) => client.snapshot_from_txn(txn).await,
-            None => client.newest_snapshot().await,
-        };
+        let key = key.to_owned();
 
-        match ss.get(meta_key.to_owned()).await? {
-            Some(meta_value) => {
-                // check key type and ttl
-                if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
-                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+        client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
+
+                    let mut txn = txn_rc.lock().await;
+                    match txn.get(meta_key.to_owned()).await? {
+                        Some(meta_value) => {
+                            // check key type and ttl
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
+                                return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                            }
+
+                            drop(txn);
+                            let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
+                            if key_is_expired(ttl) {
+                                self.clone()
+                                    .do_async_txnkv_hash_expire_if_needed(&key)
+                                    .await?;
+                                return Ok(resp_int(0));
+                            }
+                            let meta_size = self.txnkv_sum_key_size(&key, version).await?;
+                            Ok(resp_int(meta_size as i64))
+                        }
+                        None => Ok(resp_int(0)),
+                    }
                 }
-
-                let (ttl, version, _meta_size) = KeyDecoder::decode_key_meta(&meta_value);
-                if key_is_expired(ttl) {
-                    self.clone()
-                        .do_async_txnkv_hash_expire_if_needed(key)
-                        .await?;
-                    return Ok(resp_int(0));
-                }
-
-                let meta_size = self.txnkv_sum_key_size(key, version).await?;
-                Ok(resp_int(meta_size as i64))
-            }
-            None => Ok(resp_int(0)),
-        }
+                .boxed()
+            })
+            .await
     }
 
     pub async fn do_async_txnkv_hgetall(
-        self,
+        mut self,
         key: &str,
         with_field: bool,
         with_value: bool,
     ) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+        let mut client = get_txn_client()?;
         let meta_key = KEY_ENCODER.encode_txnkv_meta_key(key);
-        let mut ss = match self.txn.clone() {
-            Some(txn) => client.snapshot_from_txn(txn).await,
-            None => client.newest_snapshot().await,
-        };
+        let key = key.to_owned();
 
-        if let Some(meta_value) = ss.get(meta_key.to_owned()).await? {
-            // check key type and ttl
-            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
-                return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
-            }
+        client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
 
-            let (ttl, version, _meta_size) = KeyDecoder::decode_key_meta(&meta_value);
-            if key_is_expired(ttl) {
-                self.clone()
-                    .do_async_txnkv_hash_expire_if_needed(key)
-                    .await?;
-                return Ok(resp_nil());
-            }
+                    let mut txn = txn_rc.lock().await;
 
-            let range: Range<Key> = KEY_ENCODER.encode_txnkv_hash_data_key_start(key, version)
-                ..KEY_ENCODER.encode_txnkv_hash_data_key_end(key, version);
-            let bound_range: BoundRange = range.into();
-            // scan return iterator
-            let iter = ss.scan(bound_range, u32::MAX).await?;
+                    if let Some(meta_value) = txn.get(meta_key.to_owned()).await? {
+                        // check key type and ttl
+                        if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
+                            return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                        }
 
-            let resp: Vec<Frame>;
-            if with_field && with_value {
-                resp = iter
-                    .flat_map(|kv| {
-                        let field: Vec<u8> =
-                            KeyDecoder::decode_key_hash_userkey_from_datakey(key, kv.0);
-                        [resp_bulk(field), resp_bulk(kv.1)]
-                    })
-                    .collect();
-            } else if with_field {
-                resp = iter
-                    .flat_map(|kv| {
-                        let field: Vec<u8> =
-                            KeyDecoder::decode_key_hash_userkey_from_datakey(key, kv.0);
-                        [resp_bulk(field)]
-                    })
-                    .collect();
-            } else {
-                resp = iter.flat_map(|kv| [resp_bulk(kv.1)]).collect();
-            }
+                        let (ttl, version, _meta_size) = KeyDecoder::decode_key_meta(&meta_value);
+                        if key_is_expired(ttl) {
+                            drop(txn);
+                            self.clone()
+                                .do_async_txnkv_hash_expire_if_needed(&key)
+                                .await?;
+                            return Ok(resp_nil());
+                        }
 
-            Ok(resp_array(resp))
-        } else {
-            Ok(resp_array(vec![]))
-        }
+                        let range: Range<Key> = KEY_ENCODER
+                            .encode_txnkv_hash_data_key_start(&key, version)
+                            ..KEY_ENCODER.encode_txnkv_hash_data_key_end(&key, version);
+                        let bound_range: BoundRange = range.into();
+                        // scan return iterator
+                        let iter = txn.scan(bound_range, u32::MAX).await?;
+
+                        let resp: Vec<Frame>;
+                        if with_field && with_value {
+                            resp = iter
+                                .flat_map(|kv| {
+                                    let field: Vec<u8> =
+                                        KeyDecoder::decode_key_hash_userkey_from_datakey(
+                                            &key, kv.0,
+                                        );
+                                    [resp_bulk(field), resp_bulk(kv.1)]
+                                })
+                                .collect();
+                        } else if with_field {
+                            resp = iter
+                                .flat_map(|kv| {
+                                    let field: Vec<u8> =
+                                        KeyDecoder::decode_key_hash_userkey_from_datakey(
+                                            &key, kv.0,
+                                        );
+                                    [resp_bulk(field)]
+                                })
+                                .collect();
+                        } else {
+                            resp = iter.flat_map(|kv| [resp_bulk(kv.1)]).collect();
+                        }
+
+                        Ok(resp_array(resp))
+                    } else {
+                        Ok(resp_array(vec![]))
+                    }
+                }
+                .boxed()
+            })
+            .await
     }
 
     pub async fn do_async_txnkv_hdel(mut self, key: &str, fields: &[String]) -> AsyncResult<Frame> {
@@ -496,15 +599,14 @@ impl<'a> HashCommandCtx {
                                 let sub_meta_key =
                                     KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, idx);
                                 // create it with negtive value if sub meta key not exists
-                                let new_size =
-                                    txn.get_for_update(sub_meta_key.clone()).await?.map_or_else(
-                                        || -deleted,
-                                        |value| {
-                                            let sub_size =
-                                                i64::from_be_bytes(value.try_into().unwrap());
-                                            sub_size - deleted
-                                        },
-                                    );
+                                let new_size = txn.get(sub_meta_key.clone()).await?.map_or_else(
+                                    || -deleted,
+                                    |value| {
+                                        let sub_size =
+                                            i64::from_be_bytes(value.try_into().unwrap());
+                                        sub_size - deleted
+                                    },
+                                );
                                 // new_size may be negtive
                                 txn.put(sub_meta_key, new_size.to_be_bytes().to_vec())
                                     .await?;
@@ -584,10 +686,8 @@ impl<'a> HashCommandCtx {
                                     let sub_meta_key =
                                         KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, idx);
 
-                                    let sub_size = txn
-                                        .get_for_update(sub_meta_key.clone())
-                                        .await?
-                                        .map_or_else(
+                                    let sub_size =
+                                        txn.get(sub_meta_key.clone()).await?.map_or_else(
                                             || 1,
                                             |value| i64::from_be_bytes(value.try_into().unwrap()),
                                         );
@@ -656,7 +756,7 @@ impl<'a> HashCommandCtx {
                         self.txn = Some(txn_arc.clone());
                     }
                     let mut txn = txn_arc.lock().await;
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             let (_, version, _) = KeyDecoder::decode_key_meta(&meta_value);
 
@@ -721,7 +821,7 @@ impl<'a> HashCommandCtx {
                         self.txn = Some(txn_arc.clone());
                     }
                     let mut txn = txn_arc.lock().await;
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             let (ttl, version, _meta_size) =
                                 KeyDecoder::decode_key_meta(&meta_value);

@@ -127,12 +127,10 @@ class LuaTest(unittest.TestCase):
         self.assertTrue('Invalid arguments' in str(err))
 
     def test_type_error(self):
-        # TODO
         script = '''
-        -- redis.call('set', KEYS[1], 'b')
-        return redis.call('lpush', KEYS[1], 'val')
+        redis.call('set', KEYS[1], 'b')
+        return redis.call('sadd', KEYS[1], 'val')
         '''
-        self.r.set(self.k1, 'a')
         with self.assertRaises(Exception) as cm:
             self.run_script(script, 1, self.k1)
         err = cm.exception
@@ -159,9 +157,6 @@ class LuaTest(unittest.TestCase):
     # see redis issue https://github.com/redis/redis/issues/1118
     # see also mlua issue https://github.com/khvzak/mlua/issues/183
     def test_number_precision(self):
-        # FIXME waiting for issue fix, passby this test
-        pass
-
         script = '''
         local value = 9007199254740991;
         redis.call('set', KEYS[1], value);

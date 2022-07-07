@@ -108,7 +108,7 @@ impl SetCommandCtx {
                             let sub_meta_key =
                                 KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, rand_idx);
                             let new_sub_meta_value =
-                                txn.get_for_update(sub_meta_key.clone()).await?.map_or_else(
+                                txn.get(sub_meta_key.clone()).await?.map_or_else(
                                     || added,
                                     |value| {
                                         let old_sub_meta_value =
@@ -512,7 +512,7 @@ impl SetCommandCtx {
                                 let sub_meta_key =
                                     KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, rand_idx);
                                 let new_sub_meta_value =
-                                    txn.get_for_update(sub_meta_key.clone()).await?.map_or_else(
+                                    txn.get(sub_meta_key.clone()).await?.map_or_else(
                                         || -removed,
                                         |v| {
                                             let old_sub_meta_value =
@@ -612,7 +612,7 @@ impl SetCommandCtx {
                                 let sub_meta_key =
                                     KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, rand_idx);
                                 let new_sub_meta_value =
-                                    txn.get_for_update(sub_meta_key.clone()).await?.map_or_else(
+                                    txn.get(sub_meta_key.clone()).await?.map_or_else(
                                         || -poped_count,
                                         |v| {
                                             let old_sub_meta_value =
@@ -661,7 +661,7 @@ impl SetCommandCtx {
                     }
 
                     let mut txn = txn_rc.lock().await;
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             let version = KeyDecoder::decode_key_version(&meta_value);
 
@@ -726,7 +726,7 @@ impl SetCommandCtx {
                     }
 
                     let mut txn = txn_rc.lock().await;
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
                             if !key_is_expired(ttl) {

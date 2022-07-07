@@ -51,7 +51,7 @@ impl<'a> ListCommandCtx {
                         self.txn = Some(txn_rc.clone());
                     }
                     let mut txn = txn_rc.lock().await;
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check key type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
@@ -156,7 +156,7 @@ impl<'a> ListCommandCtx {
                     }
                     let mut values = Vec::new();
                     let mut txn = txn_rc.lock().await;
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check key type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
@@ -277,7 +277,7 @@ impl<'a> ListCommandCtx {
                         self.txn = Some(txn_rc.clone());
                     }
                     let mut txn = txn_rc.lock().await;
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check key type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
@@ -560,7 +560,7 @@ impl<'a> ListCommandCtx {
                         self.txn = Some(txn_rc.clone());
                     }
                     let mut txn = txn_rc.lock().await;
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
@@ -628,7 +628,7 @@ impl<'a> ListCommandCtx {
                         self.txn = Some(txn_rc.clone());
                     }
                     let mut txn = txn_rc.lock().await;
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
@@ -784,7 +784,7 @@ impl<'a> ListCommandCtx {
                         self.txn = Some(txn_rc.clone());
                     }
                     let mut txn = txn_rc.lock().await;
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             // check type and ttl
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::List) {
@@ -959,7 +959,7 @@ impl<'a> ListCommandCtx {
                     }
 
                     let mut txn = txn_rc.lock().await;
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             let (_, version, left, right) =
                                 KeyDecoder::decode_key_list_meta(&meta_value);
@@ -1014,7 +1014,7 @@ impl<'a> ListCommandCtx {
                     }
 
                     let mut txn = txn_rc.lock().await;
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             let (ttl, version, left, right) =
                                 KeyDecoder::decode_key_list_meta(&meta_value);

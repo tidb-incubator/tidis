@@ -116,7 +116,7 @@ impl<'a> HashCommandCtx {
                                 KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, idx);
                             // create or update it
                             let new_sub_meta_value =
-                                txn.get_for_update(sub_meta_key.clone()).await?.map_or_else(
+                                txn.get(sub_meta_key.clone()).await?.map_or_else(
                                     || added_count.to_be_bytes().to_vec(),
                                     |sub_meta_value| {
                                         let sub_size =
@@ -575,15 +575,14 @@ impl<'a> HashCommandCtx {
                                 let sub_meta_key =
                                     KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, idx);
                                 // create it with negtive value if sub meta key not exists
-                                let new_size =
-                                    txn.get_for_update(sub_meta_key.clone()).await?.map_or_else(
-                                        || -deleted,
-                                        |value| {
-                                            let sub_size =
-                                                i64::from_be_bytes(value.try_into().unwrap());
-                                            sub_size - deleted
-                                        },
-                                    );
+                                let new_size = txn.get(sub_meta_key.clone()).await?.map_or_else(
+                                    || -deleted,
+                                    |value| {
+                                        let sub_size =
+                                            i64::from_be_bytes(value.try_into().unwrap());
+                                        sub_size - deleted
+                                    },
+                                );
                                 // new_size may be negtive
                                 txn.put(sub_meta_key, new_size.to_be_bytes().to_vec())
                                     .await?;
@@ -663,10 +662,8 @@ impl<'a> HashCommandCtx {
                                     let sub_meta_key =
                                         KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, idx);
 
-                                    let sub_size = txn
-                                        .get_for_update(sub_meta_key.clone())
-                                        .await?
-                                        .map_or_else(
+                                    let sub_size =
+                                        txn.get(sub_meta_key.clone()).await?.map_or_else(
                                             || 1,
                                             |value| i64::from_be_bytes(value.try_into().unwrap()),
                                         );
@@ -735,7 +732,7 @@ impl<'a> HashCommandCtx {
                         self.txn = Some(txn_arc.clone());
                     }
                     let mut txn = txn_arc.lock().await;
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             let (_, version, _) = KeyDecoder::decode_key_meta(&meta_value);
 
@@ -800,7 +797,7 @@ impl<'a> HashCommandCtx {
                         self.txn = Some(txn_arc.clone());
                     }
                     let mut txn = txn_arc.lock().await;
-                    match txn.get_for_update(meta_key.clone()).await? {
+                    match txn.get(meta_key.clone()).await? {
                         Some(meta_value) => {
                             let (ttl, version, _meta_size) =
                                 KeyDecoder::decode_key_meta(&meta_value);

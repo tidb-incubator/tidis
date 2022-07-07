@@ -520,7 +520,7 @@ impl StringCommandCtx {
                         self.txn = Some(txn_rc.clone());
                     }
                     let mut txn = txn_rc.lock().await;
-                    match txn.get_for_update(ekey.clone()).await? {
+                    match txn.get(ekey.clone()).await? {
                         Some(meta_value) => {
                             let ttl = KeyDecoder::decode_key_ttl(&meta_value);
                             if timestamp == 0 && ttl == 0 {

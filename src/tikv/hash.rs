@@ -7,12 +7,14 @@ use super::{
 use super::{get_txn_client, KEY_ENCODER};
 use crate::{
     async_del_hash_threshold_or_default, async_expire_hash_threshold_or_default,
+    config::LOGGER,
     config_meta_key_number_or_default,
     utils::{key_is_expired, resp_ok},
     Frame,
 };
 
 use futures::future::FutureExt;
+use slog::debug;
 use std::{convert::TryInto, ops::Range, sync::Arc};
 use tikv_client::{BoundRange, Key, KvPair, Transaction};
 use tokio::sync::Mutex;
@@ -51,10 +53,6 @@ impl<'a> HashCommandCtx {
                         Some(meta_value) => {
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Hash) {
                                 return Err(REDIS_WRONG_TYPE_ERR);
-                            }
-                            let ttl = KeyDecoder::decode_key_ttl(&meta_value);
-                            if key_is_expired(ttl) {
-                                return Ok(0);
                             }
 
                             let bound_range =
@@ -153,14 +151,17 @@ impl<'a> HashCommandCtx {
                             if expired {
                                 // add meta key
                                 let meta_size = config_meta_key_number_or_default();
-                                let new_metaval =
-                                    KEY_ENCODER.encode_txnkv_hash_meta_value(ttl, 0, meta_size);
+                                let new_metaval = KEY_ENCODER
+                                    .encode_txnkv_hash_meta_value(ttl, version, meta_size);
                                 txn.put(meta_key, new_metaval).await?;
                             }
                         }
                         None => {
                             drop(txn);
                             let version = get_version_for_new(&key, txn_rc.clone()).await?;
+
+                            debug!(LOGGER, "hset new key {} with version: {}", key, version);
+
                             txn = txn_rc.lock().await;
 
                             // not exists
@@ -172,7 +173,7 @@ impl<'a> HashCommandCtx {
                                 let datakey = KEY_ENCODER.encode_txnkv_hash_data_key(
                                     &key,
                                     &String::from_utf8_lossy(&field),
-                                    0,
+                                    version,
                                 );
                                 // check field exists
                                 let field_exists = txn.key_exists(datakey.clone()).await?;
@@ -235,6 +236,8 @@ impl<'a> HashCommandCtx {
 
                             let (ttl, version, _meta_size) =
                                 KeyDecoder::decode_key_meta(&meta_value);
+
+                            debug!(LOGGER, "hget key {} with version: {}", key, version);
 
                             if key_is_expired(ttl) {
                                 drop(txn);

@@ -2,7 +2,8 @@ import time
 import unittest
 
 from rediswrap import RedisWrapper
-from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs, NOT_EXISTS_LITERAL, CmdType
+from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs, NOT_EXISTS_LITERAL, CmdType, \
+    trigger_async_del_size, random_string
 
 
 class StringTest(unittest.TestCase):
@@ -172,6 +173,23 @@ class StringTest(unittest.TestCase):
         self.assertTrue(self.r.delete(self.k1, self.k2))
         self.assertIsNone(self.r.get(self.k1))
         self.assertIsNone(self.r.get(self.k2))
+
+    def test_async_del(self):
+        v = random_string(trigger_async_del_size())
+        self.assertTrue(self.r.set(self.k1, v))
+        self.assertEqual(self.r.get(self.k1), v)
+        self.assertTrue(self.r.delete(self.k1))
+        self.assertIsNone(self.r.get(self.k1))
+        self.assertTrue(self.r.set(self.k1, self.v1))
+
+    def test_async_expire(self):
+        v = random_string(trigger_async_del_size())
+        self.assertTrue(self.r.set(self.k1, v))
+        self.assertEqual(self.r.get(self.k1), v)
+        self.assertTrue(self.r.expire(self.k1, 1))
+        time.sleep(1)
+        self.assertIsNone(self.r.get(self.k1))
+        self.assertTrue(self.r.set(self.k1, self.v1))
 
     def test_persist(self):
         self.assertTrue(self.r.set(self.k1, self.v1))

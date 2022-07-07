@@ -2,7 +2,8 @@ import time
 import unittest
 
 from rediswrap import RedisWrapper
-from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs, NOT_EXISTS_LITERAL, CmdType
+from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs, NOT_EXISTS_LITERAL, CmdType, \
+    trigger_async_del_size
 
 
 class ZsetTest(unittest.TestCase):
@@ -171,6 +172,27 @@ class ZsetTest(unittest.TestCase):
         self.assertEqual(self.r.zcard(self.k2), 1)
         self.assertEqual(self.r.execute_command("del", self.k1, self.k2), 1)
         self.assertEqual(self.r.zcard(self.k2), 0)
+
+    def test_async_del(self):
+        size = trigger_async_del_size()
+        for i in range(size):
+            self.assertTrue(self.r.zadd(self.k1, {str(i): i}))
+        for i in range(size):
+            self.assertEqual(int(self.r.zscore(self.k1, str(i))), i)
+        self.assertTrue(self.r.delete(self.k1))
+        self.assertEqual(self.r.zcard(self.k1), 0)
+        self.assertTrue(self.r.zadd(self.k1, {self.v1: 1}))
+
+    def test_async_expire(self):
+        size = trigger_async_del_size()
+        for i in range(size):
+            self.assertTrue(self.r.zadd(self.k1, {str(i): i}))
+        for i in range(size):
+            self.assertEqual(int(self.r.zscore(self.k1, str(i))), i)
+        self.assertTrue(self.r.expire(self.k1, 1))
+        time.sleep(1)
+        self.assertEqual(self.r.zcard(self.k1), 0)
+        self.assertTrue(self.r.zadd(self.k1, {self.v1: 1}))
 
     def test_persist(self):
         self.assertEqual(self.r.zadd(self.k1, {self.v1: 10}), 1)

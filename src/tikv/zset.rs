@@ -49,11 +49,6 @@ impl ZsetCommandCtx {
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Zset) {
                                 return Err(REDIS_WRONG_TYPE_ERR);
                             }
-                            // already exists
-                            let ttl = KeyDecoder::decode_key_ttl(&meta_value);
-                            if key_is_expired(ttl) {
-                                return Ok(0);
-                            }
 
                             let bound_range =
                                 KEY_ENCODER.encode_txnkv_sub_meta_key_range(&key, version);
@@ -251,7 +246,7 @@ impl ZsetCommandCtx {
                             // add meta key if key expired above
                             if expired {
                                 let new_meta_value =
-                                    KEY_ENCODER.encode_txnkv_zset_meta_value(ttl, 0, 0);
+                                    KEY_ENCODER.encode_txnkv_zset_meta_value(ttl, version, 0);
                                 txn.put(meta_key, new_meta_value).await?;
                             }
 

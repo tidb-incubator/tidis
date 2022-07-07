@@ -54,10 +54,6 @@ impl SetCommandCtx {
                             if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Set) {
                                 return Err(REDIS_WRONG_TYPE_ERR);
                             }
-                            let ttl = KeyDecoder::decode_key_ttl(&meta_value);
-                            if key_is_expired(ttl) {
-                                return Ok(0);
-                            }
 
                             let bound_range =
                                 KEY_ENCODER.encode_txnkv_sub_meta_key_range(&key, version);

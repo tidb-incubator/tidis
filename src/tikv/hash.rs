@@ -68,9 +68,7 @@ impl<'a> HashCommandCtx {
                             assert!(sum > 0);
                             Ok(sum)
                         }
-                        None => {
-                            return Ok(0);
-                        }
+                        None => Ok(0),
                     }
                 }
                 .boxed()

@@ -69,6 +69,7 @@ impl TxnClientWrapper<'static> {
         snapshot
     }
 
+    #[allow(dead_code)]
     pub async fn snapshot_from_txn(&self, txn: Arc<Mutex<Transaction>>) -> Snapshot {
         // add retry options
         let region_backoff = Backoff::no_jitter_backoff(

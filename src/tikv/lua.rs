@@ -56,23 +56,36 @@ impl<'a> LuaCommandCtx<'a> {
         let redis = lua.create_table()?;
         let txn_rc = self.txn;
 
-        let redis_call = lua.create_async_function(move |_lua, args: Variadic<String>| {
+        let redis_call = lua.create_async_function(move |_lua, args: Variadic<LuaValue>| {
             let txn_rc = txn_rc.clone();
             // package arguments(without cmd) to argv
             async move {
                 if (&args).len() == 0 {
-                    return Ok(LuaValue::String(
-                        _lua.create_string("invalid arguments").unwrap(),
-                    ));
+                    let table = _lua.create_table().unwrap();
+                    table.raw_set("err", "Invalid arguments, please specify at least one argument for redis.call()").unwrap();
+                    return Ok(LuaValue::Table(table));
                 }
-                let cmd_name = &args.as_slice()[0];
+                let cmd_name: String = if let LuaValue::String(cmd) = args[0].clone() {
+                    cmd.to_str().unwrap().to_owned()
+                } else {
+                    "".to_owned()
+                };
+
                 let mut argv = vec![];
                 for arg in &args.as_slice()[1..] {
-                    argv.push(arg.to_owned());
+                    if let LuaValue::Integer(i) = arg {
+                        argv.push(i.to_string());
+                    } else if let LuaValue::String(s) = arg{
+                        argv.push(s.to_str().unwrap().to_owned());
+                    }
                 }
 
-                let cmd = Command::from_argv(cmd_name, &argv).unwrap();
-                debug!(LOGGER, "command call from lua {:?}", cmd);
+                let cmd = Command::from_argv(&cmd_name, &argv).unwrap();
+                let txn_rc1 = txn_rc.clone().unwrap();
+                let txn = txn_rc1.lock().await;
+                let txn_ts = txn.start_timestamp();
+                drop(txn);
+                debug!(LOGGER, "command call from lua {:?}, txn {:?}", cmd, txn_ts);
                 let result = match cmd {
                     Command::Incr(mut cmd) => cmd.incr_by(txn_rc.clone(), true).await,
                     Command::IncrBy(mut cmd) => cmd.incr_by(txn_rc.clone(), true).await,
@@ -150,9 +163,9 @@ impl<'a> LuaCommandCtx<'a> {
                     }
                     Err(e) => {
                         error!(LOGGER, "response call from lua failed {}", e);
-                        return Ok(LuaValue::String(
-                            _lua.create_string(&e.to_string()).unwrap(),
-                        ));
+                        let table = _lua.create_table().unwrap();
+                        table.raw_set("err", e.to_string()).unwrap();
+                        Ok(LuaValue::Table(table))
                     }
                 }
             }
@@ -190,7 +203,7 @@ impl<'a> LuaCommandCtx<'a> {
         args: &[String],
     ) -> AsyncResult<Frame> {
         // get script from cache with sha1 key
-        let script = db.get_script(sha1);
+        let script = db.get_script(&sha1.to_lowercase());
         match script {
             Some(script) => Ok(self
                 .clone()

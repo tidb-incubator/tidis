@@ -25,20 +25,21 @@ slog-term = { version = "2.4" }
 tokio = { version = "1", features = ["full"] }
 tokio-stream = "0.1"
 tokio-util = { version = "0.7.1", features = ["rt"] }
-tikv-client = { git = "https://github.com/yongman/client-rust.git", rev = "6675112143896419d233394b5e02612f50a72a3d" }
+#tikv-client = { git = "https://github.com/iosmanthus/client-rust.git", branch = "api-v2" }
+tikv-client = { path = "../tikv-client-rust" }
 lazy_static = "1.4.0"
 thiserror = "1"
-prometheus = { version = "0.13.0", features = ["process"]}
+prometheus = { version = "0.13.0", features = ["process"] }
 pprof = { version = "0.9", features = ["flamegraph", "protobuf-codec"] }
 hyper = { version = "0.14.17", features = ["full"] }
 async-std = { version = "1.11.0", features = ["unstable"] }
 async-tls = { version = "0.11.0", features = ["server"], default-features = false }
 rustls = "0.19.0"
-rand = {version = "0.8.5", features = ["small_rng"] }
+rand = { version = "0.8.5", features = ["small_rng"] }
 toml = { version = "0.5.8" }
 serde = { version = "1.0", features = ["derive"] }
 futures = { version = "0.3", default-features = false }
-mlua = { version = "0.7.4", features = ["luajit", "async", "vendored", "macros", "send"]}
+mlua = { version = "0.7.4", features = ["luajit", "async", "vendored", "macros", "send"] }
 sha1 = "0.10.0"
 hex = "0.4.3"
 

@@ -9,13 +9,13 @@ use super::{
 };
 use crate::async_del_set_threshold_or_default;
 use crate::async_expire_set_threshold_or_default;
+use crate::tikv::client::Transaction;
 use crate::utils::{key_is_expired, resp_array, resp_bulk, resp_err, resp_int, resp_nil};
 use crate::Frame;
 use ::futures::future::FutureExt;
 use rand::prelude::SliceRandom;
 use std::convert::TryInto;
 use std::sync::Arc;
-use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
 use rand::{rngs::SmallRng, Rng, SeedableRng};

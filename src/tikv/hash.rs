@@ -16,10 +16,11 @@ use crate::{
 use futures::future::FutureExt;
 use slog::debug;
 use std::{convert::TryInto, ops::Range, sync::Arc};
-use tikv_client::{BoundRange, Key, KvPair, Transaction};
+use tikv_client::{BoundRange, Key, KvPair};
 use tokio::sync::Mutex;
 
 use super::errors::*;
+use crate::tikv::client::Transaction;
 use crate::utils::{resp_array, resp_bulk, resp_err, resp_int, resp_nil};
 
 use crate::metrics::REMOVED_EXPIRED_KEY_COUNTER;

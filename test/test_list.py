@@ -8,6 +8,7 @@ from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs, CmdType, 
 class ListTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        RedisWrapper.set_instance_manually("127.0.0.1", 6666)
         cls.r = RedisWrapper().get_instance()
 
         cls.k1 = '__list1__'

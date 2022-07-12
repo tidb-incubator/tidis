@@ -7,9 +7,9 @@ use crate::utils::{resp_err, resp_invalid_arguments, timestamp_from_ttl};
 use crate::{is_use_txn_api, Connection, Frame};
 
 use crate::config::LOGGER;
+use crate::tikv::client::Transaction;
 use bytes::Bytes;
 use slog::debug;
-use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
 #[derive(Debug)]

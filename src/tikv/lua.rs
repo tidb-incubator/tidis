@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use super::errors::AsyncResult;
 use crate::db::Db;
+use crate::tikv::client::Transaction;
 use crate::utils::{lua_resp_to_redis_resp, redis_resp_to_lua_resp, resp_err};
 use crate::{utils::resp_invalid_arguments, Command, Frame};
-use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
 use crate::config::LOGGER;

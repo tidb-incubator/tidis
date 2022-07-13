@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::errors::AsyncResult;
 use crate::db::Db;
-use crate::utils::{lua_resp_to_redis_resp, redis_resp_to_lua_resp, resp_err};
+use crate::utils::{lua_resp_to_redis_resp, redis_resp_to_lua_resp, resp_err, sha1hex};
 use crate::{utils::resp_invalid_arguments, Command, Frame};
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -56,6 +56,8 @@ impl<'a> LuaCommandCtx<'a> {
         let redis = lua.create_table()?;
         let txn_rc = self.txn;
 
+        // redis.call()
+        // redis.pcall()
         let redis_call = lua.create_async_function(move |_lua, args: Variadic<LuaValue>| {
             let txn_rc = txn_rc.clone();
             // package arguments(without cmd) to argv
@@ -172,6 +174,30 @@ impl<'a> LuaCommandCtx<'a> {
         })?;
         redis.set("call", redis_call.clone())?;
         redis.set("pcall", redis_call)?;
+
+        // redis.sha1hex()
+        let redis_sha1hex = lua.create_function(|_lua, str: String| {
+            let hex = sha1hex(&str);
+            Ok(LuaValue::String(_lua.create_string(&hex).unwrap()))
+        })?;
+        redis.set("sha1hex", redis_sha1hex)?;
+
+        // redis.error_reply()
+        let redis_error_reply = lua.create_function(|_lua, err_str: String| {
+            let table = _lua.create_table().unwrap();
+            table.raw_set("err", err_str).unwrap();
+            Ok(LuaValue::Table(table))
+        })?;
+        redis.set("error_reply", redis_error_reply)?;
+
+        // redis.status_reply()
+        let redis_status_reply = lua.create_function(|_lua, status_str: String| {
+            let table = _lua.create_table().unwrap();
+            table.raw_set("ok", status_str).unwrap();
+            Ok(LuaValue::Table(table))
+        })?;
+        redis.set("status_reply", redis_status_reply)?;
+
         // register to global table
         globals.set("redis", redis)?;
 

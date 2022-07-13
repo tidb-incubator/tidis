@@ -1,5 +1,7 @@
 use crate::frame::Frame;
+use hex::ToHex;
 use mlua::{Lua, Value as LuaValue};
+use sha1::{Digest, Sha1};
 use std::{
     convert::TryInto,
     time::{SystemTime, UNIX_EPOCH},
@@ -208,4 +210,11 @@ pub fn load_config(
         .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
 
     Ok(config)
+}
+
+pub fn sha1hex(s: &str) -> String {
+    let mut hasher = Sha1::new();
+    hasher.update(s);
+    let sha1 = hasher.finalize();
+    sha1.encode_hex::<String>()
 }

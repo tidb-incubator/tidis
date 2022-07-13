@@ -127,6 +127,19 @@ class LuaTest(unittest.TestCase):
         err = cm.exception
         self.assertTrue('Invalid arguments' in str(err))
 
+    def test_error_reply(self):
+        with self.assertRaises(Exception) as cm:
+            self.run_script('return redis.error_reply("this is an error")')
+        err = cm.exception
+        self.assertTrue('this is an error' in str(err))
+
+    def test_status_reply(self):
+        self.assertEqual(self.run_script('return redis.status_reply("this is a status")'), 'this is a status')
+
+    def test_sha1hex(self):
+        script = 'return redis.sha1hex("foo")'
+        self.assertEqual(self.run_script(script), '0beec7b5ea3f0fdbc95d0dd47f3c5bc275da8a33')
+
     def test_type_error(self):
         script = '''
         redis.call('set', KEYS[1], 'b')

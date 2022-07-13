@@ -2,11 +2,9 @@ use crate::cmd::Invalid;
 use crate::config::LOGGER;
 use crate::db::Db;
 use crate::tikv::errors::AsyncResult;
-use crate::utils::{resp_array, resp_bulk, resp_int, resp_invalid_arguments, resp_ok};
+use crate::utils::{resp_array, resp_bulk, resp_int, resp_invalid_arguments, resp_ok, sha1hex};
 use crate::{Connection, Frame, Parse};
 use bytes::Bytes;
-use hex::ToHex;
-use sha1::{Digest, Sha1};
 use slog::debug;
 
 #[derive(Debug)]
@@ -97,10 +95,7 @@ impl Script {
         }
         if self.is_load {
             // calculate script sha1
-            let mut hasher = Sha1::new();
-            hasher.update(&self.script);
-            let sha1 = hasher.finalize();
-            let sha1_str = sha1.encode_hex::<String>();
+            let sha1_str = sha1hex(&self.script);
             db.set_script(sha1_str.clone(), Bytes::from(self.script.clone()));
             return Ok(resp_bulk(sha1_str.as_bytes().to_vec()));
         }

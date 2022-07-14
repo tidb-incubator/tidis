@@ -78,7 +78,7 @@ impl Eval {
         db: &Db,
         lua: &Option<Lua>,
     ) -> crate::Result<()> {
-        let response = self.eval(is_sha, db, lua).await.unwrap_or_else(Into::into);
+        let response = self.eval(is_sha, db, lua).await?;
 
         debug!(
             LOGGER,
@@ -118,13 +118,11 @@ impl Eval {
         };
         match resp {
             Ok(r) => {
-                let mut txn = txn_rc.lock().await;
-                txn.commit().await?;
+                txn_rc.lock().await.commit().await?;
                 Ok(r)
             }
             Err(e) => {
-                let mut txn = txn_rc.lock().await;
-                txn.rollback().await?;
+                txn_rc.lock().await.rollback().await?;
                 Ok(resp_err(e))
             }
         }

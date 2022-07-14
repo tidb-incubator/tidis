@@ -10,6 +10,7 @@ use crate::async_del_list_threshold_or_default;
 use crate::cmd_linsert_length_limit_or_default;
 use crate::cmd_lrem_length_limit_or_default;
 use crate::metrics::REMOVED_EXPIRED_KEY_COUNTER;
+use crate::tikv::client::Transaction;
 use crate::utils::{resp_array, resp_bulk, resp_err, resp_int, resp_nil, resp_ok};
 use crate::{utils::key_is_expired, Frame};
 use bytes::Bytes;
@@ -17,7 +18,7 @@ use core::ops::RangeFrom;
 use futures::future::FutureExt;
 use std::convert::TryInto;
 use std::sync::Arc;
-use tikv_client::{BoundRange, Key, Transaction};
+use tikv_client::{BoundRange, Key};
 use tokio::sync::Mutex;
 
 const INIT_INDEX: u64 = 1 << 32;

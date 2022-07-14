@@ -6,10 +6,10 @@ use crate::utils::{resp_invalid_arguments, timestamp_from_ttl};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use crate::tikv::client::Transaction;
 use bytes::Bytes;
 use slog::debug;
 use std::sync::Arc;
-use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
 use super::Invalid;

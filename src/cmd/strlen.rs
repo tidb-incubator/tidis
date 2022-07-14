@@ -6,11 +6,11 @@ use crate::tikv::string::StringCommandCtx;
 use crate::utils::resp_invalid_arguments;
 use crate::{Connection, Frame, Parse};
 use slog::debug;
-use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
 use crate::cmd::Invalid;
 use crate::config::is_use_txn_api;
+use crate::tikv::client::Transaction;
 
 #[derive(Debug)]
 pub struct Strlen {

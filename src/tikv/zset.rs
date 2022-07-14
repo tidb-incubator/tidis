@@ -14,10 +14,11 @@ use crate::Frame;
 use ::futures::future::FutureExt;
 use std::convert::TryInto;
 use std::sync::Arc;
-use tikv_client::{BoundRange, Transaction};
+use tikv_client::BoundRange;
 use tokio::sync::Mutex;
 
 use crate::metrics::REMOVED_EXPIRED_KEY_COUNTER;
+use crate::tikv::client::Transaction;
 
 #[derive(Clone)]
 pub struct ZsetCommandCtx {

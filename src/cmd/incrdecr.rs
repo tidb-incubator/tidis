@@ -8,8 +8,8 @@ use crate::{Connection, Frame, Parse};
 
 use crate::cmd::Invalid;
 use crate::config::LOGGER;
+use crate::tikv::client::Transaction;
 use slog::debug;
-use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
 #[derive(Debug)]

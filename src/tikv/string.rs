@@ -12,7 +12,7 @@ use ::futures::future::FutureExt;
 use std::collections::HashMap;
 use std::str;
 use std::sync::Arc;
-use tikv_client::{Key, KvPair, Transaction, Value};
+use tikv_client::{Key, KvPair, Value};
 use tokio::sync::Mutex;
 
 use super::errors::*;
@@ -24,6 +24,7 @@ use crate::utils::{
 use bytes::Bytes;
 
 use crate::metrics::REMOVED_EXPIRED_KEY_COUNTER;
+use crate::tikv::client::Transaction;
 
 #[derive(Clone)]
 pub struct StringCommandCtx {

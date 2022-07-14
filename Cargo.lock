@@ -1534,6 +1534,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "paste"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c520e05135d6e763148b6426a837e239041653ba7becd2e538c076c738025fc"
+
+[[package]]
 name = "peeking_take_while"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2376,7 +2382,7 @@ dependencies = [
 [[package]]
 name = "tikv-client"
 version = "0.1.0"
-source = "git+https://github.com/yongman/client-rust.git?rev=6675112143896419d233394b5e02612f50a72a3d#6675112143896419d233394b5e02612f50a72a3d"
+source = "git+https://github.com/iosmanthus/client-rust.git?branch=api-v2#0e76e1089a63d3a864b55fd945bc83c3a97a4139"
 dependencies = [
  "async-recursion",
  "async-trait",
@@ -2388,6 +2394,7 @@ dependencies = [
  "grpcio",
  "lazy_static",
  "log",
+ "paste",
  "prometheus 0.12.0",
  "rand 0.8.5",
  "regex",
@@ -2407,7 +2414,7 @@ dependencies = [
 [[package]]
 name = "tikv-client-common"
 version = "0.1.0"
-source = "git+https://github.com/yongman/client-rust.git?rev=6675112143896419d233394b5e02612f50a72a3d#6675112143896419d233394b5e02612f50a72a3d"
+source = "git+https://github.com/iosmanthus/client-rust.git?branch=api-v2#0e76e1089a63d3a864b55fd945bc83c3a97a4139"
 dependencies = [
  "futures 0.3.21",
  "grpcio",
@@ -2423,7 +2430,7 @@ dependencies = [
 [[package]]
 name = "tikv-client-pd"
 version = "0.1.0"
-source = "git+https://github.com/yongman/client-rust.git?rev=6675112143896419d233394b5e02612f50a72a3d#6675112143896419d233394b5e02612f50a72a3d"
+source = "git+https://github.com/iosmanthus/client-rust.git?branch=api-v2#0e76e1089a63d3a864b55fd945bc83c3a97a4139"
 dependencies = [
  "async-trait",
  "futures 0.3.21",
@@ -2436,7 +2443,7 @@ dependencies = [
 [[package]]
 name = "tikv-client-proto"
 version = "0.1.0"
-source = "git+https://github.com/yongman/client-rust.git?rev=6675112143896419d233394b5e02612f50a72a3d#6675112143896419d233394b5e02612f50a72a3d"
+source = "git+https://github.com/iosmanthus/client-rust.git?branch=api-v2#0e76e1089a63d3a864b55fd945bc83c3a97a4139"
 dependencies = [
  "futures 0.3.21",
  "grpcio",
@@ -2450,7 +2457,7 @@ dependencies = [
 [[package]]
 name = "tikv-client-store"
 version = "0.1.0"
-source = "git+https://github.com/yongman/client-rust.git?rev=6675112143896419d233394b5e02612f50a72a3d#6675112143896419d233394b5e02612f50a72a3d"
+source = "git+https://github.com/iosmanthus/client-rust.git?branch=api-v2#0e76e1089a63d3a864b55fd945bc83c3a97a4139"
 dependencies = [
  "async-trait",
  "derive-new",

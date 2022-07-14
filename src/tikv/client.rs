@@ -4,9 +4,8 @@ use tokio::sync::Mutex;
 
 use tikv_client::Error::StringError;
 use tikv_client::{
-    Backoff, BoundRange, ColumnFamily, Error, Key, KvPair, RawClient, Result as TiKVResult,
-    RetryOptions, Snapshot, Timestamp, TimestampExt, Transaction, TransactionClient,
-    TransactionOptions, Value,
+    raw, transaction, Backoff, BoundRange, ColumnFamily, Error, Key, KvPair, Result as TiKVResult,
+    RetryOptions, Timestamp, TimestampExt, TransactionOptions, Value,
 };
 
 use crate::config::LOGGER;
@@ -38,6 +37,14 @@ pub struct TxnClientWrapper<'a> {
     client: &'a TransactionClient,
     retries: u32,
 }
+
+pub type Snapshot = tikv_client::Snapshot<transaction::ApiV2>;
+
+pub type Transaction = tikv_client::Transaction<transaction::ApiV2>;
+
+pub type TransactionClient = transaction::Client<transaction::ApiV2>;
+
+pub type RawClient = raw::Client<raw::ApiV2>;
 
 impl TxnClientWrapper<'static> {
     pub fn new(c: &'static TransactionClient) -> Self {

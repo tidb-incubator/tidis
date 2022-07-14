@@ -8,9 +8,9 @@ use crate::utils::resp_invalid_arguments;
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use crate::tikv::client::Transaction;
 use bytes::Bytes;
 use slog::debug;
-use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
 /// Set `key` to hold the string `value`.

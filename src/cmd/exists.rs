@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use crate::config::is_use_txn_api;
+use crate::tikv::client::Transaction;
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::string::StringCommandCtx;
 use crate::utils::resp_invalid_arguments;
 use crate::{Connection, Frame, Parse};
-use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
 use crate::cmd::Invalid;

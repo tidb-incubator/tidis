@@ -4,10 +4,10 @@ use super::errors::AsyncResult;
 use crate::db::Db;
 use crate::utils::{lua_resp_to_redis_resp, redis_resp_to_lua_resp, resp_err, sha1hex};
 use crate::{utils::resp_invalid_arguments, Command, Frame};
-use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
 use crate::config::LOGGER;
+use crate::tikv::client::Transaction;
 use slog::{debug, error};
 
 use crate::tikv::errors::{REDIS_LUA_CONTEXT_IS_NOT_INITIALIZED_ERR, REDIS_NO_MATCHING_SCRIPT_ERR};

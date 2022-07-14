@@ -4,9 +4,10 @@ use std::fs::File;
 use std::io::Write;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
+use tikv_client::{raw, transaction};
 use tokio::sync::Mutex;
 
-use tikv_client::{RawClient, Transaction, TransactionClient};
+use crate::tikv::client::{RawClient, Transaction, TransactionClient};
 
 use crate::config::LOGGER;
 use crate::tikv::encoding::KeyEncoder;
@@ -126,8 +127,13 @@ pub async fn do_async_txn_connect(addrs: Vec<String>) -> AsyncResult<()> {
             backend_key_file_or_default(),
         );
     }
-    let client =
-        TransactionClient::new_with_config(addrs.clone(), config, Some(LOGGER.clone())).await?;
+    let client = TransactionClient::new_with_config(
+        addrs.clone(),
+        config,
+        transaction::ApiV2::default(),
+        Some(LOGGER.clone()),
+    )
+    .await?;
     unsafe {
         TIKV_TXN_CLIENT.replace(client);
     }
@@ -147,7 +153,13 @@ pub async fn do_async_raw_connect(addrs: Vec<String>) -> AsyncResult<()> {
             backend_key_file_or_default(),
         );
     }
-    let client = RawClient::new_with_config(addrs.clone(), config, Some(LOGGER.clone())).await?;
+    let client = RawClient::new_with_config(
+        addrs.clone(),
+        config,
+        raw::ApiV2::default(),
+        Some(LOGGER.clone()),
+    )
+    .await?;
     unsafe {
         TIKV_RAW_CLIENT.replace(client);
     }

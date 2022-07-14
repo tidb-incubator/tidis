@@ -6,11 +6,12 @@ use crate::tikv::string::StringCommandCtx;
 use crate::tikv::KEY_ENCODER;
 use crate::utils::resp_invalid_arguments;
 use crate::{Connection, Frame, Parse};
-use tikv_client::{KvPair, Transaction};
+use tikv_client::KvPair;
 use tokio::sync::Mutex;
 
 use crate::cmd::Invalid;
 use crate::config::LOGGER;
+use crate::tikv::client::Transaction;
 use bytes::Bytes;
 use slog::debug;
 

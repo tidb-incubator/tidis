@@ -75,8 +75,8 @@ jobs:
           /home/runner/.tiup/bin/tiup playground nightly --mode tikv-slim --without-monitor &
       - name: Setup tikv-service
         run: |
-          cargo build
-          ./target/debug/tikv-service-server --config="config.toml" &
+          cargo build -r
+          ./target/release/tikv-service-server --config="config.toml" &
       - name: Setup test tool env
         uses: actions/setup-python@v3
         with:

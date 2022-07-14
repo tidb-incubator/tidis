@@ -54,6 +54,10 @@ struct Server {
 
 #[derive(Debug, Deserialize, Clone)]
 struct Backend {
+    timeout: Option<u64>,
+    ca_file: Option<String>,
+    cert_file: Option<String>,
+    key_file: Option<String>,
     use_txn_api: Option<bool>,
     use_async_commit: Option<bool>,
     try_one_pc_commit: Option<bool>,
@@ -655,4 +659,52 @@ pub fn async_gc_worker_queue_size_or_default() -> usize {
     }
     // default async gc worker queue size
     100000
+}
+
+pub fn backend_timeout_or_default() -> u64 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.timeout {
+                return b;
+            }
+        }
+    }
+    // default timeout in ms
+    10000
+}
+
+pub fn backend_ca_file_or_default() -> String {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.ca_file.clone() {
+                return b;
+            }
+        }
+    }
+    // default ca file
+    String::new()
+}
+
+pub fn backend_cert_file_or_default() -> String {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.cert_file.clone() {
+                return b;
+            }
+        }
+    }
+    // default cert file
+    String::new()
+}
+
+pub fn backend_key_file_or_default() -> String {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.key_file.clone() {
+                return b;
+            }
+        }
+    }
+    // default key file
+    String::new()
 }

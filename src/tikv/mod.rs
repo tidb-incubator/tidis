@@ -12,7 +12,10 @@ use crate::tikv::client::{RawClient, Transaction, TransactionClient};
 use crate::config::LOGGER;
 use crate::tikv::encoding::KeyEncoder;
 use crate::tikv::errors::REDIS_BACKEND_NOT_CONNECTED_ERR;
-use crate::{config_meta_key_number_or_default, fetch_idx_and_add};
+use crate::{
+    backend_ca_file_or_default, backend_cert_file_or_default, backend_key_file_or_default,
+    backend_timeout_or_default, config_meta_key_number_or_default, fetch_idx_and_add,
+};
 
 use self::client::RawClientWrapper;
 use self::client::TxnClientWrapper;
@@ -112,8 +115,21 @@ pub async fn sleep(ms: u32) {
 pub async fn do_async_txn_connect(addrs: Vec<String>) -> AsyncResult<()> {
     PD_ADDRS.write().unwrap().replace(addrs.clone());
 
-    let client = TransactionClient::new(
+    let mut config = tikv_client::Config::default()
+        .with_timeout(Duration::from_millis(backend_timeout_or_default()));
+    if !backend_ca_file_or_default().is_empty()
+        || !backend_cert_file_or_default().is_empty()
+        || !backend_key_file_or_default().is_empty()
+    {
+        config = config.with_security(
+            backend_ca_file_or_default(),
+            backend_cert_file_or_default(),
+            backend_key_file_or_default(),
+        );
+    }
+    let client = TransactionClient::new_with_config(
         addrs.clone(),
+        config,
         transaction::ApiV2::default(),
         Some(LOGGER.clone()),
     )
@@ -125,7 +141,25 @@ pub async fn do_async_txn_connect(addrs: Vec<String>) -> AsyncResult<()> {
 }
 
 pub async fn do_async_raw_connect(addrs: Vec<String>) -> AsyncResult<()> {
-    let client = RawClient::new(addrs.clone(), raw::ApiV2::default(), Some(LOGGER.clone())).await?;
+    let mut config = tikv_client::Config::default()
+        .with_timeout(Duration::from_millis(backend_timeout_or_default()));
+    if !backend_ca_file_or_default().is_empty()
+        || !backend_cert_file_or_default().is_empty()
+        || !backend_key_file_or_default().is_empty()
+    {
+        config = config.with_security(
+            backend_ca_file_or_default(),
+            backend_cert_file_or_default(),
+            backend_key_file_or_default(),
+        );
+    }
+    let client = RawClient::new_with_config(
+        addrs.clone(),
+        config,
+        raw::ApiV2::default(),
+        Some(LOGGER.clone()),
+    )
+    .await?;
     unsafe {
         TIKV_RAW_CLIENT.replace(client);
     }

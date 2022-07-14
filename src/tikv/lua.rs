@@ -7,6 +7,7 @@ use crate::{utils::resp_invalid_arguments, Command, Frame};
 use tokio::sync::Mutex;
 
 use crate::config::LOGGER;
+use crate::tikv::client::Transaction;
 use slog::{debug, error};
 
 use crate::tikv::errors::{REDIS_LUA_CONTEXT_IS_NOT_INITIALIZED_ERR, REDIS_NO_MATCHING_SCRIPT_ERR};

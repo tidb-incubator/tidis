@@ -41,7 +41,7 @@ jobs:
             target/
           key: cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-                        cargo-
+            cargo-
       - name: Run format
         env:
           RUSTFLAGS: -Dwarnings
@@ -69,14 +69,21 @@ jobs:
         working-directory: ./
         run: |
           cargo check
-      - name: Setup tikv instance
+      - name: Setup TiKV instance
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://tiup-mirrors.pingcap.com/install.sh | sh
-          /home/runner/.tiup/bin/tiup playground nightly --mode tikv-slim --without-monitor &
+          ~/.tiup/bin/tiup install playground tikv:nightly pd:nightly
+          ~/.tiup/bin/tiup playground nightly --mode tikv-slim \
+            --without-monitor --kv 3 --kv.config .github/config/tikv.toml &
+          while :; do
+            echo "waiting cluster to be ready"
+            [[ "$(curl -I http://127.0.0.1:2379/pd/api/v1/regions 2>/dev/null | head -n 1 | cut -d$' ' -f2)" -ne "405" ]] || break
+            sleep 1
+          done
       - name: Setup tikv-service
         run: |
           cargo build -r
-          ./target/release/tikv-service-server --config="config.toml" &
+          ./target/release/tikv-service-server --config=config.toml &
       - name: Setup test tool env
         uses: actions/setup-python@v3
         with:

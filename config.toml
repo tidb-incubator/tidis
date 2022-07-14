@@ -11,7 +11,7 @@ pd_addrs = "127.0.0.1:2379"
 instance_id = "1"
 prometheus_listen = "0.0.0.0"
 prometheus_port = 8080
-log_level = "debug"
+log_level = "info"
 log_file = "tikv-service.log"
 
 [backend]
@@ -22,6 +22,6 @@ use_pessimistic_txn = true
 local_pool_number = 4
 txn_retry_count = 10
 txn_region_backoff_delay_ms = 2
-txn_region_backoff_delay_attemps = 2
+txn_region_backoff_delay_attemps = 5
 txn_lock_backoff_delay_ms = 2
 txn_lock_backoff_delay_attemps = 5

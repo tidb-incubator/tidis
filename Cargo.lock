@@ -2382,6 +2382,7 @@ dependencies = [
 [[package]]
 name = "tikv-client"
 version = "0.1.0"
+source = "git+https://github.com/iosmanthus/client-rust.git?branch=api-v2#0e76e1089a63d3a864b55fd945bc83c3a97a4139"
 dependencies = [
  "async-recursion",
  "async-trait",
@@ -2413,6 +2414,7 @@ dependencies = [
 [[package]]
 name = "tikv-client-common"
 version = "0.1.0"
+source = "git+https://github.com/iosmanthus/client-rust.git?branch=api-v2#0e76e1089a63d3a864b55fd945bc83c3a97a4139"
 dependencies = [
  "futures 0.3.21",
  "grpcio",
@@ -2428,6 +2430,7 @@ dependencies = [
 [[package]]
 name = "tikv-client-pd"
 version = "0.1.0"
+source = "git+https://github.com/iosmanthus/client-rust.git?branch=api-v2#0e76e1089a63d3a864b55fd945bc83c3a97a4139"
 dependencies = [
  "async-trait",
  "futures 0.3.21",
@@ -2440,6 +2443,7 @@ dependencies = [
 [[package]]
 name = "tikv-client-proto"
 version = "0.1.0"
+source = "git+https://github.com/iosmanthus/client-rust.git?branch=api-v2#0e76e1089a63d3a864b55fd945bc83c3a97a4139"
 dependencies = [
  "futures 0.3.21",
  "grpcio",
@@ -2453,6 +2457,7 @@ dependencies = [
 [[package]]
 name = "tikv-client-store"
 version = "0.1.0"
+source = "git+https://github.com/iosmanthus/client-rust.git?branch=api-v2#0e76e1089a63d3a864b55fd945bc83c3a97a4139"
 dependencies = [
  "async-trait",
  "derive-new",

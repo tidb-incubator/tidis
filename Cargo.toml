@@ -25,8 +25,7 @@ slog-term = { version = "2.4" }
 tokio = { version = "1", features = ["full"] }
 tokio-stream = "0.1"
 tokio-util = { version = "0.7.1", features = ["rt"] }
-#tikv-client = { git = "https://github.com/iosmanthus/client-rust.git", branch = "api-v2" }
-tikv-client = { path = "../tikv-client-rust" }
+tikv-client = { git = "https://github.com/iosmanthus/client-rust.git", branch = "api-v2" }
 lazy_static = "1.4.0"
 thiserror = "1"
 prometheus = { version = "0.13.0", features = ["process"] }

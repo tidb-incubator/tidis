@@ -38,7 +38,7 @@ rand = {version = "0.8.5", features = ["small_rng"] }
 toml = { version = "0.5.8" }
 serde = { version = "1.0", features = ["derive"] }
 futures = { version = "0.3", default-features = false }
-mlua = { version = "0.7.4", features = ["luajit", "async", "vendored", "macros", "send"]}
+mlua = { version = "0.7.4", features = ["lua51", "async", "vendored", "macros", "send"]}
 sha1 = "0.10.0"
 hex = "0.4.3"
 

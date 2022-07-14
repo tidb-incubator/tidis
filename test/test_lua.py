@@ -87,7 +87,7 @@ class LuaTest(unittest.TestCase):
     def test_error_conversion(self):
         script = '''
         redis.call('set', KEYS[1], 'a')
-        local foo = redis.call('incr', KEYS[1])
+        local foo = redis.pcall('incr', KEYS[1])
         return {type(foo), foo['err']}
         '''
         self.assertEqual(self.run_script(script, 1, self.k1), ['table', 'ERR value is not an integer or out of range'])
@@ -204,6 +204,39 @@ class LuaTest(unittest.TestCase):
         return 0
         '''
         self.run_script(script, 3, self.k1, self.k2, self.k3)
+
+    def test_nil_bulk_reply(self):
+        script = '''
+        redis.call('del', KEYS[1])
+        local foo = redis.call('get', KEYS[1])
+        return {type(foo), foo == false}
+        '''
+        self.assertListEqual(self.run_script(script, 1, self.k1), ['boolean', 1])
+
+    def test_decr_if_gt(self):
+        script = '''
+        local current
+        current = redis.call('get', KEYS[1])
+        if not current then return nil end
+        if current > ARGV[1] then
+            return redis.call('decr', KEYS[1])
+        else
+            return redis.call('get', KEYS[1])
+        end
+        '''
+        self.r.set(self.k1, 5)
+        self.assertEqual(str(self.run_script(script, 1, self.k1, 2)), '4')
+        self.assertEqual(str(self.run_script(script, 1, self.k1, 2)), '3')
+        self.assertEqual(str(self.run_script(script, 1, self.k1, 2)), '2')
+        self.assertEqual(str(self.run_script(script, 1, self.k1, 2)), '2')
+        self.assertEqual(str(self.run_script(script, 1, self.k1, 2)), '2')
+
+    def test_prng_seed(self):
+        script = '''
+        math.randomseed(ARGV[1]); return tostring(math.random())
+        '''
+        self.assertEqual(self.run_script(script, 0, 10), self.run_script(script, 0, 10))
+        self.assertNotEqual(self.run_script(script, 0, 10), self.run_script(script, 0, 20))
 
     def execute_eval(self, cmd, *args):
         arg_str = ", ".join(list(map(lambda arg: "'{}'".format(arg), args)))

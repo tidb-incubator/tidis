@@ -204,6 +204,10 @@ impl<'a> LuaCommandCtx<'a> {
         let chunk = lua.load(script);
         let resp: LuaValue = chunk.eval_async().await?;
 
+        if let LuaValue::Error(e) = resp {
+            return Err(e);
+        }
+
         // convert lua value to redis value
         let redis_resp = lua_resp_to_redis_resp(resp);
 

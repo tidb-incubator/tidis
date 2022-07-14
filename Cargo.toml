@@ -20,7 +20,10 @@ atoi = "0.3.2"
 bytes = "1"
 crc = "2.0"
 structopt = "0.3.14"
-slog = { version = "2.3", features = ["max_level_trace", "release_max_level_debug"] }
+slog = { version = "2.3", features = [
+    "max_level_trace",
+    "release_max_level_debug",
+] }
 slog-term = { version = "2.4" }
 tokio = { version = "1", features = ["full"] }
 tokio-stream = "0.1"
@@ -32,13 +35,21 @@ prometheus = { version = "0.13.0", features = ["process"] }
 pprof = { version = "0.9", features = ["flamegraph", "protobuf-codec"] }
 hyper = { version = "0.14.17", features = ["full"] }
 async-std = { version = "1.11.0", features = ["unstable"] }
-async-tls = { version = "0.11.0", features = ["server"], default-features = false }
+async-tls = { version = "0.11.0", features = [
+    "server",
+], default-features = false }
 rustls = "0.19.0"
 rand = { version = "0.8.5", features = ["small_rng"] }
 toml = { version = "0.5.8" }
 serde = { version = "1.0", features = ["derive"] }
 futures = { version = "0.3", default-features = false }
-mlua = { version = "0.7.4", features = ["luajit", "async", "vendored", "macros", "send"] }
+mlua = { version = "0.7.4", features = [
+    "lua51",
+    "async",
+    "vendored",
+    "macros",
+    "send",
+] }
 sha1 = "0.10.0"
 hex = "0.4.3"
 

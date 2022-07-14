@@ -28,7 +28,7 @@ use slog::{debug, error, info, warn};
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::{self, Duration, Instant, MissedTickBehavior};
 
-use mlua::{Lua, LuaOptions, StdLib};
+use mlua::Lua;
 
 use crate::config::LOGGER;
 
@@ -706,17 +706,7 @@ impl Handler {
                             Command::Eval(_) | Command::Evalsha(_) => {
                                 if self.lua.is_none() {
                                     // initialize the mlua once in same connection
-                                    self.lua = Some(
-                                        Lua::new_with(
-                                            StdLib::STRING
-                                                | StdLib::TABLE
-                                                | StdLib::IO
-                                                | StdLib::MATH
-                                                | StdLib::OS,
-                                            LuaOptions::new(),
-                                        )
-                                        .unwrap(),
-                                    );
+                                    self.lua = Some(Lua::new());
                                 }
                             }
                             _ => {}

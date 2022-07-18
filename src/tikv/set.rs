@@ -157,7 +157,6 @@ impl SetCommandCtx {
                             let version = get_version_for_new(&key, txn_rc.clone()).await?;
                             txn = txn_rc.lock().await;
 
-                            let mut added: i64 = 0;
                             // create new meta key and meta value
                             for m in &members {
                                 // check member already exists

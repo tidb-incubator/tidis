@@ -112,19 +112,22 @@ impl SetCommandCtx {
                                 version = get_version_for_new(&key, txn_rc.clone()).await?;
                                 txn = txn_rc.lock().await;
                             }
-                            let mut added: i64 = 0;
 
+                            let mut member_data_keys = vec![];
                             for m in &members {
                                 // check member already exists
                                 let data_key =
                                     KEY_ENCODER.encode_txnkv_set_data_key(&key, m, version);
-                                let member_exists = txn.key_exists(data_key.clone()).await?;
-                                if !member_exists {
-                                    added += 1;
-                                    // value can not be vec![] if use cse as backend
-                                    txn.put(data_key, vec![0]).await?;
-                                }
+                                member_data_keys.push(data_key);
                             }
+                            // batch get
+                            let added = txn.batch_get(member_data_keys).await?.count() as i64;
+                            for m in &members {
+                                let data_key =
+                                    KEY_ENCODER.encode_txnkv_set_data_key(&key, m, version);
+                                txn.put(data_key, vec![0]).await?;
+                            }
+
                             // choose a random sub meta key for update, create if not exists
                             let sub_meta_key =
                                 KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, rand_idx);
@@ -160,16 +163,14 @@ impl SetCommandCtx {
                                 // check member already exists
                                 let data_key =
                                     KEY_ENCODER.encode_txnkv_set_data_key(&key, m, version);
-                                let member_exists = txn.key_exists(data_key.clone()).await?;
-                                if !member_exists {
-                                    added += 1;
-                                    // value can not be vec![] if use cse as backend
-                                    txn.put(data_key, vec![0]).await?;
-                                }
+                                // value can not be vec![] if use cse as backend
+                                txn.put(data_key, vec![0]).await?;
                             }
                             // create meta key
                             let meta_value = KEY_ENCODER.encode_txnkv_set_meta_value(0, version, 0);
                             txn.put(meta_key, meta_value).await?;
+
+                            let added = members.len() as i64;
 
                             // create sub meta key with a random index
                             let sub_meta_key =

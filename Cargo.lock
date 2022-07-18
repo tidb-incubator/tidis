@@ -2376,7 +2376,7 @@ dependencies = [
 [[package]]
 name = "tikv-client"
 version = "0.1.0"
-source = "git+https://github.com/yongman/client-rust.git?rev=6675112143896419d233394b5e02612f50a72a3d#6675112143896419d233394b5e02612f50a72a3d"
+source = "git+https://github.com/yongman/client-rust.git?branch=perfomance-optimize#58775934f1ce8382e617dec0758be9f3a27a28c0"
 dependencies = [
  "async-recursion",
  "async-trait",
@@ -2407,7 +2407,7 @@ dependencies = [
 [[package]]
 name = "tikv-client-common"
 version = "0.1.0"
-source = "git+https://github.com/yongman/client-rust.git?rev=6675112143896419d233394b5e02612f50a72a3d#6675112143896419d233394b5e02612f50a72a3d"
+source = "git+https://github.com/yongman/client-rust.git?branch=perfomance-optimize#58775934f1ce8382e617dec0758be9f3a27a28c0"
 dependencies = [
  "futures 0.3.21",
  "grpcio",
@@ -2423,7 +2423,7 @@ dependencies = [
 [[package]]
 name = "tikv-client-pd"
 version = "0.1.0"
-source = "git+https://github.com/yongman/client-rust.git?rev=6675112143896419d233394b5e02612f50a72a3d#6675112143896419d233394b5e02612f50a72a3d"
+source = "git+https://github.com/yongman/client-rust.git?branch=perfomance-optimize#58775934f1ce8382e617dec0758be9f3a27a28c0"
 dependencies = [
  "async-trait",
  "futures 0.3.21",
@@ -2436,7 +2436,7 @@ dependencies = [
 [[package]]
 name = "tikv-client-proto"
 version = "0.1.0"
-source = "git+https://github.com/yongman/client-rust.git?rev=6675112143896419d233394b5e02612f50a72a3d#6675112143896419d233394b5e02612f50a72a3d"
+source = "git+https://github.com/yongman/client-rust.git?branch=perfomance-optimize#58775934f1ce8382e617dec0758be9f3a27a28c0"
 dependencies = [
  "futures 0.3.21",
  "grpcio",
@@ -2450,7 +2450,7 @@ dependencies = [
 [[package]]
 name = "tikv-client-store"
 version = "0.1.0"
-source = "git+https://github.com/yongman/client-rust.git?rev=6675112143896419d233394b5e02612f50a72a3d#6675112143896419d233394b5e02612f50a72a3d"
+source = "git+https://github.com/yongman/client-rust.git?branch=perfomance-optimize#58775934f1ce8382e617dec0758be9f3a27a28c0"
 dependencies = [
  "async-trait",
  "derive-new",

@@ -117,7 +117,18 @@ impl<'a> HashCommandCtx {
                                 txn = txn_rc.lock().await;
                             }
 
-                            let mut added_count: i64 = 0;
+                            let mut fields_data_key = vec![];
+                            for kv in fvs_copy.clone() {
+                                let field: Vec<u8> = kv.0.into();
+                                let datakey = KEY_ENCODER.encode_txnkv_hash_data_key(
+                                    &key,
+                                    &String::from_utf8_lossy(&field),
+                                    version,
+                                );
+                                fields_data_key.push(datakey);
+                            }
+                            // batch get
+                            let added_count = txn.batch_get(fields_data_key).await?.count() as i64;
                             for kv in fvs_copy {
                                 let field: Vec<u8> = kv.0.into();
                                 let datakey = KEY_ENCODER.encode_txnkv_hash_data_key(
@@ -125,11 +136,6 @@ impl<'a> HashCommandCtx {
                                     &String::from_utf8_lossy(&field),
                                     version,
                                 );
-                                // check field exists
-                                let field_exists = txn.key_exists(datakey.clone()).await?;
-                                if !field_exists {
-                                    added_count += 1;
-                                }
                                 txn.put(datakey, kv.1).await?;
                             }
 
@@ -166,8 +172,19 @@ impl<'a> HashCommandCtx {
 
                             // not exists
                             let ttl = 0;
-                            let mut added_count: i64 = 0;
+                            let mut fields_data_key = vec![];
+                            for kv in fvs_copy.clone() {
+                                let field: Vec<u8> = kv.0.into();
+                                let datakey = KEY_ENCODER.encode_txnkv_hash_data_key(
+                                    &key,
+                                    &String::from_utf8_lossy(&field),
+                                    version,
+                                );
+                                fields_data_key.push(datakey);
+                            }
 
+                            // batch get
+                            let added_count = txn.batch_get(fields_data_key).await?.count() as i64;
                             for kv in fvs_copy {
                                 let field: Vec<u8> = kv.0.into();
                                 let datakey = KEY_ENCODER.encode_txnkv_hash_data_key(
@@ -175,11 +192,6 @@ impl<'a> HashCommandCtx {
                                     &String::from_utf8_lossy(&field),
                                     version,
                                 );
-                                // check field exists
-                                let field_exists = txn.key_exists(datakey.clone()).await?;
-                                if !field_exists {
-                                    added_count += 1;
-                                }
                                 txn.put(datakey, kv.1).await?;
                             }
 

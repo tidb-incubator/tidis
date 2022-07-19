@@ -13,9 +13,12 @@ use crate::utils::{key_is_expired, resp_array, resp_bulk, resp_err, resp_int, re
 use crate::Frame;
 use ::futures::future::FutureExt;
 use rand::prelude::SliceRandom;
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::sync::Arc;
+use tikv_client::Key;
 use tikv_client::Transaction;
+use tikv_client::Value;
 use tokio::sync::Mutex;
 
 use rand::{rngs::SmallRng, Rng, SeedableRng};
@@ -113,7 +116,7 @@ impl SetCommandCtx {
                                 txn = txn_rc.lock().await;
                             }
 
-                            let mut member_data_keys = vec![];
+                            let mut member_data_keys = Vec::with_capacity(members.len());
                             for m in &members {
                                 // check member already exists
                                 let data_key =
@@ -287,15 +290,29 @@ impl SetCommandCtx {
                                 }
                             } else {
                                 let mut resp = vec![];
+                                let mut member_data_keys = Vec::with_capacity(members.len());
                                 for m in &members {
                                     let data_key =
                                         KEY_ENCODER.encode_txnkv_set_data_key(&key, m, version);
-                                    if txn.key_exists(data_key).await? {
-                                        resp.push(resp_int(1));
-                                    } else {
-                                        resp.push(resp_int(0));
+                                    member_data_keys.push(data_key);
+                                }
+
+                                // batch get
+                                let member_result = txn
+                                    .batch_get(member_data_keys)
+                                    .await?
+                                    .map(|kv| kv.into())
+                                    .collect::<HashMap<Key, Value>>();
+
+                                for m in &members {
+                                    let data_key =
+                                        KEY_ENCODER.encode_txnkv_set_data_key(&key, m, version);
+                                    match member_result.get(&data_key) {
+                                        Some(_) => resp.push(resp_int(1)),
+                                        None => resp.push(resp_int(0)),
                                     }
                                 }
+
                                 Ok(resp_array(resp))
                             }
                         }

@@ -15,8 +15,8 @@ use crate::{
 
 use futures::future::FutureExt;
 use slog::debug;
-use std::{convert::TryInto, ops::Range, sync::Arc};
-use tikv_client::{BoundRange, Key, KvPair, Transaction};
+use std::{collections::HashMap, convert::TryInto, ops::Range, sync::Arc};
+use tikv_client::{BoundRange, Key, KvPair, Transaction, Value};
 use tokio::sync::Mutex;
 
 use super::errors::*;
@@ -408,16 +408,26 @@ impl<'a> HashCommandCtx {
                                 return Ok(resp_array(vec![]));
                             }
 
+                            let mut field_data_keys = Vec::with_capacity(fields.len());
                             for field in &fields {
                                 let data_key =
                                     KEY_ENCODER.encode_txnkv_hash_data_key(&key, field, version);
-                                match txn.get(data_key).await? {
-                                    Some(data) => {
-                                        resp.push(resp_bulk(data));
-                                    }
-                                    None => {
-                                        resp.push(resp_nil());
-                                    }
+                                field_data_keys.push(data_key);
+                            }
+
+                            // batch get
+                            let fields_result = txn
+                                .batch_get(field_data_keys)
+                                .await?
+                                .map(|kv| kv.into())
+                                .collect::<HashMap<Key, Value>>();
+
+                            for field in &fields {
+                                let data_key =
+                                    KEY_ENCODER.encode_txnkv_hash_data_key(&key, field, version);
+                                match fields_result.get(&data_key) {
+                                    Some(data) => resp.push(resp_bulk(data.to_vec())),
+                                    None => resp.push(resp_nil()),
                                 }
                             }
                         }

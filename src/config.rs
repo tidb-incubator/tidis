@@ -58,6 +58,7 @@ struct Backend {
     ca_file: Option<String>,
     cert_file: Option<String>,
     key_file: Option<String>,
+    conn_concurrency: Option<usize>,
     use_txn_api: Option<bool>,
     use_async_commit: Option<bool>,
     try_one_pc_commit: Option<bool>,
@@ -707,4 +708,16 @@ pub fn backend_key_file_or_default() -> String {
     }
     // default key file
     String::new()
+}
+
+pub fn conn_concurrency_or_default() -> usize {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.conn_concurrency {
+                return b;
+            }
+        }
+    }
+    // default backend connection concurrency
+    10
 }

@@ -15,7 +15,8 @@ use crate::tikv::encoding::KeyEncoder;
 use crate::tikv::errors::REDIS_BACKEND_NOT_CONNECTED_ERR;
 use crate::{
     backend_ca_file_or_default, backend_cert_file_or_default, backend_key_file_or_default,
-    backend_timeout_or_default, config_meta_key_number_or_default, fetch_idx_and_add,
+    backend_timeout_or_default, config_meta_key_number_or_default, conn_concurrency_or_default,
+    fetch_idx_and_add,
 };
 
 use self::client::RawClientWrapper;
@@ -135,8 +136,8 @@ pub async fn do_async_txn_connect(addrs: Vec<String>) -> AsyncResult<()> {
             backend_key_file_or_default(),
         );
     }
-    let mut clients = vec![];
-    for _ in 0..10 {
+    let mut clients = Vec::with_capacity(conn_concurrency_or_default());
+    for _ in 0..conn_concurrency_or_default() {
         let client =
             TransactionClient::new_with_config(addrs.clone(), config.clone(), Some(LOGGER.clone()))
                 .await?;

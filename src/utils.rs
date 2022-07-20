@@ -3,6 +3,7 @@ use hex::ToHex;
 use mlua::{Lua, Value as LuaValue};
 use sha1::{Digest, Sha1};
 use std::{
+    collections::HashSet,
     convert::TryInto,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -217,4 +218,8 @@ pub fn sha1hex(s: &str) -> String {
     hasher.update(s);
     let sha1 = hasher.finalize();
     sha1.encode_hex::<String>()
+}
+
+pub fn count_unique_keys<T: std::hash::Hash + std::cmp::Eq>(keys: &[T]) -> usize {
+    keys.iter().map(|pair| pair).collect::<HashSet<&T>>().len()
 }

@@ -9,7 +9,7 @@ use crate::{
     async_del_hash_threshold_or_default, async_expire_hash_threshold_or_default,
     config::LOGGER,
     config_meta_key_number_or_default,
-    utils::{key_is_expired, resp_ok},
+    utils::{count_unique_keys, key_is_expired, resp_ok},
     Frame,
 };
 
@@ -117,7 +117,7 @@ impl<'a> HashCommandCtx {
                                 txn = txn_rc.lock().await;
                             }
 
-                            let mut fields_data_key = vec![];
+                            let mut fields_data_key = Vec::with_capacity(fvs_len);
                             for kv in fvs_copy.clone() {
                                 let field: Vec<u8> = kv.0.into();
                                 let datakey = KEY_ENCODER.encode_txnkv_hash_data_key(
@@ -128,7 +128,9 @@ impl<'a> HashCommandCtx {
                                 fields_data_key.push(datakey);
                             }
                             // batch get
-                            let added_count = txn.batch_get(fields_data_key).await?.count() as i64;
+                            let real_fields_count = count_unique_keys(&fields_data_key);
+                            let added_count = real_fields_count as i64
+                                - txn.batch_get(fields_data_key).await?.count() as i64;
                             for kv in fvs_copy {
                                 let field: Vec<u8> = kv.0.into();
                                 let datakey = KEY_ENCODER.encode_txnkv_hash_data_key(
@@ -182,9 +184,8 @@ impl<'a> HashCommandCtx {
                                 );
                                 fields_data_key.push(datakey);
                             }
+                            let real_fields_count = count_unique_keys(&fields_data_key);
 
-                            // batch get
-                            let added_count = txn.batch_get(fields_data_key).await?.count() as i64;
                             for kv in fvs_copy {
                                 let field: Vec<u8> = kv.0.into();
                                 let datakey = KEY_ENCODER.encode_txnkv_hash_data_key(
@@ -204,7 +205,7 @@ impl<'a> HashCommandCtx {
                             // set sub meta key with a random index
                             let sub_meta_key =
                                 KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, idx);
-                            txn.put(sub_meta_key, added_count.to_be_bytes().to_vec())
+                            txn.put(sub_meta_key, real_fields_count.to_be_bytes().to_vec())
                                 .await?;
                         }
                     }

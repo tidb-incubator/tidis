@@ -9,6 +9,7 @@ use super::{
 };
 use crate::async_del_set_threshold_or_default;
 use crate::async_expire_set_threshold_or_default;
+use crate::utils::count_unique_keys;
 use crate::utils::{key_is_expired, resp_array, resp_bulk, resp_err, resp_int, resp_nil};
 use crate::Frame;
 use ::futures::future::FutureExt;
@@ -118,13 +119,15 @@ impl SetCommandCtx {
 
                             let mut member_data_keys = Vec::with_capacity(members.len());
                             for m in &members {
-                                // check member already exists
                                 let data_key =
                                     KEY_ENCODER.encode_txnkv_set_data_key(&key, m, version);
                                 member_data_keys.push(data_key);
                             }
                             // batch get
-                            let added = txn.batch_get(member_data_keys).await?.count() as i64;
+                            // count the unique members
+                            let real_member_count = count_unique_keys(&member_data_keys);
+                            let added = real_member_count as i64
+                                - txn.batch_get(member_data_keys).await?.count() as i64;
                             for m in &members {
                                 let data_key =
                                     KEY_ENCODER.encode_txnkv_set_data_key(&key, m, version);
@@ -172,7 +175,7 @@ impl SetCommandCtx {
                             let meta_value = KEY_ENCODER.encode_txnkv_set_meta_value(0, version, 0);
                             txn.put(meta_key, meta_value).await?;
 
-                            let added = members.len() as i64;
+                            let added = count_unique_keys(&members) as i64;
 
                             // create sub meta key with a random index
                             let sub_meta_key =

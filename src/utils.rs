@@ -221,5 +221,5 @@ pub fn sha1hex(s: &str) -> String {
 }
 
 pub fn count_unique_keys<T: std::hash::Hash + std::cmp::Eq>(keys: &[T]) -> usize {
-    keys.iter().map(|pair| pair).collect::<HashSet<&T>>().len()
+    keys.iter().collect::<HashSet<&T>>().len()
 }

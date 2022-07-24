@@ -153,11 +153,25 @@ impl KeyDecoder {
         Self::decode_cmp_uint64_to_f64(u64::from_be_bytes(value[..].try_into().unwrap()))
     }
 
+    fn encoded_bytes_len(encoded: &[u8]) -> usize {
+        let mut idx = ENC_GROUP_SIZE;
+        loop {
+            if encoded.len() < idx + 1 {
+                return encoded.len();
+            }
+            let marker = encoded[idx];
+            if marker != ENC_MARKER {
+                return idx + 1;
+            }
+            idx += ENC_GROUP_SIZE + 1;
+        }
+    }
+
     pub fn decode_key_gc_userkey_version(key: Key) -> (Vec<u8>, u16) {
         let key: Vec<u8> = key.into();
         let enc_key_start = 5;
         let ukey = Self::decode_bytes(&key[enc_key_start..]);
-        let idx = 5 + ukey.len();
+        let idx = 5 + Self::encoded_bytes_len(&key[enc_key_start..]);
         let version = u16::from_be_bytes(key[idx..idx + 2].try_into().unwrap());
         (ukey, version)
     }

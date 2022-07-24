@@ -15,7 +15,10 @@ use crate::metrics::GC_TASK_QUEUE_COUNTER;
 use crate::tikv::encoding::{DataType, KeyDecoder};
 use crate::tikv::errors::{AsyncResult, RTError};
 use crate::tikv::{get_txn_client, KEY_ENCODER};
-use crate::{async_gc_interval_or_default, async_gc_worker_queue_size_or_default};
+use crate::{
+    async_deletion_enabled_or_default, async_gc_interval_or_default,
+    async_gc_worker_queue_size_or_default,
+};
 
 const CRC16: Crc<u16> = Crc::<u16>::new(&CRC_16_XMODEM);
 
@@ -89,6 +92,10 @@ impl GcMaster {
         let txn_client = get_txn_client()?;
         loop {
             interval.tick().await;
+
+            if !async_deletion_enabled_or_default() {
+                continue;
+            }
 
             let mut ss = txn_client.newest_snapshot().await;
             let bound_range = KEY_ENCODER.encode_txnkv_gc_version_key_range();

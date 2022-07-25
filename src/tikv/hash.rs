@@ -9,14 +9,14 @@ use crate::{
     async_del_hash_threshold_or_default, async_expire_hash_threshold_or_default,
     config::LOGGER,
     config_meta_key_number_or_default,
-    utils::{key_is_expired, resp_ok},
+    utils::{count_unique_keys, key_is_expired, resp_ok},
     Frame,
 };
 
 use futures::future::FutureExt;
 use slog::debug;
-use std::{convert::TryInto, ops::Range, sync::Arc};
-use tikv_client::{BoundRange, Key, KvPair, Transaction};
+use std::{collections::HashMap, convert::TryInto, ops::Range, sync::Arc};
+use tikv_client::{BoundRange, Key, KvPair, Transaction, Value};
 use tokio::sync::Mutex;
 
 use super::errors::*;
@@ -117,7 +117,20 @@ impl<'a> HashCommandCtx {
                                 txn = txn_rc.lock().await;
                             }
 
-                            let mut added_count: i64 = 0;
+                            let mut fields_data_key = Vec::with_capacity(fvs_len);
+                            for kv in fvs_copy.clone() {
+                                let field: Vec<u8> = kv.0.into();
+                                let datakey = KEY_ENCODER.encode_txnkv_hash_data_key(
+                                    &key,
+                                    &String::from_utf8_lossy(&field),
+                                    version,
+                                );
+                                fields_data_key.push(datakey);
+                            }
+                            // batch get
+                            let real_fields_count = count_unique_keys(&fields_data_key);
+                            let added_count = real_fields_count as i64
+                                - txn.batch_get(fields_data_key).await?.count() as i64;
                             for kv in fvs_copy {
                                 let field: Vec<u8> = kv.0.into();
                                 let datakey = KEY_ENCODER.encode_txnkv_hash_data_key(
@@ -125,11 +138,6 @@ impl<'a> HashCommandCtx {
                                     &String::from_utf8_lossy(&field),
                                     version,
                                 );
-                                // check field exists
-                                let field_exists = txn.key_exists(datakey.clone()).await?;
-                                if !field_exists {
-                                    added_count += 1;
-                                }
                                 txn.put(datakey, kv.1).await?;
                             }
 
@@ -166,7 +174,17 @@ impl<'a> HashCommandCtx {
 
                             // not exists
                             let ttl = 0;
-                            let mut added_count: i64 = 0;
+                            let mut fields_data_key = vec![];
+                            for kv in fvs_copy.clone() {
+                                let field: Vec<u8> = kv.0.into();
+                                let datakey = KEY_ENCODER.encode_txnkv_hash_data_key(
+                                    &key,
+                                    &String::from_utf8_lossy(&field),
+                                    version,
+                                );
+                                fields_data_key.push(datakey);
+                            }
+                            let real_fields_count = count_unique_keys(&fields_data_key);
 
                             for kv in fvs_copy {
                                 let field: Vec<u8> = kv.0.into();
@@ -175,11 +193,6 @@ impl<'a> HashCommandCtx {
                                     &String::from_utf8_lossy(&field),
                                     version,
                                 );
-                                // check field exists
-                                let field_exists = txn.key_exists(datakey.clone()).await?;
-                                if !field_exists {
-                                    added_count += 1;
-                                }
                                 txn.put(datakey, kv.1).await?;
                             }
 
@@ -192,7 +205,7 @@ impl<'a> HashCommandCtx {
                             // set sub meta key with a random index
                             let sub_meta_key =
                                 KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, idx);
-                            txn.put(sub_meta_key, added_count.to_be_bytes().to_vec())
+                            txn.put(sub_meta_key, real_fields_count.to_be_bytes().to_vec())
                                 .await?;
                         }
                     }
@@ -396,16 +409,26 @@ impl<'a> HashCommandCtx {
                                 return Ok(resp_array(vec![]));
                             }
 
+                            let mut field_data_keys = Vec::with_capacity(fields.len());
                             for field in &fields {
                                 let data_key =
                                     KEY_ENCODER.encode_txnkv_hash_data_key(&key, field, version);
-                                match txn.get(data_key).await? {
-                                    Some(data) => {
-                                        resp.push(resp_bulk(data));
-                                    }
-                                    None => {
-                                        resp.push(resp_nil());
-                                    }
+                                field_data_keys.push(data_key);
+                            }
+
+                            // batch get
+                            let fields_result = txn
+                                .batch_get(field_data_keys)
+                                .await?
+                                .map(|kv| kv.into())
+                                .collect::<HashMap<Key, Value>>();
+
+                            for field in &fields {
+                                let data_key =
+                                    KEY_ENCODER.encode_txnkv_hash_data_key(&key, field, version);
+                                match fields_result.get(&data_key) {
+                                    Some(data) => resp.push(resp_bulk(data.to_vec())),
+                                    None => resp.push(resp_nil()),
                                 }
                             }
                         }

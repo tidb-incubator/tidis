@@ -2,6 +2,8 @@ use pprof::protos::Message;
 use std::collections::{HashMap, LinkedList};
 use std::fs::File;
 use std::io::Write;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -13,7 +15,8 @@ use crate::tikv::encoding::KeyEncoder;
 use crate::tikv::errors::REDIS_BACKEND_NOT_CONNECTED_ERR;
 use crate::{
     backend_ca_file_or_default, backend_cert_file_or_default, backend_key_file_or_default,
-    backend_timeout_or_default, config_meta_key_number_or_default, fetch_idx_and_add,
+    backend_timeout_or_default, config_meta_key_number_or_default, conn_concurrency_or_default,
+    fetch_idx_and_add,
 };
 
 use self::client::RawClientWrapper;
@@ -46,7 +49,7 @@ pub fn start_profiler() {
     unsafe {
         let guard = pprof::ProfilerGuardBuilder::default()
             .frequency(1000)
-            //.blocklist(&["libc", "libgcc", "pthread", "vdso"])
+            .blocklist(&["libc", "libgcc", "pthread", "vdso"])
             .build()
             .unwrap();
         PROFILER_GUARD = Some(guard);
@@ -75,7 +78,8 @@ pub fn stop_profiler() {
 
 pub static mut TIKV_RAW_CLIENT: Option<RawClient> = None;
 
-pub static mut TIKV_TXN_CLIENT: Option<TransactionClient> = None;
+pub static mut TIKV_TXN_CLIENTS: Option<Vec<TransactionClient>> = None;
+pub static mut TIKV_TXN_CLIENT_IDX: AtomicUsize = AtomicUsize::new(0);
 
 pub static mut INSTANCE_ID: u64 = 0;
 
@@ -102,7 +106,13 @@ pub fn get_txn_client() -> Result<TxnClientWrapper<'static>, RTError> {
     if unsafe { TIKV_RAW_CLIENT.is_none() } {
         return Err(REDIS_BACKEND_NOT_CONNECTED_ERR);
     }
-    let client = unsafe { TIKV_TXN_CLIENT.as_ref().unwrap() };
+    let client = unsafe {
+        let mut idx = TIKV_TXN_CLIENT_IDX.load(Relaxed);
+        idx = (idx + 1) % TIKV_TXN_CLIENTS.as_ref().unwrap().len();
+        TIKV_TXN_CLIENT_IDX.store(idx, Relaxed);
+
+        &TIKV_TXN_CLIENTS.as_ref().unwrap()[idx]
+    };
     let ret = TxnClientWrapper::new(client);
     Ok(ret)
 }
@@ -126,11 +136,17 @@ pub async fn do_async_txn_connect(addrs: Vec<String>) -> AsyncResult<()> {
             backend_key_file_or_default(),
         );
     }
-    let client =
-        TransactionClient::new_with_config(addrs.clone(), config, Some(LOGGER.clone())).await?;
-    unsafe {
-        TIKV_TXN_CLIENT.replace(client);
+    let mut clients = Vec::with_capacity(conn_concurrency_or_default());
+    for _ in 0..conn_concurrency_or_default() {
+        let client =
+            TransactionClient::new_with_config(addrs.clone(), config.clone(), Some(LOGGER.clone()))
+                .await?;
+        clients.push(client);
     }
+    unsafe {
+        TIKV_TXN_CLIENTS.replace(clients);
+    }
+
     Ok(())
 }
 

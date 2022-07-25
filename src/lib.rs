@@ -106,6 +106,7 @@ pub use config::config_tls_cert_file_or_default;
 pub use config::config_tls_key_file_or_default;
 pub use config::config_tls_listen_or_default;
 pub use config::config_tls_port_or_default;
+pub use config::conn_concurrency_or_default;
 pub use config::get_global_config;
 pub use config::is_auth_enabled;
 pub use config::is_auth_matched;

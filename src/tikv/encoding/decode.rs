@@ -1,11 +1,37 @@
 use std::convert::TryInto;
 
-use super::{DataType, SIGN_MASK};
+use crate::tikv::KEY_ENCODER;
+
+use super::{DataType, ENC_GROUP_SIZE, ENC_MARKER, SIGN_MASK};
 use tikv_client::{Key, Value};
 
 pub struct KeyDecoder {}
 
 impl KeyDecoder {
+    pub fn decode_bytes(data: &[u8]) -> Vec<u8> {
+        let mut key = Vec::with_capacity(data.len() / (ENC_GROUP_SIZE + 1) * ENC_GROUP_SIZE);
+        let mut offset = 0;
+        let chunk_len = ENC_GROUP_SIZE + 1;
+        loop {
+            // everytime make ENC_GROUP_SIZE + 1 elements as a decode unit
+            let next_offset = offset + chunk_len;
+            let chunk = &data[offset..next_offset];
+            offset = next_offset;
+            // the last byte in decode unit is for marker which indicates pad size
+            let (&marker, bytes) = chunk.split_last().unwrap();
+            let pad_size = (ENC_MARKER - marker) as usize;
+            // no padding, just push 8 bytes
+            if pad_size == 0 {
+                key.extend_from_slice(bytes);
+                continue;
+            }
+            let (bytes, _) = bytes.split_at(ENC_GROUP_SIZE - pad_size);
+            key.extend_from_slice(bytes);
+
+            return key;
+        }
+    }
+
     #[allow(dead_code)]
     pub fn decode_string(key: Key) -> Vec<u8> {
         let mut bytes: Vec<u8> = key.into();
@@ -59,9 +85,10 @@ impl KeyDecoder {
         )
     }
 
-    pub fn decode_key_hash_userkey_from_datakey(rkey: &str, key: Key) -> Vec<u8> {
+    pub fn decode_key_hash_userkey_from_datakey(ukey: &str, key: Key) -> Vec<u8> {
         let key: Vec<u8> = key.into();
-        let idx = 10 + rkey.len();
+        let enc_ukey = KEY_ENCODER.encode_bytes(ukey.as_bytes());
+        let idx = 8 + enc_ukey.len();
         key[idx..].to_vec()
     }
 
@@ -75,15 +102,17 @@ impl KeyDecoder {
         )
     }
 
-    pub fn decode_key_list_idx_from_datakey(rkey: &str, key: Key) -> u64 {
+    pub fn decode_key_list_idx_from_datakey(ukey: &str, key: Key) -> u64 {
         let key: Vec<u8> = key.into();
-        let idx = 10 + rkey.len();
+        let enc_ukey = KEY_ENCODER.encode_bytes(ukey.as_bytes());
+        let idx = 8 + enc_ukey.len();
         u64::from_be_bytes(key[idx..].try_into().unwrap())
     }
 
-    pub fn decode_key_set_member_from_datakey(rkey: &str, key: Key) -> Vec<u8> {
+    pub fn decode_key_set_member_from_datakey(ukey: &str, key: Key) -> Vec<u8> {
         let key: Vec<u8> = key.into();
-        let idx = 10 + rkey.len();
+        let enc_ukey = KEY_ENCODER.encode_bytes(ukey.as_bytes());
+        let idx = 8 + enc_ukey.len();
         key[idx..].to_vec()
     }
 
@@ -99,22 +128,24 @@ impl KeyDecoder {
         f64::from_bits(score)
     }
 
-    #[allow(dead_code)]
-    pub fn decode_key_zset_member_from_scorekey(rkey: &str, key: Key) -> Vec<u8> {
+    pub fn decode_key_zset_score_from_scorekey(ukey: &str, key: Key) -> f64 {
         let key: Vec<u8> = key.into();
-        let idx = 19 + rkey.len();
-        key[idx..].to_vec()
-    }
-
-    pub fn decode_key_zset_score_from_scorekey(rkey: &str, key: Key) -> f64 {
-        let key: Vec<u8> = key.into();
-        let idx = 10 + rkey.len();
+        let enc_ukey = KEY_ENCODER.encode_bytes(ukey.as_bytes());
+        let idx = 8 + enc_ukey.len();
         Self::decode_cmp_uint64_to_f64(u64::from_be_bytes(key[idx..idx + 8].try_into().unwrap()))
     }
 
-    pub fn decode_key_zset_member_from_datakey(rkey: &str, key: Key) -> Vec<u8> {
+    pub fn decode_key_zset_member_from_scorekey(ukey: &str, key: Key) -> Vec<u8> {
         let key: Vec<u8> = key.into();
-        let idx = 10 + rkey.len();
+        let enc_ukey = KEY_ENCODER.encode_bytes(ukey.as_bytes());
+        let idx = 17 + enc_ukey.len();
+        key[idx..].to_vec()
+    }
+
+    pub fn decode_key_zset_member_from_datakey(ukey: &str, key: Key) -> Vec<u8> {
+        let key: Vec<u8> = key.into();
+        let enc_ukey = KEY_ENCODER.encode_bytes(ukey.as_bytes());
+        let idx = 8 + enc_ukey.len();
         key[idx..].to_vec()
     }
 
@@ -122,12 +153,26 @@ impl KeyDecoder {
         Self::decode_cmp_uint64_to_f64(u64::from_be_bytes(value[..].try_into().unwrap()))
     }
 
+    fn encoded_bytes_len(encoded: &[u8]) -> usize {
+        let mut idx = ENC_GROUP_SIZE;
+        loop {
+            if encoded.len() < idx + 1 {
+                return encoded.len();
+            }
+            let marker = encoded[idx];
+            if marker != ENC_MARKER {
+                return idx + 1;
+            }
+            idx += ENC_GROUP_SIZE + 1;
+        }
+    }
+
     pub fn decode_key_gc_userkey_version(key: Key) -> (Vec<u8>, u16) {
         let key: Vec<u8> = key.into();
-        // decode user key length first
-        let user_key_len = u16::from_be_bytes(key[5..7].try_into().unwrap());
-        let idx = 7 + user_key_len as usize;
+        let enc_key_start = 5;
+        let ukey = Self::decode_bytes(&key[enc_key_start..]);
+        let idx = 5 + Self::encoded_bytes_len(&key[enc_key_start..]);
         let version = u16::from_be_bytes(key[idx..idx + 2].try_into().unwrap());
-        (key[7..idx].to_vec(), version)
+        (ukey, version)
     }
 }

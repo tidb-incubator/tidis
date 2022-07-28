@@ -11,7 +11,7 @@ use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Expire {
     key: String,
     seconds: i64,

@@ -8,7 +8,7 @@ use crate::{
     Connection, Frame, Parse,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Fake {
     args: Vec<String>,
     valid: bool,

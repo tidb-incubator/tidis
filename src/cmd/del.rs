@@ -12,7 +12,7 @@ use tokio::sync::Mutex;
 
 use super::Invalid;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Del {
     keys: Vec<String>,
     valid: bool,

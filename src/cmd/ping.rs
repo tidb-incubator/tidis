@@ -10,7 +10,7 @@ use slog::debug;
 ///
 /// This command is often used to test if a connection
 /// is still alive, or to measure latency.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Ping {
     /// optional message to be returned
     msg: Option<String>,

@@ -15,7 +15,7 @@ use tokio::sync::Mutex;
 
 use super::Invalid;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Linsert {
     key: String,
     before_pivot: bool,

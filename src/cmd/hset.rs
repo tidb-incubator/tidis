@@ -12,7 +12,7 @@ use slog::debug;
 use tikv_client::{KvPair, Transaction};
 use tokio::sync::Mutex;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Hset {
     key: String,
     field_and_value: Vec<KvPair>,

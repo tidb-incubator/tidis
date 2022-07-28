@@ -25,7 +25,7 @@ use tokio::sync::Mutex;
 ///
 /// * EX `seconds` -- Set the specified expire time, in seconds.
 /// * PX `milliseconds` -- Set the specified expire time, in milliseconds.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SetNX {
     /// the lookup key
     key: String,

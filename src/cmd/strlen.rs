@@ -12,7 +12,7 @@ use tokio::sync::Mutex;
 use crate::cmd::Invalid;
 use crate::config::is_use_txn_api;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Strlen {
     key: String,
     valid: bool,

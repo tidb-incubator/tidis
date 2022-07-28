@@ -86,3 +86,8 @@ pub const REDIS_UNKNOWN_SUBCOMMAND: RTError =
 pub const DECREMENT_OVERFLOW: RTError = RTError::String("Decrement would overflow");
 pub const REDIS_LIST_TOO_LARGE_ERR: RTError = RTError::String("ERR list is too large to execute");
 pub const KEY_VERSION_EXHUSTED_ERR: RTError = RTError::String("ERR key version exhausted");
+pub const REDIS_MULTI_NESTED_ERR: RTError = RTError::String("ERR MULTI calls can not be nested");
+pub const REDIS_DISCARD_WITHOUT_MULTI_ERR: RTError = RTError::String("ERR DISCARD without MULTI");
+pub const REDIS_EXEC_WITHOUT_MULTI_ERR: RTError = RTError::String("ERR EXEC without MULTI");
+pub const REDIS_EXEC_ERR: RTError =
+    RTError::String("EXECABORT Transaction discarded because of previous errors.");

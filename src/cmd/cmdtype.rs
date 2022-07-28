@@ -13,7 +13,7 @@ use crate::config::is_use_txn_api;
 
 use super::Invalid;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Type {
     key: String,
     valid: bool,

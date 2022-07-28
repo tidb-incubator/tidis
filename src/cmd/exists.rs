@@ -12,7 +12,7 @@ use crate::cmd::Invalid;
 use crate::config::LOGGER;
 use slog::debug;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Exists {
     keys: Vec<String>,
     valid: bool,

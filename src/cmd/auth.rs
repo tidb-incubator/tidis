@@ -1,7 +1,7 @@
 use crate::cmd::Invalid;
 use crate::Parse;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Auth {
     passwd: String,
     valid: bool,

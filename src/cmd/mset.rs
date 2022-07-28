@@ -14,7 +14,7 @@ use crate::config::LOGGER;
 use bytes::Bytes;
 use slog::debug;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Mset {
     keys: Vec<String>,
     vals: Vec<Bytes>,

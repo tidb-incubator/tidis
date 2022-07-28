@@ -15,7 +15,7 @@ use crate::cmd::Invalid;
 use crate::config::LOGGER;
 use slog::debug;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Eval {
     script: String,
     numkeys: i64,

@@ -726,6 +726,7 @@ impl Handler {
                                         .await?;
                                 } else {
                                     self.inner_txn = true;
+                                    self.queued_commands.clear();
                                     self.connection.write_frame(&resp_ok()).await?;
                                 }
                             }

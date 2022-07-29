@@ -7,7 +7,7 @@ use crate::metrics::{
 };
 use crate::tikv::encoding::KeyDecoder;
 use crate::tikv::{get_txn_client, KEY_ENCODER};
-use crate::utils::{self, resp_err, resp_invalid_arguments, resp_ok, sleep};
+use crate::utils::{self, resp_err, resp_invalid_arguments, resp_ok, resp_queued, sleep};
 use crate::{
     async_gc_worker_number_or_default, config_cluster_broadcast_addr_or_default,
     config_cluster_topology_expire_or_default, config_cluster_topology_interval_or_default,
@@ -36,6 +36,7 @@ use tokio_util::task::LocalPoolHandle;
 
 use crate::tikv::errors::{
     REDIS_AUTH_INVALID_PASSWORD_ERR, REDIS_AUTH_REQUIRED_ERR, REDIS_AUTH_WHEN_DISABLED_ERR,
+    REDIS_DISCARD_WITHOUT_MULTI_ERR, REDIS_EXEC_WITHOUT_MULTI_ERR, REDIS_MULTI_NESTED_ERR,
 };
 
 /// Server listener state. Created in the `run` call. It includes a `run` method
@@ -135,6 +136,10 @@ struct Handler {
     /// `Connection` allows the handler to operate at the "frame" level and keep
     /// the byte level protocol parsing details encapsulated in `Connection`.
     connection: Connection,
+
+    /// The txn state of this connection.
+    inner_txn: bool,
+    queued_commands: Vec<Command>,
 
     /// Max connection semaphore.
     ///
@@ -430,6 +435,9 @@ impl Listener {
                 // buffers to perform redis protocol frame parsing.
                 connection: Connection::new(socket),
 
+                inner_txn: false,
+                queued_commands: vec![],
+
                 // The connection state needs a handle to the max connections
                 // semaphore. When the handler is done processing the
                 // connection, a permit is added back to the semaphore.
@@ -528,6 +536,8 @@ impl TlsListener {
                 db: self.db_holder.db(),
                 topo: self.topo_holder.clone(),
                 connection: Connection::new_tls(&local_addr, &peer_addr, tls_stream),
+                inner_txn: false,
+                queued_commands: vec![],
                 shutdown: Shutdown::new(self.tls_notify_shutdown.subscribe()),
                 authorized: !is_auth_enabled(),
                 lua: None,
@@ -709,7 +719,56 @@ impl Handler {
                                     self.lua = Some(Lua::new());
                                 }
                             }
-                            _ => {}
+                            Command::Multi(_) => {
+                                if self.inner_txn {
+                                    self.connection
+                                        .write_frame(&resp_err(REDIS_MULTI_NESTED_ERR))
+                                        .await?;
+                                } else {
+                                    self.inner_txn = true;
+                                    self.queued_commands.clear();
+                                    self.connection.write_frame(&resp_ok()).await?;
+                                }
+                            }
+                            Command::Exec(c) => {
+                                if !self.inner_txn {
+                                    self.connection
+                                        .write_frame(&resp_err(REDIS_EXEC_WITHOUT_MULTI_ERR))
+                                        .await?;
+                                } else {
+                                    self.inner_txn = false;
+                                    c.clone()
+                                        .exec(&mut self.connection, self.queued_commands.clone())
+                                        .await?;
+                                }
+
+                                let duration = Instant::now() - start_at;
+                                REQUEST_CMD_HANDLE_TIME
+                                    .with_label_values(&[&cmd_name])
+                                    .observe(duration_to_sec(duration));
+                                REQUEST_CMD_FINISH_COUNTER
+                                    .with_label_values(&[&cmd_name])
+                                    .inc();
+                                continue;
+                            }
+                            Command::Discard(_) => {
+                                if self.inner_txn {
+                                    self.inner_txn = false;
+                                    self.queued_commands.clear();
+                                    self.connection.write_frame(&resp_ok()).await?;
+                                } else {
+                                    self.connection
+                                        .write_frame(&resp_err(REDIS_DISCARD_WITHOUT_MULTI_ERR))
+                                        .await?;
+                                }
+                            }
+                            _ => {
+                                if self.inner_txn {
+                                    self.queued_commands.push(cmd);
+                                    self.connection.write_frame(&resp_queued()).await?;
+                                    continue;
+                                }
+                            }
                         }
                         // Perform the work needed to apply the command. This may mutate the
                         // database state as a result.

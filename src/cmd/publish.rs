@@ -12,7 +12,7 @@ use crate::utils::resp_invalid_arguments;
 ///
 /// Channel names have no relation to the key-value namespace. Publishing on a
 /// channel named "foo" has no relation to setting the "foo" key.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Publish {
     /// Name of the channel on which the message should be published.
     channel: String,

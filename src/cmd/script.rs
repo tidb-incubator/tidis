@@ -7,7 +7,7 @@ use crate::{Connection, Frame, Parse};
 use bytes::Bytes;
 use slog::debug;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Script {
     script: String,
     is_load: bool,

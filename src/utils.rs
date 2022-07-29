@@ -24,6 +24,10 @@ pub fn resp_ok() -> Frame {
     Frame::Simple("OK".to_string())
 }
 
+pub fn resp_queued() -> Frame {
+    Frame::Simple("QUEUED".to_string())
+}
+
 pub fn resp_ok_ignore<T>(_: T) -> Frame {
     resp_ok()
 }

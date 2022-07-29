@@ -192,6 +192,9 @@ pub use cluster::Cluster;
 mod fake;
 pub use fake::Fake;
 
+mod multi;
+pub use multi::Multi;
+
 use crate::{cluster::Cluster as Topo, Connection, Db, Frame, Parse, ParseError, Shutdown};
 
 /// All commands should be implement new_invalid() for invalid check
@@ -215,7 +218,7 @@ fn transform_parse<T: Invalid>(parse_res: crate::Result<T>, parse: &mut Parse) -
 /// Enumeration of supported Redis commands.
 ///
 /// Methods called on `Command` are delegated to the command implementation.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Command {
     Del(Del),
     Get(Get),
@@ -306,6 +309,11 @@ pub enum Command {
     ReadOnly(Fake),
     Client(Fake),
     Info(Fake),
+
+    // multi/exec/abort
+    Multi(Multi),
+    Exec(Multi),
+    Discard(Multi),
 
     Unknown(Unknown),
 }
@@ -537,6 +545,9 @@ impl Command {
                 Fake::parse_frames(&mut parse, "info"),
                 &mut parse,
             )),
+            "multi" => Command::Multi(Multi::new()),
+            "exec" => Command::Exec(Multi::new()),
+            "discard" => Command::Discard(Multi::new()),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -823,6 +834,9 @@ impl Command {
             Command::ReadOnly(_) => "readonly",
             Command::Client(_) => "client",
             Command::Info(_) => "info",
+            Command::Multi(_) => "multi",
+            Command::Exec(_) => "exec",
+            Command::Discard(_) => "discard",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

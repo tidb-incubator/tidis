@@ -26,7 +26,7 @@ use super::Invalid;
 ///
 /// * EX `seconds` -- Set the specified expire time, in seconds.
 /// * PX `milliseconds` -- Set the specified expire time, in milliseconds.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Set {
     /// the lookup key
     key: String,

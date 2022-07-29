@@ -13,7 +13,7 @@ use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Push {
     key: String,
     items: Vec<Bytes>,

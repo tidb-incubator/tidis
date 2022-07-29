@@ -6,7 +6,7 @@ use crate::utils::{resp_err, resp_invalid_arguments, resp_ok};
 use crate::{Connection, Parse};
 use slog::debug;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Debug {
     subcommand: String,
     valid: bool,

@@ -4,7 +4,7 @@ use crate::config::LOGGER;
 use slog::debug;
 
 /// Represents an "unknown" command. This is not a real `Redis` command.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Unknown {
     command_name: String,
 }

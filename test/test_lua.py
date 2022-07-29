@@ -99,6 +99,12 @@ class LuaTest(unittest.TestCase):
         '''
         self.assertEqual(self.run_script(script, 1, self.k1), ['boolean', 1])
 
+    def test_nil_conversion_2(self):
+        script = '''
+        return nil
+        '''
+        self.assertEqual(self.run_script(script), None)
+
     def test_no_args(self):
         script = '''
         redis.call()

@@ -65,6 +65,7 @@ pub async fn sleep(ms: u32) {
 
 pub fn lua_resp_to_redis_resp(resp: LuaValue) -> Frame {
     match resp {
+        LuaValue::Nil => Frame::Null,
         LuaValue::String(r) => resp_bulk(r.to_str().unwrap().as_bytes().to_vec()),
         LuaValue::Integer(r) => resp_int(r),
         LuaValue::Boolean(r) => {

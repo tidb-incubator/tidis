@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -42,22 +43,26 @@ impl Zremrangebyscore {
         Ok(z)
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Zremrangebyscore> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Zremrangebyscore> {
         if argv.len() != 3 {
             return Ok(Zremrangebyscore::new_invalid());
         }
         // TODO
-        let min = match argv[1].parse::<f64>() {
+        let min = match String::from_utf8_lossy(&argv[1]).parse::<f64>() {
             Ok(v) => v,
             Err(_) => return Ok(Zremrangebyscore::new_invalid()),
         };
 
-        let max = match argv[2].parse::<f64>() {
+        let max = match String::from_utf8_lossy(&argv[2]).parse::<f64>() {
             Ok(v) => v,
             Err(_) => return Ok(Zremrangebyscore::new_invalid()),
         };
 
-        Ok(Zremrangebyscore::new(&argv[0], min, max))
+        Ok(Zremrangebyscore::new(
+            &String::from_utf8_lossy(&argv[0]),
+            min,
+            max,
+        ))
     }
 
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {

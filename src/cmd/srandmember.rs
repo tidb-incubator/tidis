@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -42,18 +43,18 @@ impl Srandmember {
         })
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Srandmember> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Srandmember> {
         if argv.is_empty() || argv.len() > 2 {
             return Ok(Srandmember::new_invalid());
         }
         let mut count = None;
         if argv.len() == 2 {
-            match argv[1].parse::<i64>() {
+            match String::from_utf8_lossy(&argv[1]).parse::<i64>() {
                 Ok(v) => count = Some(v),
                 Err(_) => return Ok(Srandmember::new_invalid()),
             }
         }
-        Ok(Srandmember::new(&argv[0], count))
+        Ok(Srandmember::new(&String::from_utf8_lossy(&argv[0]), count))
     }
 
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {

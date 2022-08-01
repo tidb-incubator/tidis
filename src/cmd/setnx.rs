@@ -81,12 +81,12 @@ impl SetNX {
         })
     }
 
-    pub fn parse_argv(argv: &Vec<String>) -> crate::Result<SetNX> {
+    pub fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<SetNX> {
         if argv.len() != 2 {
             return Ok(SetNX::new_invalid());
         }
-        let key = argv[0].clone();
-        let value = Bytes::from(argv[1].clone());
+        let key = String::from_utf8_lossy(&argv[0]).to_string();
+        let value = argv[1].clone();
 
         Ok(SetNX {
             key,

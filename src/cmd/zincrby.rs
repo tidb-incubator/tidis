@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -40,14 +41,14 @@ impl Zincrby {
         Ok(Zincrby::new(&key, step, &member))
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Zincrby> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Zincrby> {
         if argv.len() != 3 {
             return Ok(Zincrby::new_invalid());
         }
 
-        let key = &argv[0];
-        let step = argv[1].parse::<f64>()?;
-        let member = &argv[2];
+        let key = &String::from_utf8_lossy(&argv[0]);
+        let step = String::from_utf8_lossy(&argv[1]).parse::<f64>()?;
+        let member = &String::from_utf8_lossy(&argv[2]);
 
         Ok(Zincrby::new(key, step, member))
     }

@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -38,11 +39,14 @@ impl Sismember {
         })
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Sismember> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Sismember> {
         if argv.len() != 2 {
             return Ok(Sismember::new_invalid());
         }
-        Ok(Sismember::new(&argv[0], &argv[1]))
+        Ok(Sismember::new(
+            &String::from_utf8_lossy(&argv[0]),
+            &String::from_utf8_lossy(&argv[1]),
+        ))
     }
 
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {

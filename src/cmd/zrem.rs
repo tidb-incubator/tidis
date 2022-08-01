@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -53,13 +54,13 @@ impl Zrem {
         Ok(zrem)
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Zrem> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Zrem> {
         if argv.len() < 2 {
             return Ok(Zrem::new_invalid());
         }
-        let mut zrem = Zrem::new(&argv[0]);
+        let mut zrem = Zrem::new(&String::from_utf8_lossy(&argv[0]));
         for arg in &argv[1..] {
-            zrem.add_member(arg);
+            zrem.add_member(&String::from_utf8_lossy(arg));
         }
         Ok(zrem)
     }

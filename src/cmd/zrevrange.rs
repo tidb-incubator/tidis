@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -52,15 +53,15 @@ impl Zrevrange {
         Ok(z)
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Zrevrange> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Zrevrange> {
         if argv.len() < 3 {
             return Ok(Zrevrange::new_invalid());
         }
-        let min = match argv[1].parse::<i64>() {
+        let min = match String::from_utf8_lossy(&argv[1]).parse::<i64>() {
             Ok(v) => v,
             Err(_) => return Ok(Zrevrange::new_invalid()),
         };
-        let max = match argv[2].parse::<i64>() {
+        let max = match String::from_utf8_lossy(&argv[2]).parse::<i64>() {
             Ok(v) => v,
             Err(_) => return Ok(Zrevrange::new_invalid()),
         };
@@ -68,11 +69,11 @@ impl Zrevrange {
 
         for arg in &argv[2..] {
             // flags implement in single command, such as ZRANGEBYSCORE
-            if arg.to_uppercase().as_str() == "WITHSCORES" {
+            if String::from_utf8_lossy(arg).to_uppercase().as_str() == "WITHSCORES" {
                 withscores = true;
             }
         }
-        let z = Zrevrange::new(&argv[0], min, max, withscores);
+        let z = Zrevrange::new(&String::from_utf8_lossy(&argv[0]), min, max, withscores);
 
         Ok(z)
     }

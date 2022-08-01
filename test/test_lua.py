@@ -244,6 +244,32 @@ class LuaTest(unittest.TestCase):
         self.assertEqual(self.run_script(script, 0, 10), self.run_script(script, 0, 10))
         self.assertNotEqual(self.run_script(script, 0, 10), self.run_script(script, 0, 20))
 
+    def test_raw_args(self):
+        script = '''
+        local v = redis.call('hget',KEYS[1], 'version');
+        if ( false == v or nil == v  ) then v=tonumber(ARGV[1])-1;end; v=tonumber(v);
+        if ( tonumber(ARGV[1]) ~= v+1 )then return 0;
+        elseif (redis.call('hmset', KEYS[1], 'version', ARGV[1], 'data', ARGV[2]))
+        then redis.call('expire', KEYS[1], ARGV[3]);
+        return 1;
+        else return 0;end
+        '''
+        raw_args1 = [10, 16, 119, 88, 49, 52, 88, 79, 89, 119, 79, 52, 83, 80, 115, 76, 70, 
+        82, 18, 25, 48, 48, 48, 48, 48, 48, 48, 48, 45, 48, 48, 48, 48, 45, 52, 68, 70, 48,
+        45, 57, 66, 51, 67, 45, 55, 26, 19, 56, 49, 53, 50, 48, 49, 57, 49, 50, 57, 48, 54,
+        48, 55, 54, 53, 50, 54, 54, 34, 0, 42, 0, 48, 0, 66, 92, 10, 40, 50, 54, 51, 98, 51,
+        100, 57, 101, 50, 52, 51, 99, 57, 101, 55, 53, 99, 99, 97, 53, 100, 53, 97, 57, 102,
+        50, 99, 51, 48, 98, 48, 51, 50, 51, 52, 55, 98, 101, 97, 101, 16, 153, 228, 188, 152,
+        6, 26, 40, 51, 53, 99, 49, 55, 56, 52, 51, 52, 51, 52, 49, 97, 54, 48, 57, 55, 52, 56,
+        51, 100, 54, 49, 98, 52, 102, 97, 99, 48, 55, 100, 50, 48, 99, 100, 49, 57, 53, 51, 57,
+        34, 0, 66, 92, 10, 40, 48, 102, 48, 102, 51, 56, 50, 51, 55, 97, 100, 55, 50, 57, 54, 100,
+        99, 99, 55, 52, 102, 55, 53, 51, 48, 100, 50, 53, 51, 56, 54, 56, 102, 97, 56, 101, 50,
+        98, 57, 56, 16, 243, 161, 188, 152, 6, 26, 40, 50, 51, 99, 48, 98, 56, 53, 53, 52, 55,
+        55, 100, 97, 99, 97, 101, 49, 49, 57, 57, 98, 54, 100, 55, 100, 98, 98, 48, 51, 97, 100,
+        49, 54, 51, 101, 49, 52, 102, 53, 100, 34, 0]
+        self.run_script(script, 1, self.k1, 2, bytes(raw_args1), '3600')
+
+
     def execute_eval(self, cmd, *args):
         arg_str = ", ".join(list(map(lambda arg: "'{}'".format(arg), args)))
         lua_script = "return redis.call('{}', {})".format(cmd, arg_str)

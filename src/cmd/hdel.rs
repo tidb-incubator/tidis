@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -45,13 +46,13 @@ impl Hdel {
         Ok(hdel)
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Hdel> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Hdel> {
         if argv.len() < 2 {
             return Ok(Hdel::new_invalid());
         }
-        let mut hdel = Hdel::new(&argv[0]);
+        let mut hdel = Hdel::new(&String::from_utf8_lossy(&argv[0]));
         for arg in &argv[1..] {
-            hdel.add_field(arg);
+            hdel.add_field(&String::from_utf8_lossy(arg));
         }
         Ok(hdel)
     }

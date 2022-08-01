@@ -4,6 +4,7 @@ use super::errors::AsyncResult;
 use crate::db::Db;
 use crate::utils::{lua_resp_to_redis_resp, redis_resp_to_lua_resp, resp_err, sha1hex};
 use crate::{utils::resp_invalid_arguments, Command, Frame};
+use bytes::Bytes;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
@@ -28,7 +29,7 @@ impl<'a> LuaCommandCtx<'a> {
         self,
         script: &str,
         keys: &[String],
-        args: &[String],
+        args: &[Bytes],
     ) -> LuaResult<Frame> {
         let lua = match self.lua {
             Some(lua) => lua,
@@ -45,7 +46,8 @@ impl<'a> LuaCommandCtx<'a> {
         }
         let args_table = lua.create_table()?;
         for (idx, arg) in args.iter().enumerate() {
-            args_table.set(idx + 1, arg.clone())?;
+            let str = lua.create_string(arg)?;
+            args_table.set(idx + 1, str)?;
         }
 
         globals.set("KEYS", keys_table)?;
@@ -76,9 +78,9 @@ impl<'a> LuaCommandCtx<'a> {
                 let mut argv = vec![];
                 for arg in &args.as_slice()[1..] {
                     if let LuaValue::Integer(i) = arg {
-                        argv.push(i.to_string());
+                        argv.push(Bytes::from(i.to_string().as_bytes().to_vec()));
                     } else if let LuaValue::String(s) = arg{
-                        argv.push(s.to_str().unwrap().to_owned());
+                        argv.push(Bytes::from(s.as_bytes().to_vec()));
                     }
                 }
 
@@ -220,7 +222,7 @@ impl<'a> LuaCommandCtx<'a> {
         script: &str,
         _: &Db,
         keys: &[String],
-        args: &[String],
+        args: &[Bytes],
     ) -> AsyncResult<Frame> {
         Ok(self.clone().do_async_eval_inner(script, keys, args).await?)
     }
@@ -230,7 +232,7 @@ impl<'a> LuaCommandCtx<'a> {
         sha1: &str,
         db: &Db,
         keys: &[String],
-        args: &[String],
+        args: &[Bytes],
     ) -> AsyncResult<Frame> {
         // get script from cache with sha1 key
         let script = db.get_script(&sha1.to_lowercase());

@@ -8,6 +8,7 @@ use crate::tikv::lua::LuaCommandCtx;
 use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame, Parse};
 
+use bytes::Bytes;
 use mlua::Lua;
 use tokio::sync::Mutex;
 
@@ -20,7 +21,7 @@ pub struct Eval {
     script: String,
     numkeys: i64,
     keys: Vec<String>,
-    args: Vec<String>,
+    args: Vec<Bytes>,
     valid: bool,
 }
 
@@ -44,7 +45,7 @@ impl Eval {
         self.keys.push(key);
     }
 
-    pub fn add_arg(&mut self, arg: String) {
+    pub fn add_arg(&mut self, arg: Bytes) {
         self.args.push(arg);
     }
 
@@ -64,7 +65,7 @@ impl Eval {
             }
         }
 
-        while let Ok(arg) = parse.next_string() {
+        while let Ok(arg) = parse.next_bytes() {
             eval.add_arg(arg);
         }
 

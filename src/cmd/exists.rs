@@ -5,6 +5,7 @@ use crate::tikv::errors::AsyncResult;
 use crate::tikv::string::StringCommandCtx;
 use crate::utils::resp_invalid_arguments;
 use crate::{Connection, Frame, Parse};
+use bytes::Bytes;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
@@ -38,7 +39,7 @@ impl Exists {
         Ok(exists)
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Exists> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Exists> {
         if argv.is_empty() {
             return Ok(Exists {
                 keys: vec![],
@@ -46,7 +47,10 @@ impl Exists {
             });
         }
         Ok(Exists {
-            keys: argv.to_owned(),
+            keys: argv
+                .iter()
+                .map(|x| String::from_utf8_lossy(x).to_string())
+                .collect::<Vec<String>>(),
             valid: true,
         })
     }

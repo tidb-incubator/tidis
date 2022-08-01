@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -50,11 +51,14 @@ impl Hstrlen {
         Ok(Hstrlen::new(&key, &field))
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Hstrlen> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Hstrlen> {
         if argv.len() != 2 {
             return Ok(Hstrlen::new_invalid());
         }
-        Ok(Hstrlen::new(&argv[0], &argv[1]))
+        Ok(Hstrlen::new(
+            &String::from_utf8_lossy(&argv[0]),
+            &String::from_utf8_lossy(&argv[1]),
+        ))
     }
 
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {

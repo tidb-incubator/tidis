@@ -105,7 +105,7 @@ impl Zrangebyscore {
         Ok(z)
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Zrangebyscore> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Zrangebyscore> {
         if argv.len() < 3 {
             return Ok(Zrangebyscore::new_invalid());
         }
@@ -115,7 +115,7 @@ impl Zrangebyscore {
         let mut max: f64 = 0f64;
 
         // parse score range as bytes, to handle exclusive bounder
-        let mut bmin = Bytes::from(argv[1].clone());
+        let mut bmin = argv[1].clone();
         // check first byte
         if bmin[0] == b'(' {
             // drain the first byte
@@ -133,7 +133,7 @@ impl Zrangebyscore {
                 .unwrap();
         }
 
-        let mut bmax = Bytes::from(argv[2].clone());
+        let mut bmax = argv[2].clone();
         if bmax[0] == b'(' {
             bmax.advance(1);
             max_inclusive = false;
@@ -153,7 +153,7 @@ impl Zrangebyscore {
 
         // try to parse other flags
         for v in &argv[2..] {
-            match v.to_uppercase().as_str() {
+            match String::from_utf8_lossy(v).to_uppercase().as_str() {
                 // flags implement in signle command, such as ZRANGEBYSCORE
                 "LIMIT" => {}
                 "WITHSCORES" => {
@@ -163,7 +163,14 @@ impl Zrangebyscore {
             }
         }
 
-        let z = Zrangebyscore::new(&argv[0], min, min_inclusive, max, max_inclusive, withscores);
+        let z = Zrangebyscore::new(
+            &String::from_utf8_lossy(&argv[0]),
+            min,
+            min_inclusive,
+            max,
+            max_inclusive,
+            withscores,
+        );
 
         Ok(z)
     }

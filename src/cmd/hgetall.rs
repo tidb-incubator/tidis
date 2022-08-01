@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -40,11 +41,11 @@ impl Hgetall {
         Ok(Hgetall { key, valid: true })
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Hgetall> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Hgetall> {
         if argv.len() != 1 {
             return Ok(Hgetall::new_invalid());
         }
-        let key = &argv[0];
+        let key = &String::from_utf8_lossy(&argv[0]);
         Ok(Hgetall::new(key))
     }
 

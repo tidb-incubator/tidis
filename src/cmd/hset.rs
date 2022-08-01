@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::{KvPair, Transaction};
 use tokio::sync::Mutex;
@@ -55,18 +56,18 @@ impl Hset {
         Ok(hset)
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Hset> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Hset> {
         if argv.len() % 2 != 1 {
             return Ok(Hset::new_invalid());
         }
-        let key = &argv[0];
+        let key = String::from_utf8_lossy(&argv[0]).to_string();
         let mut hset = Hset::default();
-        hset.set_key(key);
+        hset.set_key(&key);
 
         for idx in (1..argv.len()).step_by(2) {
-            let field = argv[idx].to_owned();
-            let value = argv[idx + 1].to_owned().as_bytes().to_vec();
-            let kv = KvPair::new(field, value);
+            let field = String::from_utf8_lossy(&argv[idx]);
+            let value = argv[idx + 1].clone();
+            let kv = KvPair::new(field.to_string(), value);
             hset.add_field_value(kv);
         }
         Ok(hset)

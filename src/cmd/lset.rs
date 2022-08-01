@@ -48,16 +48,16 @@ impl Lset {
         })
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Lset> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Lset> {
         if argv.len() != 3 {
             return Ok(Lset::new_invalid());
         }
-        let key = &argv[0];
-        let idx = match argv[1].parse::<i64>() {
+        let key = &String::from_utf8_lossy(&argv[0]);
+        let idx = match String::from_utf8_lossy(&argv[1]).parse::<i64>() {
             Ok(v) => v,
             Err(_) => return Ok(Lset::new_invalid()),
         };
-        let ele = Bytes::from(argv[2].clone());
+        let ele = argv[2].clone();
         Ok(Lset::new(key, idx, ele))
     }
 

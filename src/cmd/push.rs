@@ -52,14 +52,14 @@ impl Push {
         Ok(push)
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Push> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Push> {
         if argv.len() < 2 {
             return Ok(Push::new_invalid());
         }
-        let mut push = Push::new(&argv[0]);
+        let mut push = Push::new(&String::from_utf8_lossy(&argv[0]));
 
         for arg in &argv[1..] {
-            push.add_item(Bytes::from(arg.to_owned()));
+            push.add_item(arg.to_owned());
         }
 
         Ok(push)

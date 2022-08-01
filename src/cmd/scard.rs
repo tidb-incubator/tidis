@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -40,11 +41,11 @@ impl Scard {
         Ok(Scard::new(&key))
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Scard> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Scard> {
         if argv.len() != 1 {
             return Ok(Scard::new_invalid());
         }
-        Ok(Scard::new(&argv[0]))
+        Ok(Scard::new(&String::from_utf8_lossy(&argv[0])))
     }
 
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {

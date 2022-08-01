@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -40,11 +41,11 @@ impl Zcard {
         Ok(Zcard { key, valid: true })
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Zcard> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Zcard> {
         if argv.len() != 1 {
             return Ok(Zcard::new_invalid());
         }
-        Ok(Zcard::new(&argv[0]))
+        Ok(Zcard::new(&String::from_utf8_lossy(&argv[0])))
     }
 
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {

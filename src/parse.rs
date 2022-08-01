@@ -61,6 +61,7 @@ impl Parse {
             // While errors are stored as strings, they are considered separate
             // types.
             Frame::Simple(s) => Ok(s),
+            // Frame::Bulk(data) => Ok(String::from_utf8_lossy(&data[..]).to_string()),
             Frame::Bulk(data) => str::from_utf8(&data[..])
                 .map(|s| s.to_string())
                 .map_err(|_| "protocol error; invalid string".into()),

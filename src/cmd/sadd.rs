@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -50,14 +51,14 @@ impl Sadd {
         Ok(sadd)
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Sadd> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Sadd> {
         if argv.len() < 2 {
             return Ok(Sadd::new_invalid());
         }
-        let key = &argv[0];
+        let key = &String::from_utf8_lossy(&argv[0]);
         let mut sadd = Sadd::new(key);
         for arg in &argv[1..] {
-            sadd.add_member(arg);
+            sadd.add_member(&String::from_utf8_lossy(arg));
         }
         Ok(sadd)
     }

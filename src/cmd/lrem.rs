@@ -46,14 +46,14 @@ impl Lrem {
         })
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Lrem> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Lrem> {
         if argv.len() != 3 {
             return Ok(Lrem::new_invalid());
         }
-        let key = &argv[0];
-        let count = argv[1].parse::<i64>()?;
+        let key = &String::from_utf8_lossy(&argv[0]);
+        let count = String::from_utf8_lossy(&argv[1]).parse::<i64>()?;
 
-        let element = Bytes::from(argv[2].clone());
+        let element = argv[2].clone();
         Ok(Lrem::new(key, count, element))
     }
 

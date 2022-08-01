@@ -7,6 +7,7 @@ use crate::tikv::errors::AsyncResult;
 use crate::tikv::string::StringCommandCtx;
 use crate::utils::resp_invalid_arguments;
 use crate::{Connection, Frame, Parse};
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -46,13 +47,13 @@ impl Mget {
         Ok(mget)
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Mget> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Mget> {
         if argv.is_empty() {
             return Ok(Mget::new_invalid());
         }
         let mut mget = Mget::default();
         for arg in argv {
-            mget.add_key(arg.to_string());
+            mget.add_key(String::from_utf8_lossy(arg).to_string());
         }
         Ok(mget)
     }

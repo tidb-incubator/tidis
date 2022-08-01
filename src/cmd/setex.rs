@@ -84,13 +84,14 @@ impl SetEX {
         })
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<SetEX> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<SetEX> {
         if argv.len() != 3 {
             return Ok(SetEX::new_invalid());
         }
-        let key = argv[0].clone();
-        let expire = argv[1].parse::<i64>();
-        let value = Bytes::from(argv[2].clone());
+        let key = String::from_utf8_lossy(&argv[0]).to_string();
+        let expire = String::from_utf8_lossy(&argv[1]).parse::<i64>();
+        let value = argv[2].clone();
+
         if let Ok(v) = expire {
             return Ok(SetEX::new(key, value, v * 1000));
         }

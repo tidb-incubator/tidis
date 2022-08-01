@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -39,11 +40,14 @@ impl Zscore {
         })
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Zscore> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Zscore> {
         if argv.len() != 2 {
             return Ok(Zscore::new_invalid());
         }
-        Ok(Zscore::new(&argv[0], &argv[1]))
+        Ok(Zscore::new(
+            &String::from_utf8_lossy(&argv[0]),
+            &String::from_utf8_lossy(&argv[1]),
+        ))
     }
 
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {

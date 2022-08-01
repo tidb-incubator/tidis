@@ -1,5 +1,6 @@
 mod get;
 
+use bytes::Bytes;
 pub use get::Get;
 
 mod del;
@@ -565,7 +566,7 @@ impl Command {
         Ok(command)
     }
 
-    pub fn from_argv(cmd_name: &str, argv: &Vec<String>) -> crate::Result<Command> {
+    pub fn from_argv(cmd_name: &str, argv: &Vec<Bytes>) -> crate::Result<Command> {
         let command_name = cmd_name.to_owned().to_lowercase();
         // Match the command name, delegating the rest of the parsing to the
         // specific command.

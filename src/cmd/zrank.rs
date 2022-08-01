@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -39,11 +40,14 @@ impl Zrank {
         })
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Zrank> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Zrank> {
         if argv.len() != 2 {
             return Ok(Zrank::new_invalid());
         }
-        Ok(Zrank::new(&argv[0], &argv[1]))
+        Ok(Zrank::new(
+            &String::from_utf8_lossy(&argv[0]),
+            &String::from_utf8_lossy(&argv[1]),
+        ))
     }
 
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {

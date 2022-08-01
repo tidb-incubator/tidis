@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -65,15 +66,15 @@ impl Zrange {
         Ok(z)
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Zrange> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Zrange> {
         if argv.len() < 3 {
             return Ok(Zrange::new_invalid());
         }
-        let min = match argv[1].parse::<i64>() {
+        let min = match String::from_utf8_lossy(&argv[1]).parse::<i64>() {
             Ok(v) => v,
             Err(_) => return Ok(Zrange::new_invalid()),
         };
-        let max = match argv[2].parse::<i64>() {
+        let max = match String::from_utf8_lossy(&argv[2]).parse::<i64>() {
             Ok(v) => v,
             Err(_) => return Ok(Zrange::new_invalid()),
         };
@@ -81,7 +82,7 @@ impl Zrange {
         let mut reverse = false;
 
         for arg in &argv[2..] {
-            match arg.to_uppercase().as_str() {
+            match String::from_utf8_lossy(arg).to_uppercase().as_str() {
                 // flags implement in single command, such as ZRANGEBYSCORE
                 "BYSCORE" => {}
                 "BYLEX" => {}
@@ -95,7 +96,13 @@ impl Zrange {
                 _ => {}
             }
         }
-        let z = Zrange::new(&argv[0], min, max, withscores, reverse);
+        let z = Zrange::new(
+            &String::from_utf8_lossy(&argv[0]),
+            min,
+            max,
+            withscores,
+            reverse,
+        );
 
         Ok(z)
     }

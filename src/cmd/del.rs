@@ -6,6 +6,7 @@ use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::string::StringCommandCtx;
 use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame, Parse};
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -37,7 +38,7 @@ impl Del {
         Ok(del)
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Del> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Del> {
         if argv.is_empty() {
             return Ok(Del {
                 keys: vec![],
@@ -45,7 +46,10 @@ impl Del {
             });
         }
         Ok(Del {
-            keys: argv.to_owned(),
+            keys: argv
+                .iter()
+                .map(|x| String::from_utf8_lossy(x).to_string())
+                .collect::<Vec<String>>(),
             valid: true,
         })
     }

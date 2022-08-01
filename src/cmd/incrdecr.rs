@@ -8,6 +8,7 @@ use crate::{Connection, Frame, Parse};
 
 use crate::cmd::Invalid;
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -42,15 +43,15 @@ impl IncrDecr {
         })
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>, single_step: bool) -> crate::Result<IncrDecr> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>, single_step: bool) -> crate::Result<IncrDecr> {
         if (single_step && argv.len() != 1) || (!single_step && argv.len() != 2) {
             return Ok(IncrDecr::new_invalid());
         }
-        let key = &argv[0];
+        let key = &String::from_utf8_lossy(&argv[0]);
         let step = if single_step {
             Ok(1)
         } else {
-            argv[1].parse::<i64>()
+            String::from_utf8_lossy(&argv[1]).parse::<i64>()
         };
 
         match step {

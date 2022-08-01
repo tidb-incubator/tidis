@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -127,17 +128,17 @@ impl Zadd {
         Ok(zadd)
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Zadd> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Zadd> {
         if argv.is_empty() {
             return Ok(Zadd::new_invalid());
         }
-        let mut zadd = Zadd::new(&argv[0]);
+        let mut zadd = Zadd::new(&String::from_utf8_lossy(&argv[0]));
         let mut first_score: Option<f64>;
 
         // try to parse the flag
         let mut idx = 1;
         loop {
-            let arg = argv[idx].to_uppercase();
+            let arg = String::from_utf8_lossy(&argv[idx]).to_uppercase();
             if idx >= argv.len() {
                 return Ok(Zadd::new_invalid());
             }
@@ -189,19 +190,19 @@ impl Zadd {
                 if idx >= argv.len() {
                     return Ok(Zadd::new_invalid());
                 }
-                let member = &argv[idx];
+                let member = &String::from_utf8_lossy(&argv[idx]);
                 zadd.add_member(member);
             } else {
                 idx += 1;
                 if idx == argv.len() {
                     break;
                 }
-                if let Ok(score) = argv[idx].parse::<f64>() {
+                if let Ok(score) = String::from_utf8_lossy(&argv[idx]).parse::<f64>() {
                     idx += 1;
                     if idx >= argv.len() {
                         return Ok(Zadd::new_invalid());
                     }
-                    let member = &argv[idx];
+                    let member = &String::from_utf8_lossy(&argv[idx]);
                     zadd.add_score(score);
                     zadd.add_member(member);
                 } else {

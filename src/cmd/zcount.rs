@@ -66,7 +66,7 @@ impl Zcount {
         Ok(z)
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Zcount> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Zcount> {
         if argv.len() < 3 {
             return Ok(Zcount::new_invalid());
         }
@@ -74,27 +74,29 @@ impl Zcount {
         let mut max_inclusive = true;
 
         // parse score range as bytes, to handle exclusive bounder
-        let mut bmin = Bytes::from(argv[1].clone());
+        let mut bmin = argv[1].clone();
         // check first byte
         if bmin[0] == b'(' {
             // drain the first byte
             bmin.advance(1);
             min_inclusive = false;
         }
-        let min = String::from_utf8_lossy(&bmin.to_vec())
-            .parse::<f64>()
-            .unwrap();
+        let min = String::from_utf8_lossy(&bmin).parse::<f64>().unwrap();
 
-        let mut bmax = Bytes::from(argv[2].clone());
+        let mut bmax = argv[2].clone();
         if bmax[0] == b'(' {
             bmax.advance(1);
             max_inclusive = false;
         }
-        let max = String::from_utf8_lossy(&bmax.to_vec())
-            .parse::<f64>()
-            .unwrap();
+        let max = String::from_utf8_lossy(&bmax).parse::<f64>().unwrap();
 
-        let z = Zcount::new(&argv[0], min, min_inclusive, max, max_inclusive);
+        let z = Zcount::new(
+            &String::from_utf8_lossy(&argv[0]),
+            min,
+            min_inclusive,
+            max,
+            max_inclusive,
+        );
         Ok(z)
     }
 

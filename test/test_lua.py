@@ -793,6 +793,14 @@ class LuaTest(unittest.TestCase):
             self.assertEqual(self.execute_eval('zadd', self.k1, i, str(i)), 1)
         self.assertEqual(self.execute_eval('zremrangebyscore', self.k1, 21, 30), 10)
 
+    def test_zremrangebyrank(self):
+        for i in range(100):
+            self.assertEqual(self.execute_eval('zadd', self.k1, i, str(i)), 1)
+        self.assertEqual(self.execute_eval('zremrangebyrank', self.k1, 21, 30), 10)
+        self.assertEqual(self.execute_eval('zremrangebyrank', self.k1, 30, 20), 0)
+        self.assertEqual(self.execute_eval('zremrangebyrank', self.k1, 0, -1), 90)
+        self.assertEqual(self.execute_eval('zcard', self.k1), 0)
+
     def test_zcount(self):
         for i in range(100):
             self.assertEqual(self.execute_eval('zadd', self.k1, i, str(i)), 1)

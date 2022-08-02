@@ -88,6 +88,7 @@ impl Multi {
                 Command::Zscore(cmd) => cmd.zscore(txn_rc.clone()).await,
                 Command::Zrem(cmd) => cmd.zrem(txn_rc.clone()).await,
                 Command::Zremrangebyscore(cmd) => cmd.zremrangebyscore(txn_rc.clone()).await,
+                Command::Zremrangebyrank(cmd) => cmd.zremrangebyrank(txn_rc.clone()).await,
                 Command::Zrange(cmd) => cmd.zrange(txn_rc.clone()).await,
                 Command::Zrevrange(cmd) => cmd.zrevrange(txn_rc.clone()).await,
                 Command::Zrangebyscore(cmd) => cmd.zrangebyscore(txn_rc.clone(), false).await,

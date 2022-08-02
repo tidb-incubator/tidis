@@ -192,8 +192,10 @@ impl GcWorker {
 
     pub async fn handle_task(&self, task: GcTask) -> AsyncResult<()> {
         let mut txn_client = get_txn_client()?;
+
         txn_client
             .exec_in_txn(None, |txn_rc| {
+                let task = task.clone();
                 async move {
                     let mut txn = txn_rc.lock().await;
                     let user_key = String::from_utf8_lossy(&task.user_key);
@@ -297,13 +299,32 @@ impl GcWorker {
                         KEY_ENCODER.encode_txnkv_gc_version_key(&user_key, version);
                     txn.delete(gc_version_key).await?;
 
+                    Ok(())
+                }
+                .boxed()
+            })
+            .await?;
+
+        // check the gc key in a small txn, avoid transaction confliction
+        txn_client
+            .exec_in_txn(None, |txn_rc| {
+                let task = task.clone();
+                async move {
+                    let mut txn = txn_rc.lock().await;
+                    let user_key = String::from_utf8_lossy(&task.user_key);
                     // also delete gc key if version in gc key is same as task.version
                     let gc_key = KEY_ENCODER.encode_txnkv_gc_key(&user_key);
+                    let version = task.version;
                     match txn.get(gc_key.clone()).await? {
                         Some(v) => {
                             let ver = u16::from_be_bytes(v[..2].try_into().unwrap());
                             if ver == version {
-                                debug!(LOGGER, "[GC] clean gc key for user key {}", user_key);
+                                debug!(
+                                    LOGGER,
+                                    "[GC] clean gc key for user key {} with version {}",
+                                    user_key,
+                                    version
+                                );
                                 txn.delete(gc_key).await?;
                             }
                         }

@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -47,17 +48,17 @@ impl Ltrim {
         })
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Ltrim> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Ltrim> {
         if argv.len() != 3 {
             return Ok(Ltrim::new_invalid());
         }
-        let key = &argv[0];
-        let start = match argv[1].parse::<i64>() {
+        let key = &String::from_utf8_lossy(&argv[0]);
+        let start = match String::from_utf8_lossy(&argv[1]).parse::<i64>() {
             Ok(v) => v,
             Err(_) => return Ok(Ltrim::new_invalid()),
         };
 
-        let end = match argv[2].parse::<i64>() {
+        let end = match String::from_utf8_lossy(&argv[2]).parse::<i64>() {
             Ok(v) => v,
             Err(_) => return Ok(Ltrim::new_invalid()),
         };

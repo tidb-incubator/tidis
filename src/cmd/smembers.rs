@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -40,14 +41,14 @@ impl Smembers {
         Ok(Smembers::new(&key))
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Smembers> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Smembers> {
         if argv.len() != 1 {
             return Ok(Smembers {
                 key: "".to_owned(),
                 valid: false,
             });
         }
-        Ok(Smembers::new(&argv[0]))
+        Ok(Smembers::new(&String::from_utf8_lossy(&argv[0])))
     }
 
     pub(crate) async fn apply(self, dst: &mut Connection) -> crate::Result<()> {

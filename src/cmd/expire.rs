@@ -7,6 +7,7 @@ use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::string::StringCommandCtx;
 use crate::utils::{resp_err, resp_invalid_arguments, timestamp_from_ttl};
 use crate::{Connection, Frame, Parse};
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -47,12 +48,12 @@ impl Expire {
         })
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Expire> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Expire> {
         if argv.len() != 2 {
             return Ok(Expire::new_invalid());
         }
-        let key = argv[0].to_owned();
-        match argv[1].parse::<i64>() {
+        let key = String::from_utf8_lossy(&argv[0]);
+        match String::from_utf8_lossy(&argv[1]).parse::<i64>() {
             Ok(v) => Ok(Expire::new(key, v)),
             Err(_) => Ok(Expire::new_invalid()),
         }

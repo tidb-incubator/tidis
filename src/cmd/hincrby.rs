@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -59,13 +60,13 @@ impl Hincrby {
         })
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Hincrby> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Hincrby> {
         if argv.len() != 3 {
             return Ok(Hincrby::new_invalid());
         }
-        let key = &argv[0];
-        let field = &argv[1];
-        let step = argv[2].parse::<i64>();
+        let key = &String::from_utf8_lossy(&argv[0]);
+        let field = &String::from_utf8_lossy(&argv[1]);
+        let step = String::from_utf8_lossy(&argv[2]).parse::<i64>();
         match step {
             Ok(v) => Ok(Hincrby::new(key, field, v)),
             Err(_) => Ok(Hincrby::new_invalid()),

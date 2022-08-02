@@ -62,14 +62,14 @@ impl Mset {
         Ok(mset)
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Mset> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Mset> {
         if argv.len() % 2 != 0 {
             return Ok(Mset::new_invalid());
         }
         let mut mset = Mset::default();
         for idx in (0..argv.len()).step_by(2) {
-            mset.add_key(argv[idx].clone());
-            mset.add_val(Bytes::from(argv[idx + 1].clone()));
+            mset.add_key(String::from_utf8_lossy(&argv[idx]).to_string());
+            mset.add_val(argv[idx + 1].clone());
         }
         Ok(mset)
     }

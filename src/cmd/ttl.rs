@@ -7,6 +7,7 @@ use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::string::StringCommandCtx;
 use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame, Parse};
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -36,12 +37,12 @@ impl TTL {
         Ok(TTL { key, valid: true })
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<TTL> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<TTL> {
         if argv.len() != 1 {
             return Ok(TTL::new_invalid());
         }
         Ok(TTL {
-            key: argv[0].to_owned(),
+            key: String::from_utf8_lossy(&argv[0]).to_string(),
             valid: true,
         })
     }

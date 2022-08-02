@@ -154,6 +154,9 @@ pub use zrem::Zrem;
 mod zremrangebyscore;
 pub use zremrangebyscore::Zremrangebyscore;
 
+mod zremrangebyrank;
+pub use zremrangebyrank::Zremrangebyrank;
+
 mod zrange;
 pub use zrange::Zrange;
 
@@ -287,6 +290,7 @@ pub enum Command {
     Zscore(Zscore),
     Zrem(Zrem),
     Zremrangebyscore(Zremrangebyscore),
+    Zremrangebyrank(Zremrangebyrank),
     Zrange(Zrange),
     Zrevrange(Zrevrange),
     Zrangebyscore(Zrangebyscore),
@@ -493,6 +497,10 @@ impl Command {
                 Zremrangebyscore::parse_frames(&mut parse),
                 &mut parse,
             )),
+            "zremrangebyrank" => Command::Zremrangebyrank(transform_parse(
+                Zremrangebyrank::parse_frames(&mut parse),
+                &mut parse,
+            )),
             "zrange" => Command::Zrange(transform_parse(
                 Zrange::parse_frames(&mut parse),
                 &mut parse,
@@ -628,6 +636,7 @@ impl Command {
             "zscore" => Command::Zscore(Zscore::parse_argv(argv)?),
             "zrem" => Command::Zrem(Zrem::parse_argv(argv)?),
             "zremrangebyscore" => Command::Zremrangebyscore(Zremrangebyscore::parse_argv(argv)?),
+            "zremrangebyrank" => Command::Zremrangebyrank(Zremrangebyrank::parse_argv(argv)?),
             "zrange" => Command::Zrange(Zrange::parse_argv(argv)?),
             "zrevrange" => Command::Zrevrange(Zrevrange::parse_argv(argv)?),
             "zrangebyscore" => Command::Zrangebyscore(Zrangebyscore::parse_argv(argv)?),
@@ -725,6 +734,7 @@ impl Command {
             Zscore(cmd) => cmd.apply(dst).await,
             Zrem(cmd) => cmd.apply(dst).await,
             Zremrangebyscore(cmd) => cmd.apply(dst).await,
+            Zremrangebyrank(cmd) => cmd.apply(dst).await,
             Zrange(cmd) => cmd.apply(dst).await,
             Zrevrange(cmd) => cmd.apply(dst).await,
             Zrangebyscore(cmd) => cmd.apply(dst, false).await,
@@ -819,6 +829,7 @@ impl Command {
             Command::Zscore(_) => "zscore",
             Command::Zrem(_) => "zrem",
             Command::Zremrangebyscore(_) => "zremrangebyscore",
+            Command::Zremrangebyrank(_) => "zremrangebyrank",
             Command::Zrange(_) => "zrange",
             Command::Zrevrange(_) => "zrevrange",
             Command::Zrangebyscore(_) => "zrangebyscore",

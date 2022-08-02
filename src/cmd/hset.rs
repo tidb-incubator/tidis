@@ -67,7 +67,7 @@ impl Hset {
         for idx in (1..argv.len()).step_by(2) {
             let field = String::from_utf8_lossy(&argv[idx]);
             let value = argv[idx + 1].clone();
-            let kv = KvPair::new(field.to_string(), value);
+            let kv = KvPair::new(field.to_string(), value.to_vec());
             hset.add_field_value(kv);
         }
         Ok(hset)

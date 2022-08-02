@@ -57,12 +57,12 @@ impl Linsert {
         })
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Linsert> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Linsert> {
         if argv.len() != 4 {
             return Ok(Linsert::new_invalid());
         }
-        let key = &argv[0];
-        let before_pivot = match argv[1].to_lowercase().as_str() {
+        let key = &String::from_utf8_lossy(&argv[0]);
+        let before_pivot = match String::from_utf8_lossy(&argv[1]).to_lowercase().as_str() {
             "before" => true,
             "after" => false,
             _ => {
@@ -70,8 +70,8 @@ impl Linsert {
             }
         };
 
-        let pivot = Bytes::from(argv[2].clone());
-        let element = Bytes::from(argv[3].clone());
+        let pivot = argv[2].clone();
+        let element = argv[3].clone();
         Ok(Linsert::new(key, before_pivot, pivot, element))
     }
 

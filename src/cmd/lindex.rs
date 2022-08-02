@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -43,12 +44,12 @@ impl Lindex {
         })
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Lindex> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Lindex> {
         if argv.len() != 2 {
             return Ok(Lindex::new_invalid());
         }
-        let key = &argv[0];
-        let idx = match argv[1].parse::<i64>() {
+        let key = &String::from_utf8_lossy(&argv[0]);
+        let idx = match String::from_utf8_lossy(&argv[1]).parse::<i64>() {
             Ok(v) => v,
             Err(_) => return Ok(Lindex::new_invalid()),
         };

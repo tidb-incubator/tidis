@@ -8,6 +8,7 @@ use crate::utils::{resp_err, resp_invalid_arguments};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -32,14 +33,14 @@ impl Pop {
         &self.key
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Pop> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Pop> {
         if argv.is_empty() || argv.len() > 2 {
             return Ok(Pop::new_invalid());
         }
-        let key = &argv[0];
+        let key = &String::from_utf8_lossy(&argv[0]);
         let mut count = 1;
         if argv.len() == 2 {
-            match argv[1].parse::<i64>() {
+            match String::from_utf8_lossy(&argv[1]).parse::<i64>() {
                 Ok(v) => count = v,
                 Err(_) => {
                     return Ok(Pop::new_invalid());

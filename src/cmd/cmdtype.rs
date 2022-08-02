@@ -5,6 +5,7 @@ use crate::tikv::errors::AsyncResult;
 use crate::tikv::string::StringCommandCtx;
 use crate::utils::resp_invalid_arguments;
 use crate::{Connection, Frame, Parse};
+use bytes::Bytes;
 use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
@@ -37,11 +38,11 @@ impl Type {
         Ok(Type::new(key))
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Type> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Type> {
         if argv.len() != 1 {
             return Ok(Type::new_invalid());
         }
-        let key = &argv[0];
+        let key = &String::from_utf8_lossy(&argv[0]);
         Ok(Type::new(key))
     }
 

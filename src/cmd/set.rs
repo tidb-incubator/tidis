@@ -145,12 +145,12 @@ impl Set {
         })
     }
 
-    pub(crate) fn parse_argv(argv: &Vec<String>) -> crate::Result<Set> {
+    pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Set> {
         if argv.len() < 2 {
             return Ok(Set::new_invalid());
         }
-        let key = argv[0].clone();
-        let value = Bytes::from(argv[1].clone());
+        let key = String::from_utf8_lossy(&argv[0]).to_string();
+        let value = argv[1].clone();
         let mut expire = None;
         let mut nx = None;
         let mut idx = 2;
@@ -158,21 +158,22 @@ impl Set {
             if idx >= argv.len() {
                 break;
             }
-            if argv[idx].to_uppercase() == "EX" {
+            let flag = String::from_utf8_lossy(&argv[idx]).to_uppercase();
+            if flag == "EX" {
                 idx += 1;
-                let secs = argv[idx].parse::<i64>();
+                let secs = String::from_utf8_lossy(&argv[idx]).parse::<i64>();
                 if let Ok(v) = secs {
                     expire = Some(v * 1000);
                 } else {
                     return Ok(Set::new_invalid());
                 }
-            } else if argv[idx].to_uppercase() == "PX" {
+            } else if flag == "PX" {
                 idx += 1;
-                let ms = argv[idx].parse::<i64>();
+                let ms = String::from_utf8_lossy(&argv[idx]).parse::<i64>();
                 if let Ok(v) = ms {
                     expire = Some(v);
                 }
-            } else if argv[idx].to_uppercase() == "NX" {
+            } else if flag == "NX" {
                 nx = Some(true);
             } else {
                 return Ok(Set::new_invalid());

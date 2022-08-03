@@ -1105,6 +1105,120 @@ impl ZsetCommandCtx {
     //     Ok(resp_nil())
     // }
 
+    pub async fn do_async_txnkv_zremrange_by_rank(
+        mut self,
+        key: &str,
+        mut min: i64,
+        mut max: i64,
+    ) -> AsyncResult<Frame> {
+        let mut client = get_txn_client()?;
+        let meta_key = KEY_ENCODER.encode_txnkv_meta_key(key);
+        let key = key.to_owned();
+        let rand_idx = gen_next_meta_index();
+
+        let resp = client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
+
+                    let mut txn = txn_rc.lock().await;
+
+                    let mut removed_count = 0;
+                    match txn.get(meta_key.to_owned()).await? {
+                        Some(meta_value) => {
+                            // check key type and ttl
+                            if !matches!(KeyDecoder::decode_key_type(&meta_value), DataType::Zset) {
+                                return Err(REDIS_WRONG_TYPE_ERR);
+                            }
+
+                            drop(txn);
+                            let (ttl, version, _) = KeyDecoder::decode_key_meta(&meta_value);
+                            if key_is_expired(ttl) {
+                                self.clone()
+                                    .do_async_txnkv_zset_expire_if_needed(&key)
+                                    .await?;
+                                return Ok(0);
+                            }
+                            let size = self.txnkv_sum_key_size(&key, version).await?;
+                            // convert index to positive if negtive
+                            if min < 0 {
+                                min += size;
+                            }
+                            if max < 0 {
+                                max += size;
+                            }
+
+                            let bound_range =
+                                KEY_ENCODER.encode_txnkv_zset_score_key_range(&key, version);
+                            txn = txn_rc.lock().await;
+                            let iter = txn.scan(bound_range, size.try_into().unwrap()).await?;
+
+                            let mut idx = 0;
+                            for kv in iter {
+                                if idx < min {
+                                    idx += 1;
+                                    continue;
+                                }
+                                if idx > max {
+                                    break;
+                                }
+                                idx += 1;
+
+                                let member = String::from_utf8_lossy(&kv.1);
+                                // encode member key
+                                let member_key =
+                                    KEY_ENCODER.encode_txnkv_zset_data_key(&key, &member, version);
+
+                                // delete member key and score key
+                                txn.delete(member_key).await?;
+                                txn.delete(kv.0).await?;
+                                removed_count += 1;
+                            }
+
+                            // update sub meta key
+                            drop(txn);
+                            txn = txn_rc.lock().await;
+                            // clear all sub meta keys and meta key if all members removed
+                            if removed_count >= size {
+                                let bound_range =
+                                    KEY_ENCODER.encode_txnkv_sub_meta_key_range(&key, version);
+                                let iter = txn.scan_keys(bound_range, u32::MAX).await?;
+                                for k in iter {
+                                    txn.delete(k).await?;
+                                }
+                                txn.delete(meta_key).await?;
+                            } else {
+                                let sub_meta_key =
+                                    KEY_ENCODER.encode_txnkv_sub_meta_key(&key, version, rand_idx);
+                                let new_sub_meta_value =
+                                    txn.get(sub_meta_key.clone()).await?.map_or_else(
+                                        || -removed_count,
+                                        |v| {
+                                            let old_sub_meta_value =
+                                                i64::from_be_bytes(v.try_into().unwrap());
+                                            old_sub_meta_value - removed_count
+                                        },
+                                    );
+                                txn.put(sub_meta_key, new_sub_meta_value.to_be_bytes().to_vec())
+                                    .await?;
+                            }
+
+                            Ok(removed_count)
+                        }
+                        None => Ok(0),
+                    }
+                }
+                .boxed()
+            })
+            .await;
+        match resp {
+            Ok(v) => Ok(resp_int(v)),
+            Err(e) => Ok(resp_err(e)),
+        }
+    }
+
     pub async fn do_async_txnkv_zremrange_by_score(
         mut self,
         key: &str,

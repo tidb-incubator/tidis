@@ -107,6 +107,14 @@ class ZsetTest(unittest.TestCase):
         self.assertEqual(self.r.zremrangebyscore(self.k1, 21, 30), 10)
         self.assertEqual(self.r.zremrangebyscore(self.k1, 30, 21), 0)
 
+    def test_zremrangebyrank(self):
+        for i in range(100):
+            self.assertEqual(self.r.zadd(self.k1, {str(i): i}), 1)
+        self.assertEqual(self.r.zremrangebyrank(self.k1, 21, 30), 10)
+        self.assertEqual(self.r.zremrangebyrank(self.k1, 30, 21), 0)
+        self.assertEqual(self.r.zremrangebyrank(self.k1, 0, -1), 90)
+        self.assertEqual(self.r.zcard(self.k1), 0)
+
     def test_zcount(self):
         for i in range(100):
             self.assertEqual(self.r.zadd(self.k1, {str(i): i}), 1)

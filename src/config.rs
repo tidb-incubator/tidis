@@ -12,10 +12,11 @@ lazy_static! {
             OpenOptions::new()
                 .create(true)
                 .write(true)
-                .truncate(true)
+                .append(true)
                 .open(log_file())
                 .unwrap()
         ))
+        .use_custom_timestamp(crate::utils::timestamp_local)
         .build()
         .filter_level(slog::Level::from_usize(log_level()).unwrap())
         .fuse(),

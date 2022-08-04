@@ -2,6 +2,7 @@ use crate::frame::Frame;
 use hex::ToHex;
 use mlua::{Lua, Value as LuaValue};
 use sha1::{Digest, Sha1};
+use std::io;
 use std::{
     collections::HashSet,
     convert::TryInto,
@@ -10,7 +11,6 @@ use std::{
 use tokio::time::Duration;
 
 use crate::tikv::errors::{RTError, REDIS_LUA_PANIC};
-use async_std::io;
 use rustls::{
     internal::pemfile::{certs, rsa_private_keys},
     AllowAnyAuthenticatedClient, RootCertStore,
@@ -19,6 +19,8 @@ use rustls::{Certificate, NoClientAuth, PrivateKey, ServerConfig};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
+
+const TIMESTAMP_FORMAT: &str = "%Y/%m/%d %H:%M:%S%.3f %:z";
 
 pub fn resp_ok() -> Frame {
     Frame::Simple("OK".to_string())
@@ -227,4 +229,9 @@ pub fn sha1hex(s: &str) -> String {
 
 pub fn count_unique_keys<T: std::hash::Hash + std::cmp::Eq>(keys: &[T]) -> usize {
     keys.iter().collect::<HashSet<&T>>().len()
+}
+
+pub fn timestamp_local(io: &mut dyn io::Write) -> io::Result<()> {
+    let now = chrono::Local::now().format(TIMESTAMP_FORMAT);
+    write!(io, "{}", now)
 }

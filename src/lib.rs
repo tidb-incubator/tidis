@@ -68,6 +68,8 @@ pub use tikv::set_instance_id;
 
 pub mod cluster;
 
+pub mod client;
+
 pub mod utils;
 
 pub mod config;

@@ -91,3 +91,6 @@ pub const REDIS_DISCARD_WITHOUT_MULTI_ERR: RTError = RTError::String("ERR DISCAR
 pub const REDIS_EXEC_WITHOUT_MULTI_ERR: RTError = RTError::String("ERR EXEC without MULTI");
 pub const REDIS_EXEC_ERR: RTError =
     RTError::String("EXECABORT Transaction discarded because of previous errors.");
+
+pub const REDIS_INVALID_CLIENT_ID_ERR: RTError = RTError::String("ERR Invalid client ID");
+pub const REDIS_NO_SUCH_CLIENT_ERR: RTError = RTError::String("ERR No such client");

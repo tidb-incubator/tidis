@@ -1,4 +1,5 @@
-use tokio::sync::broadcast;
+use tokio::select;
+use tokio::sync::{broadcast, mpsc};
 
 /// Listens for the server shutdown signal.
 ///
@@ -14,16 +15,20 @@ pub(crate) struct Shutdown {
     /// `true` if the shutdown signal has been received
     shutdown: bool,
 
-    /// The receive half of the channel used to listen for shutdown.
+    /// The receive half of the channel used to listen for server shutdown.
     notify: broadcast::Receiver<()>,
+
+    /// used to listen for P2P kill signal
+    kill_rx: mpsc::Receiver<()>,
 }
 
 impl Shutdown {
     /// Create a new `Shutdown` backed by the given `broadcast::Receiver`.
-    pub(crate) fn new(notify: broadcast::Receiver<()>) -> Shutdown {
+    pub(crate) fn new(notify: broadcast::Receiver<()>, kill_rx: mpsc::Receiver<()>) -> Shutdown {
         Shutdown {
             shutdown: false,
             notify,
+            kill_rx,
         }
     }
 
@@ -40,10 +45,16 @@ impl Shutdown {
             return;
         }
 
-        // Cannot receive a "lag error" as only one value is ever sent.
-        let _ = self.notify.recv().await;
-
-        // Remember that the signal has been received.
-        self.shutdown = true;
+        select! {
+            // Cannot receive a "lag error" as only one value is ever sent.
+            _ = self.notify.recv() => {
+                // server shutdown caused shutdown
+                self.shutdown = true;
+            },
+            _ = self.kill_rx.recv() => {
+                // kill signal caused shutdown
+                self.shutdown = true;
+            }
+        };
     }
 }

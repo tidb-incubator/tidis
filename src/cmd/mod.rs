@@ -2,6 +2,8 @@ mod get;
 
 use bytes::Bytes;
 pub use get::Get;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 mod del;
 pub use del::Del;
@@ -12,6 +14,7 @@ pub use mget::Mget;
 mod mset;
 use mlua::Lua;
 pub use mset::Mset;
+use tokio::sync::Mutex;
 
 mod strlen;
 pub use strlen::Strlen;
@@ -199,6 +202,7 @@ pub use fake::Fake;
 mod multi;
 pub use multi::Multi;
 
+use crate::client::Client;
 use crate::{cluster::Cluster as Topo, Connection, Db, Frame, Parse, ParseError, Shutdown};
 
 /// All commands should be implement new_invalid() for invalid check
@@ -660,11 +664,14 @@ impl Command {
     ///
     /// The response is written to `dst`. This is called by the server in order
     /// to execute a received command.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn apply(
         self,
         db: &Db,
         topo: &Topo,
         dst: &mut Connection,
+        cur_client: Arc<Mutex<Client>>,
+        clients: Arc<Mutex<HashMap<u64, Arc<Mutex<Client>>>>>,
         lua: &mut Option<Lua>,
         shutdown: &mut Shutdown,
     ) -> crate::Result<()> {
@@ -748,10 +755,10 @@ impl Command {
             Debug(cmd) => cmd.apply(dst).await,
 
             Cluster(cmd) => cmd.apply(topo, dst).await,
-            ReadWrite(cmd) => cmd.apply("readwrite", dst).await,
-            ReadOnly(cmd) => cmd.apply("readonly", dst).await,
-            Client(cmd) => cmd.apply("client", dst).await,
-            Info(cmd) => cmd.apply("info", dst).await,
+            ReadWrite(cmd) => cmd.apply("readwrite", dst, cur_client, clients).await,
+            ReadOnly(cmd) => cmd.apply("readonly", dst, cur_client, clients).await,
+            Client(cmd) => cmd.apply("client", dst, cur_client, clients).await,
+            Info(cmd) => cmd.apply("info", dst, cur_client, clients).await,
 
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the

@@ -44,3 +44,8 @@ class RedisWrapper:
                             help="service port (default: {})".format(cls.default_port))
         args = parser.parse_args()
         return args.ip, args.port
+
+    @classmethod
+    def clone(cls):
+        conn = cls._instance.connection_pool.get_connection("")
+        return redis.StrictRedis(host=conn.host, port=conn.port, decode_responses=True)

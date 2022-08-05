@@ -14,24 +14,27 @@ use crate::{
     config_local_pool_number, is_auth_enabled, is_auth_matched, Command, Connection, Db,
     DbDropGuard, Shutdown,
 };
+use std::collections::HashMap;
 
 use async_std::net::{TcpListener, TcpStream};
 use futures::FutureExt;
 use std::future::Future;
 use std::ops::Range;
+use std::sync::Arc;
 use tikv_client::{BoundRange, Key};
 
 use async_std::prelude::StreamExt;
 use async_tls::TlsAcceptor;
 use rand::Rng;
 use slog::{debug, error, info, warn};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, Mutex};
 use tokio::time::{self, Duration, Instant, MissedTickBehavior};
 
 use mlua::Lua;
 
 use crate::config::LOGGER;
 
+use crate::client::Client;
 use tokio_util::task::LocalPoolHandle;
 
 use crate::tikv::errors::{
@@ -53,6 +56,7 @@ struct Listener {
     db_holder: DbDropGuard,
 
     topo_holder: Cluster,
+    clients: Arc<Mutex<HashMap<u64, Arc<Mutex<Client>>>>>,
 
     /// TCP listener supplied by the `run` caller.
     listener: TcpListener,
@@ -96,6 +100,7 @@ struct Listener {
 struct TlsListener {
     db_holder: DbDropGuard,
     topo_holder: Cluster,
+    clients: Arc<Mutex<HashMap<u64, Arc<Mutex<Client>>>>>,
     tls_listener: TcpListener,
     tls_acceptor: TlsAcceptor,
     tls_notify_shutdown: broadcast::Sender<()>,
@@ -127,6 +132,8 @@ struct Handler {
     db: Db,
 
     topo: Cluster,
+    cur_client: Arc<Mutex<Client>>,
+    clients: Arc<Mutex<HashMap<u64, Arc<Mutex<Client>>>>>,
 
     /// The TCP connection decorated with the redis protocol encoder / decoder
     /// implemented using a buffered `TcpStream`.
@@ -232,6 +239,7 @@ pub async fn run(
             listener: listener.unwrap(),
             db_holder: db_holder.clone(),
             topo_holder: topo_holder.clone(),
+            clients: Arc::new(Mutex::new(HashMap::new())),
             // limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
             notify_shutdown,
             shutdown_complete_tx,
@@ -274,6 +282,7 @@ pub async fn run(
             tls_listener: tls_listener.unwrap(),
             db_holder: db_holder.clone(),
             topo_holder: topo_holder.clone(),
+            clients: Arc::new(Mutex::new(HashMap::new())),
             tls_acceptor: tls_acceptor.unwrap(),
             tls_notify_shutdown,
             tls_shutdown_complete_tx,
@@ -317,6 +326,7 @@ pub async fn run(
             listener: listener.unwrap(),
             db_holder: db_holder.clone(),
             topo_holder: topo_holder.clone(),
+            clients: Arc::new(Mutex::new(HashMap::new())),
             // limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
             notify_shutdown,
             shutdown_complete_tx,
@@ -329,6 +339,7 @@ pub async fn run(
             tls_listener: tls_listener.unwrap(),
             db_holder: db_holder.clone(),
             topo_holder: topo_holder.clone(),
+            clients: Arc::new(Mutex::new(HashMap::new())),
             tls_acceptor: tls_acceptor.unwrap(),
             tls_notify_shutdown,
             tls_shutdown_complete_tx,
@@ -423,6 +434,14 @@ impl Listener {
             // The `accept` method internally attempts to recover errors, so an
             // error here is non-recoverable.
             let socket = self.accept().await?;
+            let (kill_tx, kill_rx) = mpsc::channel(1);
+            let client = Client::new(socket.clone(), kill_tx);
+            let client_id = client.id();
+            let arc_client = Arc::new(Mutex::new(client));
+            self.clients
+                .lock()
+                .await
+                .insert(client_id, arc_client.clone());
 
             // Create the necessary per-connection handler state.
             let mut handler = Handler {
@@ -430,6 +449,8 @@ impl Listener {
                 db: self.db_holder.db(),
 
                 topo: self.topo_holder.clone(),
+                cur_client: arc_client.clone(),
+                clients: self.clients.clone(),
 
                 // Initialize the connection state. This allocates read/write
                 // buffers to perform redis protocol frame parsing.
@@ -444,7 +465,7 @@ impl Listener {
                 // limit_connections: self.limit_connections.clone(),
 
                 // Receive shutdown notifications.
-                shutdown: Shutdown::new(self.notify_shutdown.subscribe()),
+                shutdown: Shutdown::new(self.notify_shutdown.subscribe(), kill_rx),
 
                 authorized: !is_auth_enabled(),
 
@@ -511,6 +532,14 @@ impl TlsListener {
         while let Some(stream) = incoming.next().await {
             let acceptor = self.tls_acceptor.clone();
             let stream = stream?;
+            let (kill_tx, kill_rx) = mpsc::channel(1);
+            let client = Client::new(stream.clone(), kill_tx);
+            let client_id = client.id();
+            let arc_client = Arc::new(Mutex::new(client));
+            self.clients
+                .lock()
+                .await
+                .insert(client_id, arc_client.clone());
 
             let local_addr = (&stream).local_addr().unwrap().to_string();
             let peer_addr = (&stream).peer_addr().unwrap().to_string();
@@ -535,10 +564,12 @@ impl TlsListener {
             let mut handler = Handler {
                 db: self.db_holder.db(),
                 topo: self.topo_holder.clone(),
+                cur_client: arc_client.clone(),
+                clients: self.clients.clone(),
                 connection: Connection::new_tls(&local_addr, &peer_addr, tls_stream),
                 inner_txn: false,
                 queued_commands: vec![],
-                shutdown: Shutdown::new(self.tls_notify_shutdown.subscribe()),
+                shutdown: Shutdown::new(self.tls_notify_shutdown.subscribe(), kill_rx),
                 authorized: !is_auth_enabled(),
                 lua: None,
                 _shutdown_complete: self.tls_shutdown_complete_tx.clone(),
@@ -674,6 +705,12 @@ impl Handler {
             // unsupported command.
             let cmd = Command::from_frame(frame)?;
             let cmd_name = cmd.get_name().to_owned();
+
+            {
+                let mut w_client = self.cur_client.lock().await;
+                w_client.interact(&cmd_name);
+            }
+
             let start_at = Instant::now();
             REQUEST_COUNTER.inc();
             REQUEST_CMD_COUNTER.with_label_values(&[&cmd_name]).inc();
@@ -782,6 +819,8 @@ impl Handler {
                                 &self.db,
                                 &self.topo,
                                 &mut self.connection,
+                                self.cur_client.clone(),
+                                self.clients.clone(),
                                 &mut self.lua,
                                 &mut self.shutdown,
                             )

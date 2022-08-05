@@ -20,14 +20,14 @@ use async_std::net::{TcpListener, TcpStream};
 use futures::FutureExt;
 use std::future::Future;
 use std::ops::Range;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use tikv_client::{BoundRange, Key};
 
 use async_std::prelude::StreamExt;
 use async_tls::TlsAcceptor;
 use rand::Rng;
 use slog::{debug, error, info, warn};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, Mutex};
 use tokio::time::{self, Duration, Instant, MissedTickBehavior};
 
 use mlua::Lua;
@@ -56,7 +56,7 @@ struct Listener {
     db_holder: DbDropGuard,
 
     topo_holder: Cluster,
-    clients: Arc<RwLock<HashMap<u64, Arc<RwLock<Client>>>>>,
+    clients: Arc<Mutex<HashMap<u64, Arc<Mutex<Client>>>>>,
 
     /// TCP listener supplied by the `run` caller.
     listener: TcpListener,
@@ -100,7 +100,7 @@ struct Listener {
 struct TlsListener {
     db_holder: DbDropGuard,
     topo_holder: Cluster,
-    clients: Arc<RwLock<HashMap<u64, Arc<RwLock<Client>>>>>,
+    clients: Arc<Mutex<HashMap<u64, Arc<Mutex<Client>>>>>,
     tls_listener: TcpListener,
     tls_acceptor: TlsAcceptor,
     tls_notify_shutdown: broadcast::Sender<()>,
@@ -132,8 +132,8 @@ struct Handler {
     db: Db,
 
     topo: Cluster,
-    cur_client: Arc<RwLock<Client>>,
-    clients: Arc<RwLock<HashMap<u64, Arc<RwLock<Client>>>>>,
+    cur_client: Arc<Mutex<Client>>,
+    clients: Arc<Mutex<HashMap<u64, Arc<Mutex<Client>>>>>,
 
     /// The TCP connection decorated with the redis protocol encoder / decoder
     /// implemented using a buffered `TcpStream`.
@@ -239,7 +239,7 @@ pub async fn run(
             listener: listener.unwrap(),
             db_holder: db_holder.clone(),
             topo_holder: topo_holder.clone(),
-            clients: Arc::new(RwLock::new(HashMap::new())),
+            clients: Arc::new(Mutex::new(HashMap::new())),
             // limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
             notify_shutdown,
             shutdown_complete_tx,
@@ -282,7 +282,7 @@ pub async fn run(
             tls_listener: tls_listener.unwrap(),
             db_holder: db_holder.clone(),
             topo_holder: topo_holder.clone(),
-            clients: Arc::new(RwLock::new(HashMap::new())),
+            clients: Arc::new(Mutex::new(HashMap::new())),
             tls_acceptor: tls_acceptor.unwrap(),
             tls_notify_shutdown,
             tls_shutdown_complete_tx,
@@ -326,7 +326,7 @@ pub async fn run(
             listener: listener.unwrap(),
             db_holder: db_holder.clone(),
             topo_holder: topo_holder.clone(),
-            clients: Arc::new(RwLock::new(HashMap::new())),
+            clients: Arc::new(Mutex::new(HashMap::new())),
             // limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
             notify_shutdown,
             shutdown_complete_tx,
@@ -339,7 +339,7 @@ pub async fn run(
             tls_listener: tls_listener.unwrap(),
             db_holder: db_holder.clone(),
             topo_holder: topo_holder.clone(),
-            clients: Arc::new(RwLock::new(HashMap::new())),
+            clients: Arc::new(Mutex::new(HashMap::new())),
             tls_acceptor: tls_acceptor.unwrap(),
             tls_notify_shutdown,
             tls_shutdown_complete_tx,
@@ -437,11 +437,11 @@ impl Listener {
             let (kill_tx, kill_rx) = mpsc::channel(1);
             let client = Client::new(socket.clone(), kill_tx);
             let client_id = client.id();
-            let arc_client = Arc::new(RwLock::new(client));
-            let mut map = self.clients.write().unwrap();
-            map.insert(client_id, arc_client.clone());
-            // minimize the time hold the write lock
-            drop(map);
+            let arc_client = Arc::new(Mutex::new(client));
+            self.clients
+                .lock()
+                .await
+                .insert(client_id, arc_client.clone());
 
             // Create the necessary per-connection handler state.
             let mut handler = Handler {
@@ -535,13 +535,11 @@ impl TlsListener {
             let (kill_tx, kill_rx) = mpsc::channel(1);
             let client = Client::new(stream.clone(), kill_tx);
             let client_id = client.id();
-            let arc_client = Arc::new(RwLock::new(client));
-            {
-                let mut map = self.clients.write().unwrap();
-                map.insert(client_id, arc_client.clone());
-                // minimize the time hold the write lock
-                //drop(map);
-            }
+            let arc_client = Arc::new(Mutex::new(client));
+            self.clients
+                .lock()
+                .await
+                .insert(client_id, arc_client.clone());
 
             let local_addr = (&stream).local_addr().unwrap().to_string();
             let peer_addr = (&stream).peer_addr().unwrap().to_string();
@@ -709,7 +707,7 @@ impl Handler {
             let cmd_name = cmd.get_name().to_owned();
 
             {
-                let mut w_client = self.cur_client.write().unwrap();
+                let mut w_client = self.cur_client.lock().await;
                 w_client.interact(&cmd_name);
             }
 

@@ -3,7 +3,7 @@ mod get;
 use bytes::Bytes;
 pub use get::Get;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 mod del;
 pub use del::Del;
@@ -14,6 +14,7 @@ pub use mget::Mget;
 mod mset;
 use mlua::Lua;
 pub use mset::Mset;
+use tokio::sync::Mutex;
 
 mod strlen;
 pub use strlen::Strlen;
@@ -669,8 +670,8 @@ impl Command {
         db: &Db,
         topo: &Topo,
         dst: &mut Connection,
-        cur_client: Arc<RwLock<Client>>,
-        clients: Arc<RwLock<HashMap<u64, Arc<RwLock<Client>>>>>,
+        cur_client: Arc<Mutex<Client>>,
+        clients: Arc<Mutex<HashMap<u64, Arc<Mutex<Client>>>>>,
         lua: &mut Option<Lua>,
         shutdown: &mut Shutdown,
     ) -> crate::Result<()> {

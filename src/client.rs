@@ -6,7 +6,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::SystemTime;
 use tokio::sync::mpsc::Sender;
 
-static COUNTER: AtomicU64 = AtomicU64::new(0);
+// reserve id 0
+static COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone)]
 pub struct Client {

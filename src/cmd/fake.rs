@@ -78,8 +78,8 @@ impl Fake {
                     "ID" => resp_int(cur_client.lock().await.id() as i64),
                     "LIST" => {
                         if self.args.len() == 1 {
-                            return resp_str(
-                                &generate_clients_string(
+                            return resp_bulk(
+                                encode_clients_info(
                                     clients.lock().await.clone().into_values().collect(),
                                 )
                                 .await,
@@ -102,7 +102,7 @@ impl Fake {
                                     }
                                 }
 
-                                return resp_str(&generate_clients_string(match_clients).await);
+                                return resp_bulk(encode_clients_info(match_clients).await);
                             }
                             _ => resp_err(REDIS_NOT_SUPPORTED_ERR),
                         };
@@ -245,7 +245,7 @@ impl Fake {
 }
 
 #[inline]
-async fn generate_clients_string(clients: Vec<Arc<Mutex<Client>>>) -> String {
+async fn encode_clients_info(clients: Vec<Arc<Mutex<Client>>>) -> Vec<u8> {
     let mut resp_list = String::new();
     for client in clients {
         let r_client = client.lock().await;
@@ -253,7 +253,7 @@ async fn generate_clients_string(clients: Vec<Arc<Mutex<Client>>>) -> String {
         resp_list.push('\n');
     }
 
-    resp_list
+    resp_list.into_bytes()
 }
 
 impl Invalid for Fake {

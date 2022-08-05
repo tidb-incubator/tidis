@@ -168,6 +168,8 @@ impl Fake {
                             }
                         }
 
+                        // retrieve current client id in advance for preventing dead lock during clients traverse
+                        let cur_client_id = cur_client.lock().await.id();
                         let mut eligible_clients: Vec<Arc<Mutex<Client>>> = vec![];
                         {
                             let lk_clients = clients.lock().await;
@@ -186,7 +188,7 @@ impl Fake {
                                 if filter_id != 0 && lk_client.id() != filter_id {
                                     continue;
                                 }
-                                if cur_client.lock().await.id() == lk_client.id() && filter_skipme {
+                                if cur_client_id == lk_client.id() && filter_skipme {
                                     continue;
                                 }
 

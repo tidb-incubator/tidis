@@ -3,6 +3,7 @@ import unittest
 from redis import exceptions
 
 from rediswrap import RedisWrapper
+from test_util import random_string
 
 
 class GenericTest(unittest.TestCase):
@@ -56,6 +57,22 @@ class GenericTest(unittest.TestCase):
             self.r.execute_command('discard')
         err = cm.exception
         self.assertEqual(str(err), 'DISCARD without MULTI')
+
+    def test_client(self):
+        client1 = self.r
+        client1_id = client1.execute_command("client id")
+        self.assertIsNotNone(client1_id)
+
+        self.assertIsNone(client1.execute_command("client getname"))
+        random_name = random_string(6)
+        self.assertTrue(client1.execute_command("client setname", random_name))
+        self.assertEqual(client1.execute_command("client getname"), random_name)
+
+        client2 = RedisWrapper.clone()
+        self.assertIsNotNone(client2.execute_command("client id"))
+        self.assertIsNotNone(client2.execute_command("client list id", client1_id))
+        self.assertEqual(client2.execute_command("client kill id", client1_id), 1)
+        self.assertEqual(client2.execute_command("client list id", client1_id), "")
 
     def tearDown(self):
         pass

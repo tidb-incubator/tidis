@@ -202,6 +202,9 @@ pub use fake::Fake;
 mod multi;
 pub use multi::Multi;
 
+mod scan;
+pub use scan::Scan;
+
 use crate::client::Client;
 use crate::{cluster::Cluster as Topo, Connection, Db, Frame, Parse, ParseError, Shutdown};
 
@@ -323,6 +326,8 @@ pub enum Command {
     Multi(Multi),
     Exec(Multi),
     Discard(Multi),
+
+    Scan(Scan),
 
     Unknown(Unknown),
 }
@@ -561,6 +566,7 @@ impl Command {
             "multi" => Command::Multi(Multi::new()),
             "exec" => Command::Exec(Multi::new()),
             "discard" => Command::Discard(Multi::new()),
+            "scan" => Command::Scan(transform_parse(Scan::parse_frames(&mut parse), &mut parse)),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -650,6 +656,7 @@ impl Command {
             "zpopmax" => Command::Zpopmax(Zpop::parse_argv(argv)?),
             "zrank" => Command::Zrank(Zrank::parse_argv(argv)?),
             "zincrby" => Command::Zincryby(Zincrby::parse_argv(argv)?),
+            "scan" => Command::Scan(Scan::parse_argv(argv)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -760,6 +767,8 @@ impl Command {
             Client(cmd) => cmd.apply("client", dst, cur_client, clients).await,
             Info(cmd) => cmd.apply("info", dst, cur_client, clients).await,
 
+            Scan(cmd) => cmd.apply(dst).await,
+
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
             // context of a `Subscribe` command.
@@ -856,6 +865,7 @@ impl Command {
             Command::Multi(_) => "multi",
             Command::Exec(_) => "exec",
             Command::Discard(_) => "discard",
+            Command::Scan(_) => "scan",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

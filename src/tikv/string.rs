@@ -5,14 +5,14 @@ use super::{
     KEY_ENCODER,
 };
 use crate::{
-    utils::{resp_bulk, resp_nil, resp_ok},
+    utils::{resp_array, resp_bulk, resp_nil, resp_ok},
     Frame,
 };
 use ::futures::future::FutureExt;
 use std::collections::HashMap;
 use std::str;
 use std::sync::Arc;
-use tikv_client::{Key, KvPair, Transaction, Value};
+use tikv_client::{BoundRange, Key, KvPair, Transaction, Value};
 use tokio::sync::Mutex;
 
 use super::errors::*;
@@ -789,5 +789,69 @@ impl StringCommandCtx {
             Ok(v) => Ok(resp_int(v)),
             Err(e) => Ok(resp_err(e)),
         }
+    }
+
+    pub async fn do_async_txnkv_scan(mut self, start: &str, count: u32) -> AsyncResult<Frame> {
+        let mut client = get_txn_client()?;
+        let ekey = KEY_ENCODER.encode_txnkv_string(start);
+
+        client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
+
+                    let mut keys = vec![];
+                    let mut next_key = vec![];
+                    let mut txn = txn_rc.lock().await;
+
+                    let range = ekey.clone()..KEY_ENCODER.encode_txnkv_keyspace_end();
+                    let bound_range: BoundRange = range.into();
+
+                    // TODO make this incremental loop for small limit count
+                    let iter = txn.scan(bound_range, 100).await?;
+
+                    for kv in iter {
+                        // skip the left bound key, this should be exclusive
+                        if &kv.0 == &ekey {
+                            continue;
+                        }
+                        let (userkey, is_meta_key) =
+                            KeyDecoder::decode_key_userkey_from_metakey(&kv.0);
+
+                        // skip the sub metakeys or data keys
+                        if !is_meta_key {
+                            continue;
+                        }
+
+                        let ttl = KeyDecoder::decode_key_ttl(&kv.1);
+                        if key_is_expired(ttl) {
+                            drop(txn);
+                            self.clone()
+                                .do_async_txnkv_del(&vec![
+                                    String::from_utf8_lossy(&userkey).to_string()
+                                ])
+                                .await?;
+                            txn = txn_rc.lock().await;
+                        }
+                        if keys.len() == (count - 1) as usize {
+                            next_key = userkey.clone();
+                            keys.push(resp_bulk(userkey));
+                            break;
+                        }
+                        keys.push(resp_bulk(userkey));
+                    }
+                    if keys.len() < count as usize {
+                        next_key = vec![];
+                    }
+                    let resp_next_key = resp_bulk(next_key);
+                    let resp_keys = resp_array(keys);
+
+                    Ok(resp_array(vec![resp_next_key, resp_keys]))
+                }
+                .boxed()
+            })
+            .await
     }
 }

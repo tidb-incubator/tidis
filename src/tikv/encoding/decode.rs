@@ -2,7 +2,7 @@ use std::convert::TryInto;
 
 use crate::tikv::KEY_ENCODER;
 
-use super::{DataType, ENC_GROUP_SIZE, ENC_MARKER, SIGN_MASK};
+use super::{encode::DATA_TYPE_META, DataType, ENC_GROUP_SIZE, ENC_MARKER, SIGN_MASK};
 use tikv_client::{Key, Value};
 
 pub struct KeyDecoder {}
@@ -174,5 +174,13 @@ impl KeyDecoder {
         let idx = 5 + Self::encoded_bytes_len(&key[enc_key_start..]);
         let version = u16::from_be_bytes(key[idx..idx + 2].try_into().unwrap());
         (ukey, version)
+    }
+
+    pub fn decode_key_userkey_from_metakey(key: &Key) -> (Vec<u8>, bool) {
+        let key: Vec<u8> = key.to_owned().into();
+        let enc_key_start = 4;
+        let idx = 4 + Self::encoded_bytes_len(&key[enc_key_start..]);
+        let ukey = Self::decode_bytes(&key[enc_key_start..]);
+        (ukey, key[idx] == DATA_TYPE_META && idx + 1 == key.len())
     }
 }

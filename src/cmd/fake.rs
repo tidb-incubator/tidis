@@ -129,9 +129,7 @@ impl Fake {
                             return match target_client {
                                 Some(client) => {
                                     let lk_client = client.lock().await;
-                                    let mut lk_clients = clients.lock().await;
                                     lk_client.kill().await;
-                                    lk_clients.remove(&lk_client.id());
                                     resp_ok()
                                 }
                                 None => resp_err(REDIS_NO_SUCH_CLIENT_ERR),
@@ -197,11 +195,9 @@ impl Fake {
                         }
 
                         let killed = eligible_clients.len() as i64;
-                        let mut lk_clients = clients.lock().await;
                         for eligible_client in eligible_clients {
                             let lk_eligible_client = eligible_client.lock().await;
                             lk_eligible_client.kill().await;
-                            lk_clients.remove(&lk_eligible_client.id());
                         }
 
                         resp_int(killed)

@@ -46,8 +46,8 @@ impl Connection {
     pub fn new(socket: TcpStream) -> Connection {
         Connection {
             tls: false,
-            local_addr: (&socket).local_addr().unwrap().to_string(),
-            peer_addr: (&socket).peer_addr().unwrap().to_string(),
+            local_addr: socket.local_addr().unwrap().to_string(),
+            peer_addr: socket.peer_addr().unwrap().to_string(),
 
             w: Some(BufWriter::new(socket.clone())),
             r: Some(BufReader::new(socket)),

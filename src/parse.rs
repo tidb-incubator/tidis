@@ -114,7 +114,7 @@ impl Parse {
                 Err(_) => Err(MSG.into()),
             },
             //Frame::Bulk(data) => atoi::<i64>(&data).ok_or_else(|| MSG.into()),
-            Frame::Bulk(data) => match String::from_utf8_lossy(&data.to_vec()).parse::<i64>() {
+            Frame::Bulk(data) => match String::from_utf8_lossy(&data).parse::<i64>() {
                 Ok(value) => Ok(value),
                 Err(_) => Err(MSG.into()),
             },

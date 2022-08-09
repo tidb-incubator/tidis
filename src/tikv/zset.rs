@@ -1336,7 +1336,7 @@ impl ZsetCommandCtx {
         let key = key.to_owned();
         let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
 
-        let resp = client
+        client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
                 async move {
                     if self.txn.is_none() {
@@ -1407,8 +1407,7 @@ impl ZsetCommandCtx {
                 }
                 .boxed()
             })
-            .await;
-        resp
+            .await
     }
 
     pub async fn do_async_txnkv_zset_expire_if_needed(mut self, key: &str) -> AsyncResult<i64> {
@@ -1416,7 +1415,7 @@ impl ZsetCommandCtx {
         let key = key.to_owned();
         let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
 
-        let resp = client
+        client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
                 async move {
                     if self.txn.is_none() {
@@ -1496,7 +1495,6 @@ impl ZsetCommandCtx {
                 }
                 .boxed()
             })
-            .await;
-        resp
+            .await
     }
 }

@@ -543,8 +543,8 @@ impl TlsListener {
                 .await
                 .insert(client_id, arc_client.clone());
 
-            let local_addr = (&stream).local_addr().unwrap().to_string();
-            let peer_addr = (&stream).peer_addr().unwrap().to_string();
+            let local_addr = stream.local_addr().unwrap().to_string();
+            let peer_addr = stream.peer_addr().unwrap().to_string();
 
             // start tls handshake
             let handshake = acceptor.accept(stream);

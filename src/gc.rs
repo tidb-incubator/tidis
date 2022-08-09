@@ -315,20 +315,17 @@ impl GcWorker {
                     // also delete gc key if version in gc key is same as task.version
                     let gc_key = KEY_ENCODER.encode_txnkv_gc_key(&user_key);
                     let version = task.version;
-                    match txn.get(gc_key.clone()).await? {
-                        Some(v) => {
-                            let ver = u16::from_be_bytes(v[..2].try_into().unwrap());
-                            if ver == version {
-                                debug!(
-                                    LOGGER,
-                                    "[GC] clean gc key for user key {} with version {}",
-                                    user_key,
-                                    version
-                                );
-                                txn.delete(gc_key).await?;
-                            }
+                    if let Some(v) = txn.get(gc_key.clone()).await? {
+                        let ver = u16::from_be_bytes(v[..2].try_into().unwrap());
+                        if ver == version {
+                            debug!(
+                                LOGGER,
+                                "[GC] clean gc key for user key {} with version {}",
+                                user_key,
+                                version
+                            );
+                            txn.delete(gc_key).await?;
                         }
-                        None => {}
                     }
                     Ok(())
                 }

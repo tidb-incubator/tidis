@@ -512,8 +512,8 @@ impl TlsListener {
             let acceptor = self.tls_acceptor.clone();
             let stream = stream?;
 
-            let local_addr = (&stream).local_addr().unwrap().to_string();
-            let peer_addr = (&stream).peer_addr().unwrap().to_string();
+            let local_addr = stream.local_addr().unwrap().to_string();
+            let peer_addr = stream.peer_addr().unwrap().to_string();
 
             // start tls handshake
             let handshake = acceptor.accept(stream);

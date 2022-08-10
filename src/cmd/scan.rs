@@ -58,7 +58,7 @@ impl Scan {
     }
 
     pub(crate) fn parse_argv(argv: &Vec<Bytes>) -> crate::Result<Scan> {
-        if argv.len() < 1 || argv.len() > 5 {
+        if argv.is_empty() || argv.len() > 5 {
             return Ok(Scan::new_invalid());
         }
 

@@ -806,44 +806,53 @@ impl StringCommandCtx {
                     let mut next_key = vec![];
                     let mut txn = txn_rc.lock().await;
 
-                    let range = ekey.clone()..KEY_ENCODER.encode_txnkv_keyspace_end();
-                    let bound_range: BoundRange = range.into();
+                    let mut left_bound = ekey.clone();
 
-                    // TODO make this incremental loop for small limit count
-                    let iter = txn.scan(bound_range, 100).await?;
+                    // set to a non-zore value before loop
+                    let mut last_round_iter_count = 1;
+                    while keys.len() < count as usize && last_round_iter_count > 0 {
+                        let range = left_bound.clone()..KEY_ENCODER.encode_txnkv_keyspace_end();
+                        let bound_range: BoundRange = range.into();
 
-                    for kv in iter {
-                        // skip the left bound key, this should be exclusive
-                        if &kv.0 == &ekey {
-                            continue;
-                        }
-                        let (userkey, is_meta_key) =
-                            KeyDecoder::decode_key_userkey_from_metakey(&kv.0);
+                        // the iterator will scan all keyspace include sub metakey and datakey
+                        let iter = txn.scan(bound_range, 100).await?;
 
-                        // skip the sub metakeys or data keys
-                        if !is_meta_key {
-                            continue;
-                        }
+                        // reset count to zero
+                        last_round_iter_count = 0;
+                        for kv in iter {
+                            last_round_iter_count += 1;
+                            // skip the left bound key, this should be exclusive
+                            if kv.0 == ekey {
+                                // check this iterator is finished or not
+                                continue;
+                            }
+                            let (userkey, is_meta_key) =
+                                KeyDecoder::decode_key_userkey_from_metakey(&kv.0);
 
-                        let ttl = KeyDecoder::decode_key_ttl(&kv.1);
-                        if key_is_expired(ttl) {
-                            drop(txn);
-                            self.clone()
-                                .do_async_txnkv_del(&vec![
-                                    String::from_utf8_lossy(&userkey).to_string()
-                                ])
-                                .await?;
-                            txn = txn_rc.lock().await;
-                        }
-                        if keys.len() == (count - 1) as usize {
-                            next_key = userkey.clone();
+                            // skip it if it is not a meta key
+                            if !is_meta_key {
+                                continue;
+                            }
+
+                            let ttl = KeyDecoder::decode_key_ttl(&kv.1);
+                            // delete it if it is expired
+                            if key_is_expired(ttl) {
+                                drop(txn);
+                                self.clone()
+                                    .do_async_txnkv_del(&vec![
+                                        String::from_utf8_lossy(&userkey).to_string()
+                                    ])
+                                    .await?;
+                                txn = txn_rc.lock().await;
+                            }
+                            if keys.len() == (count - 1) as usize {
+                                next_key = userkey.clone();
+                                keys.push(resp_bulk(userkey));
+                                break;
+                            }
                             keys.push(resp_bulk(userkey));
-                            break;
+                            left_bound = kv.0.clone();
                         }
-                        keys.push(resp_bulk(userkey));
-                    }
-                    if keys.len() < count as usize {
-                        next_key = vec![];
                     }
                     let resp_next_key = resp_bulk(next_key);
                     let resp_keys = resp_array(keys);

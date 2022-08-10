@@ -22,6 +22,7 @@ pub const RAW_KEY_PREFIX: u8 = b'r';
 pub const TXN_KEY_PREFIX: u8 = b'x';
 
 pub const DATA_TYPE_USER: u8 = b'u';
+pub const DATA_TYPE_USER_END: u8 = b'v';
 pub const DATA_TYPE_TOPO: u8 = b't';
 pub const DATA_TYPE_GC: u8 = b'g';
 pub const DATA_TYPE_GC_VERSION: u8 = b'v';
@@ -172,6 +173,14 @@ impl KeyEncoder {
         let mut key = Vec::with_capacity(5 + enc_ukey.len());
 
         self.encode_txnkv_meta_common_prefix(&enc_ukey, &mut key);
+        key.into()
+    }
+
+    pub fn encode_txnkv_keyspace_end(&self) -> Key {
+        let mut key = Vec::with_capacity(4);
+        key.push(TXN_KEY_PREFIX);
+        key.extend_from_slice(self.instance_id.as_slice());
+        key.push(DATA_TYPE_USER_END);
         key.into()
     }
 

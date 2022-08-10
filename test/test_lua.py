@@ -961,6 +961,12 @@ class LuaTest(unittest.TestCase):
         time.sleep(6)
         self.assertIsNone(self.execute_eval('get', self.k1))
 
+    def test_scan(self):
+        self.assertTrue(self.execute_eval('set', self.k1, self.v1))
+        all_scan = self.execute_eval('xscan', '', 'count', 10)
+        self.assertEqual(all_scan[0], '')
+        self.assertEqual(len(all_scan[1]), 1)
+
     def tearDown(self):
         pass
 

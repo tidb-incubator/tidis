@@ -57,6 +57,40 @@ class GenericTest(unittest.TestCase):
         err = cm.exception
         self.assertEqual(str(err), 'DISCARD without MULTI')
 
+    def test_scan(self):
+        # add some keys for scan test
+        for i in range(0, 10):
+            self.r.set('string:' + str(i), 'value' + str(i))
+            self.r.lpush('list:' + str(i), 'value' + str(i))
+            self.r.sadd('set:' + str(i), 'value' + str(i))
+            self.r.hset('hash:' + str(i), 'key' + str(i), 'value' + str(i))
+            self.r.zadd('zset:' + str(i), {'value' + str(i): i})
+        # use the custom xscan command to test the scan implementation
+        # to avoid the cursor converting to int
+        # xscan is the same as scan in server side
+        all_scan = self.r.execute_command('xscan', '', 'count', 100)
+        self.assertEqual(all_scan[0], '')
+        self.assertEqual(len(all_scan[1]), 50)
+        part1_scan = self.r.execute_command('xscan', '', 'count', 10)
+        self.assertEqual(part1_scan[0], 'hash:9')
+        self.assertEqual(len(part1_scan[1]), 10)
+        part2_scan = self.r.execute_command('xscan', part1_scan[0], 'count', 10)
+        self.assertEqual(part2_scan[0], 'list:9')
+        self.assertEqual(len(part2_scan[1]), 10)
+        match_scan = self.r.execute_command('xscan', '', 'count', 100, 'match', '^hash:*')
+        self.assertEqual(match_scan[0], '')
+        self.assertEqual(len(match_scan[1]), 10)
+
+        # clean up the keys
+        keys = []
+        for i in range(0, 10):
+            keys.append('string:' + str(i))
+            keys.append('list:' + str(i))
+            keys.append('set:' + str(i))
+            keys.append('hash:' + str(i))
+            keys.append('zset:' + str(i))
+        self.r.delete(*keys)
+
     def tearDown(self):
         pass
 

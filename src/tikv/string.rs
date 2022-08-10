@@ -5,14 +5,15 @@ use super::{
     KEY_ENCODER,
 };
 use crate::{
-    utils::{resp_bulk, resp_nil, resp_ok},
+    utils::{resp_array, resp_bulk, resp_nil, resp_ok},
     Frame,
 };
 use ::futures::future::FutureExt;
+use regex::bytes::Regex;
 use std::collections::HashMap;
 use std::str;
 use std::sync::Arc;
-use tikv_client::{Key, KvPair, Transaction, Value};
+use tikv_client::{BoundRange, Key, KvPair, Transaction, Value};
 use tokio::sync::Mutex;
 
 use super::errors::*;
@@ -789,5 +790,97 @@ impl StringCommandCtx {
             Ok(v) => Ok(resp_int(v)),
             Err(e) => Ok(resp_err(e)),
         }
+    }
+
+    pub async fn do_async_txnkv_scan(
+        mut self,
+        start: &str,
+        count: u32,
+        regex: &str,
+    ) -> AsyncResult<Frame> {
+        let mut client = get_txn_client()?;
+        let ekey = KEY_ENCODER.encode_txnkv_string(start);
+        let re = Regex::new(regex).unwrap();
+
+        client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
+
+                    let mut keys = vec![];
+                    let mut retrieved_key_count = 0;
+                    let mut next_key = vec![];
+                    let mut txn = txn_rc.lock().await;
+
+                    let mut left_bound = ekey.clone();
+
+                    // set to a non-zore value before loop
+                    let mut last_round_iter_count = 1;
+                    while retrieved_key_count < count as usize {
+                        if last_round_iter_count == 0 {
+                            next_key = vec![];
+                            break;
+                        }
+
+                        let range = left_bound.clone()..KEY_ENCODER.encode_txnkv_keyspace_end();
+                        let bound_range: BoundRange = range.into();
+
+                        // the iterator will scan all keyspace include sub metakey and datakey
+                        let iter = txn.scan(bound_range, 100).await?;
+
+                        // reset count to zero
+                        last_round_iter_count = 0;
+                        for kv in iter {
+                            // skip the left bound key, this should be exclusive
+                            if kv.0 == left_bound {
+                                continue;
+                            }
+                            left_bound = kv.0.clone();
+                            // left bound key is exclusive
+                            last_round_iter_count += 1;
+
+                            let (userkey, is_meta_key) =
+                                KeyDecoder::decode_key_userkey_from_metakey(&kv.0);
+
+                            // skip it if it is not a meta key
+                            if !is_meta_key {
+                                continue;
+                            }
+
+                            let ttl = KeyDecoder::decode_key_ttl(&kv.1);
+                            // delete it if it is expired
+                            if key_is_expired(ttl) {
+                                drop(txn);
+                                self.clone()
+                                    .do_async_txnkv_del(&vec![
+                                        String::from_utf8_lossy(&userkey).to_string()
+                                    ])
+                                    .await?;
+                                txn = txn_rc.lock().await;
+                            }
+                            if retrieved_key_count == (count - 1) as usize {
+                                next_key = userkey.clone();
+                                retrieved_key_count += 1;
+                                if re.is_match(&userkey) {
+                                    keys.push(resp_bulk(userkey));
+                                }
+                                break;
+                            }
+                            retrieved_key_count += 1;
+                            if re.is_match(&userkey) {
+                                keys.push(resp_bulk(userkey));
+                            }
+                        }
+                    }
+                    let resp_next_key = resp_bulk(next_key);
+                    let resp_keys = resp_array(keys);
+
+                    Ok(resp_array(vec![resp_next_key, resp_keys]))
+                }
+                .boxed()
+            })
+            .await
     }
 }

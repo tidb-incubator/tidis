@@ -9,6 +9,7 @@ use crate::{
     Frame,
 };
 use ::futures::future::FutureExt;
+use regex::bytes::Regex;
 use std::collections::HashMap;
 use std::str;
 use std::sync::Arc;
@@ -791,9 +792,15 @@ impl StringCommandCtx {
         }
     }
 
-    pub async fn do_async_txnkv_scan(mut self, start: &str, count: u32) -> AsyncResult<Frame> {
+    pub async fn do_async_txnkv_scan(
+        mut self,
+        start: &str,
+        count: u32,
+        regex: &str,
+    ) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let ekey = KEY_ENCODER.encode_txnkv_string(start);
+        let re = Regex::new(regex).unwrap();
 
         client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -803,6 +810,7 @@ impl StringCommandCtx {
                     }
 
                     let mut keys = vec![];
+                    let mut retrieved_key_count = 0;
                     let mut next_key = vec![];
                     let mut txn = txn_rc.lock().await;
 
@@ -810,7 +818,12 @@ impl StringCommandCtx {
 
                     // set to a non-zore value before loop
                     let mut last_round_iter_count = 1;
-                    while keys.len() < count as usize && last_round_iter_count > 0 {
+                    while retrieved_key_count < count as usize {
+                        if last_round_iter_count == 0 {
+                            next_key = vec![];
+                            break;
+                        }
+
                         let range = left_bound.clone()..KEY_ENCODER.encode_txnkv_keyspace_end();
                         let bound_range: BoundRange = range.into();
 
@@ -820,12 +833,14 @@ impl StringCommandCtx {
                         // reset count to zero
                         last_round_iter_count = 0;
                         for kv in iter {
-                            last_round_iter_count += 1;
                             // skip the left bound key, this should be exclusive
-                            if kv.0 == ekey {
-                                // check this iterator is finished or not
+                            if kv.0 == left_bound {
                                 continue;
                             }
+                            left_bound = kv.0.clone();
+                            // left bound key is exclusive
+                            last_round_iter_count += 1;
+
                             let (userkey, is_meta_key) =
                                 KeyDecoder::decode_key_userkey_from_metakey(&kv.0);
 
@@ -845,13 +860,18 @@ impl StringCommandCtx {
                                     .await?;
                                 txn = txn_rc.lock().await;
                             }
-                            if keys.len() == (count - 1) as usize {
+                            if retrieved_key_count == (count - 1) as usize {
                                 next_key = userkey.clone();
-                                keys.push(resp_bulk(userkey));
+                                retrieved_key_count += 1;
+                                if re.is_match(&userkey) {
+                                    keys.push(resp_bulk(userkey));
+                                }
                                 break;
                             }
-                            keys.push(resp_bulk(userkey));
-                            left_bound = kv.0.clone();
+                            retrieved_key_count += 1;
+                            if re.is_match(&userkey) {
+                                keys.push(resp_bulk(userkey));
+                            }
                         }
                     }
                     let resp_next_key = resp_bulk(next_key);

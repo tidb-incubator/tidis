@@ -99,6 +99,7 @@ impl Multi {
                 Command::Zrank(cmd) => cmd.zrank(txn_rc.clone()).await,
                 Command::Zincryby(cmd) => cmd.zincrby(txn_rc.clone()).await,
                 Command::Scan(cmd) => cmd.scan(txn_rc.clone()).await,
+                Command::Xscan(cmd) => cmd.scan(txn_rc.clone()).await,
                 _ => Ok(resp_invalid_arguments()),
             };
             match result {

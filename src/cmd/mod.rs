@@ -328,6 +328,8 @@ pub enum Command {
     Discard(Multi),
 
     Scan(Scan),
+    // Xscan command is same as scan, for testing purpose, avoid some client decoding the response
+    Xscan(Scan),
 
     Unknown(Unknown),
 }
@@ -567,6 +569,7 @@ impl Command {
             "exec" => Command::Exec(Multi::new()),
             "discard" => Command::Discard(Multi::new()),
             "scan" => Command::Scan(transform_parse(Scan::parse_frames(&mut parse), &mut parse)),
+            "xscan" => Command::Scan(transform_parse(Scan::parse_frames(&mut parse), &mut parse)),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -657,6 +660,7 @@ impl Command {
             "zrank" => Command::Zrank(Zrank::parse_argv(argv)?),
             "zincrby" => Command::Zincryby(Zincrby::parse_argv(argv)?),
             "scan" => Command::Scan(Scan::parse_argv(argv)?),
+            "xscan" => Command::Scan(Scan::parse_argv(argv)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -768,6 +772,7 @@ impl Command {
             Info(cmd) => cmd.apply("info", dst, cur_client, clients).await,
 
             Scan(cmd) => cmd.apply(dst).await,
+            Xscan(cmd) => cmd.apply(dst).await,
 
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the
@@ -866,6 +871,7 @@ impl Command {
             Command::Exec(_) => "exec",
             Command::Discard(_) => "discard",
             Command::Scan(_) => "scan",
+            Command::Xscan(_) => "xscan",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

@@ -37,6 +37,7 @@ async-std = { version = "1.11.0", features = ["unstable"] }
 async-tls = { version = "0.11.0", features = ["server"], default-features = false }
 rustls = "0.19.0"
 rand = {version = "0.8.5", features = ["small_rng"] }
+regex = "1"
 toml = { version = "0.5.8" }
 serde = { version = "1.0", features = ["derive"] }
 futures = { version = "0.3", default-features = false }

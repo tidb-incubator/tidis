@@ -826,5 +826,5 @@ pub fn backend_max_inflight_requests_or_default() -> usize {
         }
     }
     // default backend max inflight requests
-    100
+    10000
 }

@@ -18,8 +18,9 @@ use crate::{
     backend_completion_queue_size_or_default, backend_grpc_keepalive_time_or_default,
     backend_grpc_keepalive_timeout_or_default, backend_key_file_or_default,
     backend_max_batch_size_or_default, backend_max_batch_wait_time_or_default,
-    backend_overload_threshold_or_default, backend_timeout_or_default,
-    config_meta_key_number_or_default, conn_concurrency_or_default, fetch_idx_and_add,
+    backend_max_inflight_requests_or_default, backend_overload_threshold_or_default,
+    backend_timeout_or_default, config_meta_key_number_or_default, conn_concurrency_or_default,
+    fetch_idx_and_add,
 };
 
 use self::client::RawClientWrapper;
@@ -137,6 +138,7 @@ pub async fn do_async_txn_connect(addrs: Vec<String>) -> AsyncResult<()> {
         .with_kv_allow_batch(backend_allow_batch_or_default())
         .with_kv_overload_threshold(backend_overload_threshold_or_default())
         .with_kv_max_batch_size(backend_max_batch_size_or_default())
+        .with_kv_max_inflight_requests(backend_max_inflight_requests_or_default())
         .with_kv_max_batch_wait_time(backend_max_batch_wait_time_or_default());
     if !backend_ca_file_or_default().is_empty()
         || !backend_cert_file_or_default().is_empty()

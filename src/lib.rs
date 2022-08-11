@@ -94,6 +94,7 @@ pub use config::backend_grpc_keepalive_timeout_or_default;
 pub use config::backend_key_file_or_default;
 pub use config::backend_max_batch_size_or_default;
 pub use config::backend_max_batch_wait_time_or_default;
+pub use config::backend_max_inflight_requests_or_default;
 pub use config::backend_overload_threshold_or_default;
 pub use config::backend_timeout_or_default;
 pub use config::cmd_linsert_length_limit_or_default;

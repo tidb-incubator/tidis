@@ -71,9 +71,10 @@ struct Backend {
     grpc_keepalive_time: Option<u64>,
     grpc_keepalive_timeout: Option<u64>,
     allow_batch: Option<bool>,
-    overload_threshold: Option<usize>,
+    overload_threshold: Option<u64>,
     max_batch_wait_time: Option<u64>,
     max_batch_size: Option<usize>,
+    max_inflight_requests: Option<usize>,
 
     txn_retry_count: Option<u32>,
     txn_region_backoff_delay_ms: Option<u64>,
@@ -781,7 +782,7 @@ pub fn backend_allow_batch_or_default() -> bool {
     false
 }
 
-pub fn backend_overload_threshold_or_default() -> usize {
+pub fn backend_overload_threshold_or_default() -> u64 {
     unsafe {
         if let Some(c) = &SERVER_CONFIG {
             if let Some(b) = c.backend.overload_threshold {
@@ -814,4 +815,16 @@ pub fn backend_max_batch_size_or_default() -> usize {
     }
     // default backend max batch size
     8
+}
+
+pub fn backend_max_inflight_requests_or_default() -> usize {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.max_inflight_requests {
+                return b;
+            }
+        }
+    }
+    // default backend max inflight requests
+    100
 }

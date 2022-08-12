@@ -482,6 +482,11 @@ impl Listener {
                 if let Err(err) = handler.run().await {
                     error!(LOGGER, "connection error {:?}", err);
                 }
+                handler
+                    .clients
+                    .lock()
+                    .await
+                    .remove(&handler.cur_client.lock().await.id());
                 CURRENT_CONNECTION_COUNTER.dec();
             });
         }
@@ -582,6 +587,11 @@ impl TlsListener {
                 if let Err(err) = handler.run().await {
                     error!(LOGGER, "tls connection error {:?}", err);
                 }
+                handler
+                    .clients
+                    .lock()
+                    .await
+                    .remove(&handler.cur_client.lock().await.id());
                 CURRENT_TLS_CONNECTION_COUNTER.dec();
             });
         }

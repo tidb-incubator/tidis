@@ -9,11 +9,10 @@ use crate::tikv::errors::{
     REDIS_INVALID_CLIENT_ID_ERR, REDIS_NOT_SUPPORTED_ERR, REDIS_NO_SUCH_CLIENT_ERR,
     REDIS_VALUE_IS_NOT_INTEGER_ERR,
 };
-use crate::utils::{resp_int, resp_str};
 use crate::{
     config::LOGGER,
     tikv::errors::REDIS_UNKNOWN_SUBCOMMAND,
-    utils::{resp_bulk, resp_err, resp_invalid_arguments, resp_nil, resp_ok},
+    utils::{resp_bulk, resp_err, resp_int, resp_invalid_arguments, resp_nil, resp_ok},
     Connection, Frame, Parse,
 };
 
@@ -129,9 +128,7 @@ impl Fake {
                             return match target_client {
                                 Some(client) => {
                                     let lk_client = client.lock().await;
-                                    let mut lk_clients = clients.lock().await;
                                     lk_client.kill().await;
-                                    lk_clients.remove(&lk_client.id());
                                     resp_ok()
                                 }
                                 None => resp_err(REDIS_NO_SUCH_CLIENT_ERR),
@@ -197,11 +194,9 @@ impl Fake {
                         }
 
                         let killed = eligible_clients.len() as i64;
-                        let mut lk_clients = clients.lock().await;
                         for eligible_client in eligible_clients {
                             let lk_eligible_client = eligible_client.lock().await;
                             lk_eligible_client.kill().await;
-                            lk_clients.remove(&lk_eligible_client.id());
                         }
 
                         resp_int(killed)
@@ -217,12 +212,12 @@ impl Fake {
                     }
                     "GETNAME" => {
                         let r_cur_client = cur_client.lock().await;
-                        let name = r_cur_client.name();
+                        let name = r_cur_client.name().to_owned();
                         if name.is_empty() {
                             return resp_nil();
                         }
 
-                        resp_str(name)
+                        resp_bulk(name.into_bytes())
                     }
                     _ => resp_err(REDIS_UNKNOWN_SUBCOMMAND),
                 }

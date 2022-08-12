@@ -9,7 +9,7 @@ use crate::tikv::errors::{
     REDIS_INVALID_CLIENT_ID_ERR, REDIS_NOT_SUPPORTED_ERR, REDIS_NO_SUCH_CLIENT_ERR,
     REDIS_VALUE_IS_NOT_INTEGER_ERR,
 };
-use crate::utils::resp_int;
+use crate::utils::{resp_int, resp_str};
 use crate::{
     config::LOGGER,
     tikv::errors::REDIS_UNKNOWN_SUBCOMMAND,
@@ -42,7 +42,7 @@ impl Fake {
         self,
         command: &str,
         dst: &mut Connection,
-        cur_client: u64,
+        cur_client: Arc<Mutex<Client>>,
         clients: Arc<Mutex<HashMap<u64, Arc<Mutex<Client>>>>>,
     ) -> crate::Result<()> {
         let response = self.do_apply(command, cur_client, clients).await;
@@ -63,7 +63,7 @@ impl Fake {
     async fn do_apply(
         self,
         command: &str,
-        cur_client: u64,
+        cur_client: Arc<Mutex<Client>>,
         clients: Arc<Mutex<HashMap<u64, Arc<Mutex<Client>>>>>,
     ) -> Frame {
         if !self.valid {
@@ -73,14 +73,16 @@ impl Fake {
             "READWRITE" => resp_ok(),
             "READONLY" => resp_ok(),
             "CLIENT" => {
+                // TODO client more management will be added later
                 match self.args[0].clone().to_uppercase().as_str() {
-                    "ID" => resp_int(cur_client as i64),
+                    "ID" => resp_int(cur_client.lock().await.id() as i64),
                     "LIST" => {
                         if self.args.len() == 1 {
-                            let clients_guard = clients.lock().await;
                             return resp_bulk(
-                                encode_clients_info(clients_guard.clone().into_values().collect())
-                                    .await,
+                                encode_clients_info(
+                                    clients.lock().await.clone().into_values().collect(),
+                                )
+                                .await,
                             );
                         }
 
@@ -113,19 +115,23 @@ impl Fake {
                         // three arguments format (old format)
                         if self.args.len() == 2 {
                             let mut target_client = None;
-                            let clients_guard = clients.lock().await;
-                            for client in clients_guard.values() {
-                                // make sure get the client guard with clients aguard obtained
-                                let client = client.lock().await;
-                                if client.peer_addr() == self.args[1] {
-                                    target_client = Some(client.clone());
-                                    break;
+                            {
+                                let lk_clients = clients.lock().await;
+                                for client in lk_clients.values() {
+                                    let lk_client = client.lock().await;
+                                    if lk_client.peer_addr() == self.args[1] {
+                                        target_client = Some(client.clone());
+                                        break;
+                                    }
                                 }
                             }
 
                             return match target_client {
                                 Some(client) => {
-                                    client.kill().await;
+                                    let lk_client = client.lock().await;
+                                    let mut lk_clients = clients.lock().await;
+                                    lk_client.kill().await;
+                                    lk_clients.remove(&lk_client.id());
                                     resp_ok()
                                 }
                                 None => resp_err(REDIS_NO_SUCH_CLIENT_ERR),
@@ -163,34 +169,39 @@ impl Fake {
                         }
 
                         // retrieve current client id in advance for preventing dead lock during clients traverse
+                        let cur_client_id = cur_client.lock().await.id();
                         let mut eligible_clients: Vec<Arc<Mutex<Client>>> = vec![];
-                        let clients_guard = clients.lock().await;
-                        for client in clients_guard.values() {
-                            let client_guard = client.lock().await;
-                            if !filter_peer_addr.is_empty()
-                                && client_guard.peer_addr() != filter_peer_addr
-                            {
-                                continue;
-                            }
-                            if !filter_local_addr.is_empty()
-                                && client_guard.local_addr() != filter_local_addr
-                            {
-                                continue;
-                            }
-                            if filter_id != 0 && client_guard.id() != filter_id {
-                                continue;
-                            }
-                            if cur_client == client_guard.id() && filter_skipme {
-                                continue;
-                            }
+                        {
+                            let lk_clients = clients.lock().await;
+                            for client in lk_clients.values() {
+                                let lk_client = client.lock().await;
+                                if !filter_peer_addr.is_empty()
+                                    && lk_client.peer_addr() != filter_peer_addr
+                                {
+                                    continue;
+                                }
+                                if !filter_local_addr.is_empty()
+                                    && lk_client.local_addr() != filter_local_addr
+                                {
+                                    continue;
+                                }
+                                if filter_id != 0 && lk_client.id() != filter_id {
+                                    continue;
+                                }
+                                if cur_client_id == lk_client.id() && filter_skipme {
+                                    continue;
+                                }
 
-                            eligible_clients.push(client.clone());
+                                eligible_clients.push(client.clone());
+                            }
                         }
 
                         let killed = eligible_clients.len() as i64;
+                        let mut lk_clients = clients.lock().await;
                         for eligible_client in eligible_clients {
-                            // make sure get the client guard with clients aguard obtained
-                            eligible_client.lock().await.kill().await;
+                            let lk_eligible_client = eligible_client.lock().await;
+                            lk_eligible_client.kill().await;
+                            lk_clients.remove(&lk_eligible_client.id());
                         }
 
                         resp_int(killed)
@@ -200,30 +211,18 @@ impl Fake {
                             return resp_invalid_arguments();
                         }
 
-                        let clients_guard = clients.lock().await;
-                        clients_guard
-                            .get(&cur_client)
-                            .unwrap()
-                            .lock()
-                            .await
-                            .set_name(&self.args[1]);
-
+                        let mut w_cur_client = cur_client.lock().await;
+                        w_cur_client.set_name(&self.args[1]);
                         resp_ok()
                     }
                     "GETNAME" => {
-                        let clients_guard = clients.lock().await;
-                        let name = clients_guard
-                            .get(&cur_client)
-                            .unwrap()
-                            .lock()
-                            .await
-                            .name()
-                            .to_owned();
+                        let r_cur_client = cur_client.lock().await;
+                        let name = r_cur_client.name();
                         if name.is_empty() {
                             return resp_nil();
                         }
 
-                        resp_bulk(name.into_bytes())
+                        resp_str(name)
                     }
                     _ => resp_err(REDIS_UNKNOWN_SUBCOMMAND),
                 }
@@ -249,8 +248,8 @@ impl Fake {
 async fn encode_clients_info(clients: Vec<Arc<Mutex<Client>>>) -> Vec<u8> {
     let mut resp_list = String::new();
     for client in clients {
-        let client = client.lock().await;
-        resp_list.push_str(&client.to_string());
+        let r_client = client.lock().await;
+        resp_list.push_str(&r_client.to_string());
         resp_list.push('\n');
     }
 

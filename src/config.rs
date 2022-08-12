@@ -790,7 +790,7 @@ pub fn backend_overload_threshold_or_default() -> u64 {
             }
         }
     }
-    100
+    0
 }
 
 pub fn backend_max_batch_wait_time_or_default() -> u64 {

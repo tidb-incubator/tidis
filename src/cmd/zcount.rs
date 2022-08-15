@@ -48,18 +48,14 @@ impl Zcount {
             bmin.advance(1);
             min_inclusive = false;
         }
-        let min = String::from_utf8_lossy(&bmin.to_vec())
-            .parse::<f64>()
-            .unwrap();
+        let min = String::from_utf8_lossy(&bmin).parse::<f64>().unwrap();
 
         let mut bmax = parse.next_bytes()?;
         if bmax[0] == b'(' {
             bmax.advance(1);
             max_inclusive = false;
         }
-        let max = String::from_utf8_lossy(&bmax.to_vec())
-            .parse::<f64>()
-            .unwrap();
+        let max = String::from_utf8_lossy(&bmax).parse::<f64>().unwrap();
 
         let z = Zcount::new(&key, min, min_inclusive, max, max_inclusive);
 

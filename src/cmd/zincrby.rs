@@ -36,7 +36,7 @@ impl Zincrby {
         let step_byte = parse.next_bytes()?;
         let member = parse.next_string()?;
 
-        let step = String::from_utf8_lossy(&step_byte.to_vec()).parse::<f64>()?;
+        let step = String::from_utf8_lossy(&step_byte).parse::<f64>()?;
 
         Ok(Zincrby::new(&key, step, &member))
     }

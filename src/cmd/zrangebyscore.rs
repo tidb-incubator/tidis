@@ -66,9 +66,7 @@ impl Zrangebyscore {
         }
 
         if min == 0f64 {
-            min = String::from_utf8_lossy(&bmin.to_vec())
-                .parse::<f64>()
-                .unwrap();
+            min = String::from_utf8_lossy(&bmin).parse::<f64>().unwrap();
         }
 
         let mut bmax = parse.next_bytes()?;
@@ -82,9 +80,7 @@ impl Zrangebyscore {
         }
 
         if max == 0f64 {
-            max = String::from_utf8_lossy(&bmax.to_vec())
-                .parse::<f64>()
-                .unwrap();
+            max = String::from_utf8_lossy(&bmax).parse::<f64>().unwrap();
         }
 
         let mut withscores = false;
@@ -128,9 +124,7 @@ impl Zrangebyscore {
         }
 
         if min == 0f64 {
-            min = String::from_utf8_lossy(&bmin.to_vec())
-                .parse::<f64>()
-                .unwrap();
+            min = String::from_utf8_lossy(&bmin).parse::<f64>().unwrap();
         }
 
         let mut bmax = argv[2].clone();
@@ -144,9 +138,7 @@ impl Zrangebyscore {
         }
 
         if max == 0f64 {
-            max = String::from_utf8_lossy(&bmax.to_vec())
-                .parse::<f64>()
-                .unwrap();
+            max = String::from_utf8_lossy(&bmax).parse::<f64>().unwrap();
         }
 
         let mut withscores = false;

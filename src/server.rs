@@ -132,7 +132,7 @@ struct Handler {
     db: Db,
 
     topo: Cluster,
-    cur_client_id: u64,
+    cur_client: Arc<Mutex<Client>>,
     clients: Arc<Mutex<HashMap<u64, Arc<Mutex<Client>>>>>,
 
     /// The TCP connection decorated with the redis protocol encoder / decoder
@@ -449,7 +449,7 @@ impl Listener {
                 db: self.db_holder.db(),
 
                 topo: self.topo_holder.clone(),
-                cur_client_id: client_id,
+                cur_client: arc_client.clone(),
                 clients: self.clients.clone(),
 
                 // Initialize the connection state. This allocates read/write
@@ -475,15 +475,18 @@ impl Listener {
                 // dropped.
                 _shutdown_complete: self.shutdown_complete_tx.clone(),
             };
-
-            local_pool.spawn_pinned(move || async move {
+            local_pool.spawn_pinned(|| async move {
                 // Process the connection. If an error is encountered, log it.
                 CURRENT_CONNECTION_COUNTER.inc();
                 TOTAL_CONNECTION_PROCESSED.inc();
                 if let Err(err) = handler.run().await {
                     error!(LOGGER, "connection error {:?}", err);
                 }
-                handler.clients.lock().await.remove(&client_id);
+                handler
+                    .clients
+                    .lock()
+                    .await
+                    .remove(&handler.cur_client.lock().await.id());
                 CURRENT_CONNECTION_COUNTER.dec();
             });
         }
@@ -543,8 +546,8 @@ impl TlsListener {
                 .await
                 .insert(client_id, arc_client.clone());
 
-            let local_addr = (&stream).local_addr().unwrap().to_string();
-            let peer_addr = (&stream).peer_addr().unwrap().to_string();
+            let local_addr = stream.local_addr().unwrap().to_string();
+            let peer_addr = stream.peer_addr().unwrap().to_string();
 
             // start tls handshake
             let handshake = acceptor.accept(stream);
@@ -566,7 +569,7 @@ impl TlsListener {
             let mut handler = Handler {
                 db: self.db_holder.db(),
                 topo: self.topo_holder.clone(),
-                cur_client_id: client_id,
+                cur_client: arc_client.clone(),
                 clients: self.clients.clone(),
                 connection: Connection::new_tls(&local_addr, &peer_addr, tls_stream),
                 inner_txn: false,
@@ -577,14 +580,18 @@ impl TlsListener {
                 _shutdown_complete: self.tls_shutdown_complete_tx.clone(),
             };
 
-            local_pool.spawn_pinned(move || async move {
+            local_pool.spawn_pinned(|| async move {
                 // Process the connection. If an error is encountered, log it.
                 CURRENT_TLS_CONNECTION_COUNTER.inc();
                 TOTAL_CONNECTION_PROCESSED.inc();
                 if let Err(err) = handler.run().await {
                     error!(LOGGER, "tls connection error {:?}", err);
                 }
-                handler.clients.lock().await.remove(&client_id);
+                handler
+                    .clients
+                    .lock()
+                    .await
+                    .remove(&handler.cur_client.lock().await.id());
                 CURRENT_TLS_CONNECTION_COUNTER.dec();
             });
         }
@@ -709,15 +716,10 @@ impl Handler {
             let cmd = Command::from_frame(frame)?;
             let cmd_name = cmd.get_name().to_owned();
 
-            let clients_guard = self.clients.lock().await;
-            // make sure get the client guard with clients aguard obtained
-            clients_guard
-                .get(&self.cur_client_id)
-                .unwrap()
-                .lock()
-                .await
-                .interact(&cmd_name);
-            drop(clients_guard);
+            {
+                let mut w_client = self.cur_client.lock().await;
+                w_client.interact(&cmd_name);
+            }
 
             let start_at = Instant::now();
             REQUEST_COUNTER.inc();
@@ -827,7 +829,7 @@ impl Handler {
                                 &self.db,
                                 &self.topo,
                                 &mut self.connection,
-                                self.cur_client_id,
+                                self.cur_client.clone(),
                                 self.clients.clone(),
                                 &mut self.lua,
                                 &mut self.shutdown,

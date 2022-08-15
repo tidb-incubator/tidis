@@ -24,21 +24,18 @@ pub async fn main() -> tikv_service::Result<()> {
 
     let mut config: Option<Config> = None;
 
-    match cli.config {
-        Some(config_file_name) => {
-            let config_content =
-                fs::read_to_string(config_file_name).expect("Failed to read config file");
+    if let Some(config_file_name) = cli.config {
+        let config_content =
+            fs::read_to_string(config_file_name).expect("Failed to read config file");
 
-            // deserialize toml config
-            config = match toml::from_str(&config_content) {
-                Ok(d) => Some(d),
-                Err(e) => {
-                    println!("Unable to load config file {}", e);
-                    exit(1);
-                }
-            };
-        }
-        None => (),
+        // deserialize toml config
+        config = match toml::from_str(&config_content) {
+            Ok(d) => Some(d),
+            Err(e) => {
+                println!("Unable to load config file {}", e);
+                exit(1);
+            }
+        };
     };
 
     match &config {

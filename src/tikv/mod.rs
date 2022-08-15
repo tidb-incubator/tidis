@@ -14,7 +14,11 @@ use crate::config::LOGGER;
 use crate::tikv::encoding::KeyEncoder;
 use crate::tikv::errors::REDIS_BACKEND_NOT_CONNECTED_ERR;
 use crate::{
-    backend_ca_file_or_default, backend_cert_file_or_default, backend_key_file_or_default,
+    backend_allow_batch_or_default, backend_ca_file_or_default, backend_cert_file_or_default,
+    backend_completion_queue_size_or_default, backend_grpc_keepalive_time_or_default,
+    backend_grpc_keepalive_timeout_or_default, backend_key_file_or_default,
+    backend_max_batch_size_or_default, backend_max_batch_wait_time_or_default,
+    backend_max_inflight_requests_or_default, backend_overload_threshold_or_default,
     backend_timeout_or_default, config_meta_key_number_or_default, conn_concurrency_or_default,
     fetch_idx_and_add,
 };
@@ -125,7 +129,17 @@ pub async fn do_async_txn_connect(addrs: Vec<String>) -> AsyncResult<()> {
     PD_ADDRS.write().unwrap().replace(addrs.clone());
 
     let mut config = tikv_client::Config::default()
-        .with_timeout(Duration::from_millis(backend_timeout_or_default()));
+        .with_timeout(Duration::from_millis(backend_timeout_or_default()))
+        .with_kv_timeout(backend_timeout_or_default())
+        .with_kv_allow_batch(backend_allow_batch_or_default())
+        .with_kv_completion_queue_size(backend_completion_queue_size_or_default())
+        .with_kv_grpc_keepalive_time(backend_grpc_keepalive_time_or_default())
+        .with_kv_grpc_keepalive_timeout(backend_grpc_keepalive_timeout_or_default())
+        .with_kv_allow_batch(backend_allow_batch_or_default())
+        .with_kv_overload_threshold(backend_overload_threshold_or_default())
+        .with_kv_max_batch_size(backend_max_batch_size_or_default())
+        .with_kv_max_inflight_requests(backend_max_inflight_requests_or_default())
+        .with_kv_max_batch_wait_time(backend_max_batch_wait_time_or_default());
     if !backend_ca_file_or_default().is_empty()
         || !backend_cert_file_or_default().is_empty()
         || !backend_key_file_or_default().is_empty()

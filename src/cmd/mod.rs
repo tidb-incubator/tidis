@@ -681,7 +681,7 @@ impl Command {
         db: &Db,
         topo: &Topo,
         dst: &mut Connection,
-        cur_client_id: u64,
+        cur_client: Arc<Mutex<Client>>,
         clients: Arc<Mutex<HashMap<u64, Arc<Mutex<Client>>>>>,
         lua: &mut Option<Lua>,
         shutdown: &mut Shutdown,
@@ -766,10 +766,10 @@ impl Command {
             Debug(cmd) => cmd.apply(dst).await,
 
             Cluster(cmd) => cmd.apply(topo, dst).await,
-            ReadWrite(cmd) => cmd.apply("readwrite", dst, cur_client_id, clients).await,
-            ReadOnly(cmd) => cmd.apply("readonly", dst, cur_client_id, clients).await,
-            Client(cmd) => cmd.apply("client", dst, cur_client_id, clients).await,
-            Info(cmd) => cmd.apply("info", dst, cur_client_id, clients).await,
+            ReadWrite(cmd) => cmd.apply("readwrite", dst, cur_client, clients).await,
+            ReadOnly(cmd) => cmd.apply("readonly", dst, cur_client, clients).await,
+            Client(cmd) => cmd.apply("client", dst, cur_client, clients).await,
+            Info(cmd) => cmd.apply("info", dst, cur_client, clients).await,
 
             Scan(cmd) => cmd.apply(dst).await,
             Xscan(cmd) => cmd.apply(dst).await,

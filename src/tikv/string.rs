@@ -174,7 +174,7 @@ impl StringCommandCtx {
     pub async fn do_async_rawkv_put(self, key: &str, val: &Bytes) -> AsyncResult<Frame> {
         let client = get_client()?;
         let ekey = KEY_ENCODER.encode_rawkv_string(key);
-        let _ = client.put(ekey, val.to_vec()).await?;
+        client.put(ekey, val.to_vec()).await?;
         Ok(resp_ok())
     }
 
@@ -264,7 +264,7 @@ impl StringCommandCtx {
 
     pub async fn do_async_rawkv_batch_put(self, kvs: Vec<KvPair>) -> AsyncResult<Frame> {
         let client = get_client()?;
-        let _ = client.batch_put(kvs).await?;
+        client.batch_put(kvs).await?;
         Ok(resp_ok())
     }
 
@@ -379,19 +379,16 @@ impl StringCommandCtx {
                     for key in &keys {
                         let ekey = KEY_ENCODER.encode_txnkv_string(key);
                         let mut txn = txn_rc.lock().await;
-                        match txn.get(ekey).await? {
-                            Some(v) => {
-                                let ttl = KeyDecoder::decode_key_ttl(&v);
-                                if key_is_expired(ttl) {
-                                    drop(txn);
-                                    self.clone()
-                                        .do_async_txnkv_string_expire_if_needed(key)
-                                        .await?;
-                                } else {
-                                    cnt += 1;
-                                }
+                        if let Some(v) = txn.get(ekey).await? {
+                            let ttl = KeyDecoder::decode_key_ttl(&v);
+                            if key_is_expired(ttl) {
+                                drop(txn);
+                                self.clone()
+                                    .do_async_txnkv_string_expire_if_needed(key)
+                                    .await?;
+                            } else {
+                                cnt += 1;
                             }
-                            None => {}
                         }
                     }
                     Ok(resp_int(cnt as i64))
@@ -494,7 +491,7 @@ impl StringCommandCtx {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
 
-        let resp = client
+        client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
                 async move {
                     if self.txn.is_none() {
@@ -510,16 +507,14 @@ impl StringCommandCtx {
                 }
                 .boxed()
             })
-            .await;
-
-        resp
+            .await
     }
 
     pub async fn do_async_txnkv_string_expire_if_needed(mut self, key: &str) -> AsyncResult<i64> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
 
-        let resp = client
+        client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
                 async move {
                     if self.txn.is_none() {
@@ -541,9 +536,7 @@ impl StringCommandCtx {
                 }
                 .boxed()
             })
-            .await;
-
-        resp
+            .await
     }
 
     pub async fn do_async_txnkv_expire(mut self, key: &str, timestamp: u64) -> AsyncResult<Frame> {

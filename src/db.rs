@@ -254,6 +254,7 @@ impl Db {
     ///
     /// The returned `Receiver` is used to receive values broadcast by `PUBLISH`
     /// commands.
+    #[allow(clippy::significant_drop_in_scrutinee)]
     pub(crate) fn subscribe(&self, key: String) -> broadcast::Receiver<Bytes> {
         use std::collections::hash_map::Entry;
 

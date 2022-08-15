@@ -64,7 +64,7 @@ impl<'a> LuaCommandCtx<'a> {
             let txn_rc = txn_rc.clone();
             // package arguments(without cmd) to argv
             async move {
-                if (&args).len() == 0 {
+                if args.len() == 0 {
                     let table = _lua.create_table().unwrap();
                     table.raw_set("err", "Invalid arguments, please specify at least one argument for redis.call()").unwrap();
                     return Ok(LuaValue::Table(table));
@@ -242,7 +242,7 @@ impl<'a> LuaCommandCtx<'a> {
         match script {
             Some(script) => Ok(self
                 .clone()
-                .do_async_eval_inner(&String::from_utf8_lossy(&script.to_vec()), keys, args)
+                .do_async_eval_inner(&String::from_utf8_lossy(&script), keys, args)
                 .await?),
             None => Ok(resp_err(REDIS_NO_MATCHING_SCRIPT_ERR)),
         }

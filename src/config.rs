@@ -65,6 +65,17 @@ struct Backend {
     try_one_pc_commit: Option<bool>,
     use_pessimistic_txn: Option<bool>,
     local_pool_number: Option<usize>,
+
+    // kv client config
+    completion_queue_size: Option<usize>,
+    grpc_keepalive_time: Option<u64>,
+    grpc_keepalive_timeout: Option<u64>,
+    allow_batch: Option<bool>,
+    overload_threshold: Option<u64>,
+    max_batch_wait_time: Option<u64>,
+    max_batch_size: Option<usize>,
+    max_inflight_requests: Option<usize>,
+
     txn_retry_count: Option<u32>,
     txn_region_backoff_delay_ms: Option<u64>,
     txn_region_backoff_delay_attemps: Option<u32>,
@@ -721,4 +732,99 @@ pub fn conn_concurrency_or_default() -> usize {
     }
     // default backend connection concurrency
     10
+}
+
+pub fn backend_completion_queue_size_or_default() -> usize {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.completion_queue_size {
+                return b;
+            }
+        }
+    }
+    // default backend completion queue size
+    1
+}
+
+pub fn backend_grpc_keepalive_time_or_default() -> u64 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.grpc_keepalive_time {
+                return b;
+            }
+        }
+    }
+    // default backend grpc keepalive time in ms
+    10000
+}
+
+pub fn backend_grpc_keepalive_timeout_or_default() -> u64 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.grpc_keepalive_timeout {
+                return b;
+            }
+        }
+    }
+    // default backend grpc keepalive timeout in ms
+    2000
+}
+
+pub fn backend_allow_batch_or_default() -> bool {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.allow_batch {
+                return b;
+            }
+        }
+    }
+    // default backend not allow batch
+    false
+}
+
+pub fn backend_overload_threshold_or_default() -> u64 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.overload_threshold {
+                return b;
+            }
+        }
+    }
+    0
+}
+
+pub fn backend_max_batch_wait_time_or_default() -> u64 {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.max_batch_wait_time {
+                return b;
+            }
+        }
+    }
+    // default backend max batch wait time in ms
+    10
+}
+
+pub fn backend_max_batch_size_or_default() -> usize {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.max_batch_size {
+                return b;
+            }
+        }
+    }
+    // default backend max batch size
+    8
+}
+
+pub fn backend_max_inflight_requests_or_default() -> usize {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(b) = c.backend.max_inflight_requests {
+                return b;
+            }
+        }
+    }
+    // default backend max inflight requests
+    100
 }

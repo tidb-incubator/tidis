@@ -528,18 +528,20 @@ impl SetCommandCtx {
 
                             drop(txn);
                             let size = self.txnkv_sum_key_size(&key, version).await?;
+                            let data_keys: Vec<Key> = members
+                                .iter()
+                                .map(|member| {
+                                    KEY_ENCODER.encode_txnkv_set_data_key(&key, member, version)
+                                })
+                                .collect();
+                            let mut removed: i64 = 0;
                             txn = txn_rc.lock().await;
 
-                            let mut removed: i64 = 0;
-                            for member in &members {
-                                // check member exists
-                                let data_key =
-                                    KEY_ENCODER.encode_txnkv_set_data_key(&key, member, version);
-                                if txn.key_exists(data_key.clone()).await? {
-                                    removed += 1;
-                                    txn.delete(data_key).await?;
-                                }
+                            for pair in txn.batch_get(data_keys).await? {
+                                txn.delete(pair.0).await?;
+                                removed += 1;
                             }
+
                             // check if all items cleared, delete meta key and all sub meta keys if needed
                             if removed >= size {
                                 txn.delete(meta_key).await?;

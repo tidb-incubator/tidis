@@ -47,7 +47,7 @@ impl GcTask {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GcMaster {
     workers: Vec<GcWorker>,
     topo: Cluster,
@@ -97,12 +97,28 @@ impl GcMaster {
                 continue;
             }
 
-            let mut ss = txn_client.newest_snapshot().await;
+            let txn_res = txn_client.begin().await;
+            if txn_res.is_err() {
+                error!(LOGGER, "[GC] failed to begin txn");
+                continue;
+            }
+            let mut txn = txn_res.unwrap();
+
             let bound_range = KEY_ENCODER.encode_txnkv_gc_version_key_range();
 
             // TODO scan speed throttling
-            let iter = ss.scan(bound_range, u32::MAX).await?;
+            let iter_res = txn.scan(bound_range, u32::MAX).await;
+            if iter_res.is_err() {
+                error!(
+                    LOGGER,
+                    "[GC] scan gc version keys failed: {:?}",
+                    iter_res.err()
+                );
+                // retry next tick
+                continue;
+            }
 
+            let iter = iter_res.unwrap();
             for kv in iter {
                 let (user_key, version) = KeyDecoder::decode_key_gc_userkey_version(kv.0);
 
@@ -141,7 +157,18 @@ impl GcMaster {
                     _ => DataType::Null,
                 };
                 let task = GcTask::new(key_type, user_key, version);
-                self.dispatch_task(task).await?;
+                if let Err(e) = self.dispatch_task(task).await {
+                    error!(LOGGER, "[GC] dispatch task failed: {:?}", e);
+                    txn.rollback().await.unwrap_or_default();
+                }
+            }
+            if let Err(e) = txn.commit().await {
+                error!(
+                    LOGGER,
+                    "[GC] commit txn failed: {:?}, try to rollback it", e
+                );
+                txn.rollback().await.unwrap_or_default();
+                continue;
             }
         }
     }

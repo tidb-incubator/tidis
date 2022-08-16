@@ -5,8 +5,7 @@ use tokio::sync::Mutex;
 use tikv_client::Error::StringError;
 use tikv_client::{
     Backoff, BoundRange, ColumnFamily, Error, Key, KvPair, RawClient, Result as TiKVResult,
-    RetryOptions, Snapshot, Timestamp, TimestampExt, Transaction, TransactionClient,
-    TransactionOptions, Value,
+    RetryOptions, Transaction, TransactionClient, TransactionOptions, Value,
 };
 
 use crate::config::LOGGER;
@@ -23,8 +22,7 @@ use futures::future::BoxFuture;
 use slog::{debug, error};
 
 use crate::metrics::{
-    ACQUIRE_LOCK_DURATION, HANDLE_SNAPSHOT_DURATION, PD_ERR_COUNTER, RETRIEVE_TSO_DURATION,
-    SNAPSHOT_COUNTER, TIKV_CLIENT_RETRIES, TIKV_ERR_COUNTER, TXN_COUNTER, TXN_DURATION,
+    ACQUIRE_LOCK_DURATION, TIKV_CLIENT_RETRIES, TIKV_ERR_COUNTER, TXN_COUNTER, TXN_DURATION,
     TXN_MECHANISM_COUNTER, TXN_RETRY_COUNTER, TXN_RETRY_ERR, TXN_RETRY_KIND_COUNTER,
 };
 
@@ -45,89 +43,6 @@ impl TxnClientWrapper<'static> {
             client: c,
             retries: txn_retry_count(),
         }
-    }
-
-    pub async fn current_timestamp(&self) -> TiKVResult<Timestamp> {
-        let start_at = Instant::now();
-        let tso = self.client.current_timestamp().await;
-        let duration = Instant::now() - start_at;
-        RETRIEVE_TSO_DURATION.observe(duration_to_sec(duration));
-        tso.map_err(|err| {
-            PD_ERR_COUNTER
-                .with_label_values(&["retrieve_current_timestamp_error"])
-                .inc();
-            err
-        })
-    }
-
-    pub fn snapshot(&self, timestamp: Timestamp, options: TransactionOptions) -> Snapshot {
-        SNAPSHOT_COUNTER.inc();
-        let start_at = Instant::now();
-        let snapshot = self.client.snapshot(timestamp, options);
-        let duration = Instant::now() - start_at;
-        HANDLE_SNAPSHOT_DURATION.observe(duration_to_sec(duration));
-        snapshot
-    }
-
-    #[allow(dead_code)]
-    pub async fn snapshot_from_txn(&self, txn: Arc<Mutex<Transaction>>) -> Snapshot {
-        // add retry options
-        let region_backoff = Backoff::no_jitter_backoff(
-            txn_region_backoff_delay_ms(),
-            MAX_DELAY_MS,
-            txn_region_backoff_delay_attemps(),
-        );
-        let lock_backoff = Backoff::no_jitter_backoff(
-            txn_lock_backoff_delay_ms(),
-            MAX_DELAY_MS,
-            txn_lock_backoff_delay_attemps(),
-        );
-        let retry_options = RetryOptions::new(region_backoff, lock_backoff);
-
-        let options = if is_use_pessimistic_txn() {
-            TransactionOptions::new_pessimistic().retry_options(retry_options)
-        } else {
-            TransactionOptions::new_optimistic().retry_options(retry_options)
-        };
-        let start_at = Instant::now();
-        let txn = txn.lock().await;
-        let duration = Instant::now() - start_at;
-        ACQUIRE_LOCK_DURATION.observe(duration_to_sec(duration));
-        let ts = txn.start_timestamp();
-        self.snapshot(ts, options)
-    }
-
-    pub async fn newest_snapshot(&self) -> Snapshot {
-        // add retry options
-        let region_backoff = Backoff::no_jitter_backoff(
-            txn_region_backoff_delay_ms(),
-            MAX_DELAY_MS,
-            txn_region_backoff_delay_attemps(),
-        );
-        let lock_backoff = Backoff::no_jitter_backoff(
-            txn_lock_backoff_delay_ms(),
-            MAX_DELAY_MS,
-            txn_lock_backoff_delay_attemps(),
-        );
-        let retry_options = RetryOptions::new(region_backoff, lock_backoff);
-
-        let options = if is_use_pessimistic_txn() {
-            TransactionOptions::new_pessimistic().retry_options(retry_options)
-        } else {
-            TransactionOptions::new_optimistic().retry_options(retry_options)
-        };
-
-        let current_timestamp = match self.current_timestamp().await {
-            Ok(ts) => ts,
-            Err(e) => {
-                error!(
-                    LOGGER,
-                    "get current timestamp failed: {:?}, use max for this query", e
-                );
-                Timestamp::from_version(i64::MAX as u64)
-            }
-        };
-        self.snapshot(current_timestamp, options)
     }
 
     pub async fn begin(&self) -> TiKVResult<Transaction> {

@@ -96,29 +96,38 @@ impl StringCommandCtx {
         }
     }
 
-    pub async fn do_async_txnkv_type(self, key: &str) -> AsyncResult<Frame> {
-        let client = get_txn_client()?;
+    pub async fn do_async_txnkv_type(mut self, key: &str) -> AsyncResult<Frame> {
+        let mut client = get_txn_client()?;
         let ekey = KEY_ENCODER.encode_txnkv_string(key);
+        let key = key.to_owned();
 
-        let mut ss = match self.txn.clone() {
-            Some(txn) => client.snapshot_from_txn(txn).await,
-            None => client.newest_snapshot().await,
-        };
+        client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
 
-        match ss.get(ekey).await? {
-            Some(val) => {
-                let ttl = KeyDecoder::decode_key_ttl(&val);
-                if key_is_expired(ttl) {
-                    // delete key
-                    self.do_async_txnkv_string_expire_if_needed(key).await?;
-                    return Ok(resp_str(&DataType::Null.to_string()));
+                    let mut txn = txn_rc.lock().await;
+                    match txn.get(ekey).await? {
+                        Some(val) => {
+                            let ttl = KeyDecoder::decode_key_ttl(&val);
+                            if key_is_expired(ttl) {
+                                // delete key
+                                drop(txn);
+                                self.do_async_txnkv_string_expire_if_needed(&key).await?;
+                                return Ok(resp_str(&DataType::Null.to_string()));
+                            }
+
+                            let dt = KeyDecoder::decode_key_type(&val);
+                            Ok(resp_str(&dt.to_string()))
+                        }
+                        None => Ok(resp_str(&DataType::Null.to_string())),
+                    }
                 }
-
-                let dt = KeyDecoder::decode_key_type(&val);
-                Ok(resp_str(&dt.to_string()))
-            }
-            None => Ok(resp_str(&DataType::Null.to_string())),
-        }
+                .boxed()
+            })
+            .await
     }
 
     pub async fn do_async_rawkv_strlen(&self, key: &str) -> AsyncResult<Frame> {

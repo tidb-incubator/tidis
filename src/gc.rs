@@ -114,6 +114,7 @@ impl GcMaster {
                     "[GC] scan gc version keys failed: {:?}",
                     iter_res.err()
                 );
+                txn.rollback().await.unwrap_or_default();
                 // retry next tick
                 continue;
             }

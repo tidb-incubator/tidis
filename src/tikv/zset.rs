@@ -12,9 +12,10 @@ use crate::async_expire_zset_threshold_or_default;
 use crate::utils::{key_is_expired, resp_array, resp_bulk, resp_err, resp_int, resp_nil};
 use crate::Frame;
 use ::futures::future::FutureExt;
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::sync::Arc;
-use tikv_client::{BoundRange, Transaction};
+use tikv_client::{BoundRange, Key, Transaction, Value};
 use tokio::sync::Mutex;
 
 use crate::metrics::REMOVED_EXPIRED_KEY_COUNTER;
@@ -116,6 +117,19 @@ impl ZsetCommandCtx {
                             let mut updated_count = 0;
                             let mut added_count = 0;
 
+                            let data_keys: Vec<Key> = members
+                                .iter()
+                                .map(|member| {
+                                    KEY_ENCODER.encode_txnkv_zset_data_key(&key, member, version)
+                                })
+                                .collect();
+                            let data_map: HashMap<Key, Value> = txn
+                                .batch_get(data_keys)
+                                .await?
+                                .into_iter()
+                                .map(|pair| (pair.0, pair.1))
+                                .collect();
+
                             for idx in 0..members.len() {
                                 let data_key = KEY_ENCODER.encode_txnkv_zset_data_key(
                                     &key,
@@ -130,11 +144,11 @@ impl ZsetCommandCtx {
                                     version,
                                 );
                                 let mut member_exists = false;
-                                let old_data_value = txn.get(data_key.clone()).await?;
+                                let old_data_value = data_map.get(&data_key);
                                 let mut old_data_value_data: Vec<u8> = vec![];
                                 if let Some(v) = old_data_value {
                                     member_exists = true;
-                                    old_data_value_data = v;
+                                    old_data_value_data = v.clone();
                                 }
 
                                 if let Some(v) = exists {
@@ -1036,27 +1050,36 @@ impl ZsetCommandCtx {
                                     .await?;
                                 return Ok(0);
                             }
-                            let mut removed_count = 0;
 
-                            for member in members {
-                                let data_key =
-                                    KEY_ENCODER.encode_txnkv_zset_data_key(&key, &member, version);
-                                // get data key and decode value as score, to generate score key
-                                let score = txn.get(data_key.clone()).await?;
-                                if score.is_none() {
-                                    continue;
+                            let data_keys: Vec<Key> = members
+                                .iter()
+                                .map(|member| {
+                                    KEY_ENCODER.encode_txnkv_zset_data_key(&key, member, version)
+                                })
+                                .collect();
+                            let data_map: HashMap<Key, Value> = txn
+                                .batch_get(data_keys.clone())
+                                .await?
+                                .into_iter()
+                                .map(|pair| (pair.0, pair.1))
+                                .collect();
+
+                            for idx in 0..members.len() {
+                                if let Some(score) = data_map.get(&data_keys[idx]) {
+                                    // decode the score vec to i64
+                                    let iscore = KeyDecoder::decode_key_zset_data_value(score);
+                                    // remove member and score key
+                                    let score_key = KEY_ENCODER.encode_txnkv_zset_score_key(
+                                        &key,
+                                        iscore,
+                                        &members[idx],
+                                        version,
+                                    );
+                                    txn.delete(data_keys[idx].clone()).await?;
+                                    txn.delete(score_key).await?;
                                 }
-
-                                // decode the score vec to i64
-                                let iscore =
-                                    KeyDecoder::decode_key_zset_data_value(&score.unwrap());
-                                // remove member and score key
-                                let score_key = KEY_ENCODER
-                                    .encode_txnkv_zset_score_key(&key, iscore, &member, version);
-                                txn.delete(data_key).await?;
-                                txn.delete(score_key).await?;
-                                removed_count += 1;
                             }
+                            let removed_count = data_map.len() as i64;
 
                             drop(txn);
                             let size = self.txnkv_sum_key_size(&key, version).await?;

@@ -207,6 +207,7 @@ impl<'a> ListCommandCtx {
                                     real_count = right - left;
                                 }
 
+                                let mut data_keys = Vec::with_capacity(real_count as usize);
                                 for _ in 0..real_count {
                                     if op_left {
                                         idx = left;
@@ -215,26 +216,25 @@ impl<'a> ListCommandCtx {
                                         idx = right - 1;
                                         right -= 1;
                                     }
-                                    let data_key =
-                                        KEY_ENCODER.encode_txnkv_list_data_key(&key, idx, version);
-                                    // get data and delete
-                                    let value = txn.get(data_key.clone()).await.unwrap().unwrap();
-                                    values.push(resp_bulk(value));
-
-                                    txn.delete(data_key).await?;
-
-                                    if left == right {
-                                        // all elements poped, just delete meta key
-                                        txn.delete(meta_key.clone()).await?;
-                                    } else {
-                                        // update meta key
-                                        let new_meta_value = KEY_ENCODER
-                                            .encode_txnkv_list_meta_value(
-                                                ttl, version, left, right,
-                                            );
-                                        txn.put(meta_key.clone(), new_meta_value).await?;
-                                    }
+                                    data_keys.push(
+                                        KEY_ENCODER.encode_txnkv_list_data_key(&key, idx, version),
+                                    );
                                 }
+                                for pair in txn.batch_get(data_keys).await? {
+                                    values.push(resp_bulk(pair.1));
+                                    txn.delete(pair.0).await?;
+                                }
+
+                                if left == right {
+                                    // all elements popped, just delete meta key
+                                    txn.delete(meta_key.clone()).await?;
+                                } else {
+                                    // update meta key
+                                    let new_meta_value = KEY_ENCODER
+                                        .encode_txnkv_list_meta_value(ttl, version, left, right);
+                                    txn.put(meta_key.clone(), new_meta_value).await?;
+                                }
+
                                 Ok(values)
                             }
                         }

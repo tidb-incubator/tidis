@@ -385,21 +385,30 @@ impl StringCommandCtx {
                     }
 
                     let mut cnt = 0;
-                    for key in &keys {
-                        let ekey = KEY_ENCODER.encode_txnkv_string(key);
-                        let mut txn = txn_rc.lock().await;
-                        if let Some(v) = txn.get(ekey).await? {
-                            let ttl = KeyDecoder::decode_key_ttl(&v);
+                    let ekeys = KEY_ENCODER.encode_txnkv_strings(&keys);
+                    let kv_map: HashMap<Key, Value> = txn_rc
+                        .lock()
+                        .await
+                        .batch_get(ekeys.clone())
+                        .await?
+                        .into_iter()
+                        .map(|pair| (pair.0, pair.1))
+                        .collect();
+
+                    assert_eq!(ekeys.len(), keys.len());
+                    for idx in 0..keys.len() {
+                        if let Some(v) = kv_map.get(&ekeys[idx]) {
+                            let ttl = KeyDecoder::decode_key_ttl(v);
                             if key_is_expired(ttl) {
-                                drop(txn);
                                 self.clone()
-                                    .do_async_txnkv_string_expire_if_needed(key)
+                                    .do_async_txnkv_string_expire_if_needed(&keys[idx])
                                     .await?;
                             } else {
                                 cnt += 1;
                             }
                         }
                     }
+
                     Ok(resp_int(cnt as i64))
                 }
                 .boxed()
@@ -734,20 +743,25 @@ impl StringCommandCtx {
                         self.txn = Some(txn_rc.clone());
                     }
 
-                    let mut dts = vec![];
-                    let mut txn = txn_rc.lock().await;
+                    let mut dts = Vec::with_capacity(keys_len);
 
-                    for key in &keys {
-                        let ekey = KEY_ENCODER.encode_txnkv_string(key);
-                        let meta_value = txn.get(ekey).await?;
-                        if let Some(v) = &meta_value {
-                            let dt = KeyDecoder::decode_key_type(v);
-                            dts.push(dt);
-                        } else {
-                            dts.push(DataType::Null);
+                    let ekeys = KEY_ENCODER.encode_txnkv_strings(&keys);
+                    let kv_map: HashMap<Key, Value> = txn_rc
+                        .lock()
+                        .await
+                        .batch_get(ekeys.clone())
+                        .await?
+                        .into_iter()
+                        .map(|pair| (pair.0, pair.1))
+                        .collect();
+
+                    assert_eq!(ekeys.len(), keys_len);
+                    for ekey in &ekeys {
+                        match kv_map.get(ekey) {
+                            Some(v) => dts.push(KeyDecoder::decode_key_type(v)),
+                            None => dts.push(DataType::Null),
                         }
                     }
-                    drop(txn);
 
                     let mut resp = 0;
                     for idx in 0..keys_len {

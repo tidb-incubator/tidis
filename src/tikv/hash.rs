@@ -591,16 +591,15 @@ impl<'a> HashCommandCtx {
                             }
 
                             let mut deleted: i64 = 0;
-
-                            for field in &fields {
-                                // check data key exists
-                                let data_key =
-                                    KEY_ENCODER.encode_txnkv_hash_data_key(&key, field, version);
-                                if txn.key_exists(data_key.clone()).await? {
-                                    // delete in txn
-                                    txn.delete(data_key).await?;
-                                    deleted += 1;
-                                }
+                            let data_keys: Vec<Key> = fields
+                                .iter()
+                                .map(|field| {
+                                    KEY_ENCODER.encode_txnkv_hash_data_key(&key, field, version)
+                                })
+                                .collect();
+                            for pair in txn.batch_get(data_keys).await? {
+                                txn.delete(pair.0).await?;
+                                deleted += 1;
                             }
 
                             let idx = gen_next_meta_index();

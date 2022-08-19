@@ -478,15 +478,15 @@ python3 test_helper.py [--ip ip] [--port 6379]
     +-----------------+------------+
     |  client setname |    Yes     |
     +-----------------+------------+
-    |  cluster getname|    Yes     |
+    |  client getname |    Yes     |
     +-----------------+------------+
-    |  cluster id     |    Yes     |
+    |  client id      |    Yes     |
     +-----------------+------------+
-    |  cluster list   |    Yes     |
+    |  client list    |    Yes     |
     +-----------------+------------+
-    |  cluster kill   |    Yes     |
+    |  client kill    |    Yes     |
     +-----------------+------------+
-    |  cluster info   |    Yes     |
+    |  client info    |    Yes     |
     +-----------------+------------+
 
 ## License

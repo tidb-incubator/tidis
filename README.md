@@ -215,6 +215,30 @@ tls_auth_client is true, client must be configure certs and key file for client 
 ./src/redis-cli --tls  --cert ./tests/tls/client.crt --key ./tests/tls/client.key --cacert ./tests/tls/ca.crt
 ```
 
+## Global transaction
+
+Thanks to the global transaction of `TiKV` cluster, `TiKV-Service` can support the global transaction easily. Use `MULTI/EXEC/DISCARD` command just like `Redis Cluster` but without caring about the `CROSSSLOT` error, just use it like a single `Redis` instance.
+
+## Lua Script
+
+`TiKV-Service` use `mlua` library to interpret lua scripts. We can use `EVAL/EVALSHA` to execute lua script with global transaction support, without caring about the `CROSSSLOT` error either.
+
+## Async key deletion
+
+For collection keys with thousands of items, deletion will be a time-costing operation, enable the async deletion configuration could greatly reduce the operation time, from seconds to milliseconds.
+
+## Super batch feature support
+
+Use super batch enabled could have obvious performance optimization, but you can tunning it by your business pressure.
+
+```
+allow_batch = true
+max_batch_wait_time = 10
+max_batch_size = 20
+max_inflight_requests = 10000
+overload_threshold = 0
+```
+
 ## E2e tests
 
 You can run complete sets of all supported commands using the tools provided in the repo test directory, just run
@@ -241,6 +265,10 @@ python3 test_helper.py [--ip ip] [--port 6379]
     |    ttl    | ttl key                             |
     +-----------+-------------------------------------+
     |    type   | type key                            |
+    +-----------+-------------------------------------+
+    |    scan   | scan "" [count 10] [match "^pre*"]  |
+    +-----------+-------------------------------------+
+    |    ping   | ping                                |
     +-----------+-------------------------------------+
 
 ### String
@@ -298,30 +326,34 @@ python3 test_helper.py [--ip ip] [--port 6379]
     +------------+------------------------------------------+
     |   hgetall  | hgetall key                              |
     +------------+------------------------------------------+
+    |   hincyby  | hincyby key step                         |
+    +------------+------------------------------------------+
 
 ### List
 
-    +------------+-----------------------+
-    |  commands  |         format        |
-    +------------+-----------------------+
-    |    lpop    | lpop key              |
-    +------------+-----------------------+
-    |    rpush   | rpush key  item       |
-    +------------+-----------------------+
-    |    lpush   | lpush key  item       |
-    +------------+-----------------------+
-    |    rpop    | rpop key              |
-    +------------+-----------------------+
-    |    llen    | llen key              |
-    +------------+-----------------------+
-    |   lindex   | lindex key index      |
-    +------------+-----------------------+
-    |   lrange   | lrange key start stop |
-    +------------+-----------------------+
-    |    lset    | lset key index value  |
-    +------------+-----------------------+
-    |    ltrim   | ltrim key start stop  |
-    +------------+-----------------------+
+    +------------+---------------------------------------------+
+    |  commands  |         format                              |
+    +------------+---------------------------------------------+
+    |    lpop    | lpop key                                    |
+    +------------+---------------------------------------------+
+    |    rpush   | rpush key  item                             |
+    +------------+---------------------------------------------+
+    |    lpush   | lpush key  item                             |
+    +------------+---------------------------------------------+
+    |    rpop    | rpop key                                    |
+    +------------+---------------------------------------------+
+    |    llen    | llen key                                    |
+    +------------+---------------------------------------------+
+    |   lindex   | lindex key index                            |
+    +------------+---------------------------------------------+
+    |   lrange   | lrange key start stop                       |
+    +------------+---------------------------------------------+
+    |    lset    | lset key index value                        |
+    +------------+---------------------------------------------+
+    |    ltrim   | ltrim key start stop                        |
+    +------------+---------------------------------------------+
+    |   linsert  | linsert key <BEFORE | AFTER> pivot element  |
+    +------------+---------------------------------------------+
 
 ### Set
 
@@ -341,6 +373,8 @@ python3 test_helper.py [--ip ip] [--port 6379]
     |     srem    | srem key member                     |
     +-------------+-------------------------------------+
     |     spop    | spop key [count]                    |
+    +-------------+-------------------------------------+
+    | srandmember | spop key [count]                    |
     +-------------+-------------------------------------+
 
 ### Sorted set
@@ -362,6 +396,8 @@ python3 test_helper.py [--ip ip] [--port 6379]
     +------------------+---------------------------------------------------------------+
     | zremrangebyscore | zremrangebyscore key min max                                  |
     +------------------+---------------------------------------------------------------+
+    | zremrangebyrank  | zremrangebyscore key start stop                               |
+    +------------------+---------------------------------------------------------------+
     |      zcount      | zcount key                                                    |
     +------------------+---------------------------------------------------------------+
     |      zscore      | zscore key member                                             |
@@ -371,6 +407,8 @@ python3 test_helper.py [--ip ip] [--port 6379]
     |       zrem       | zrem key member1 [member2 ...]                                |
     +------------------+---------------------------------------------------------------+
     |      zpopmin     | zpopmin key [count]                                           |
+    +------------------+---------------------------------------------------------------+
+    |      zpopmax     | zpopmax key [count]                                           |
     +------------------+---------------------------------------------------------------+
     |      zincrby     | zincrby key increment member                                  |
     +------------------+---------------------------------------------------------------+
@@ -398,6 +436,58 @@ python3 test_helper.py [--ip ip] [--port 6379]
     +-------------+----------------------+
     |    auth     | auth password        |
     +-------------+----------------------+
+
+
+### Debug
+
+    +-------------+----------------------+
+    |   commands  |      format          |
+    +-------------+----------------------+
+    |    debug    | debug profiler_start |
+    +-------------+----------------------+
+    |    debug    | debug profiler_stop |
+    +-------------+----------------------+
+
+### Cluster
+
+    +-----------------+------------+
+    |   command       |    support |
+    +-----------------+------------+
+    |  cluster nodes  |    Yes     |
+    +-----------------+------------+
+    |  cluster info   |    Yes     |
+    +-----------------+------------+
+
+
+### Transaction
+
+    +---------+---------+
+    | command | support |
+    +---------+---------+
+    |  multi  | Yes     |
+    +---------+---------+
+    |   exec  | Yes     |
+    +---------+---------+
+    | discard | Yes     |
+    +---------+---------+
+
+### Client Management
+
+    +-----------------+------------+
+    |   command       |    support |
+    +-----------------+------------+
+    |  client setname |    Yes     |
+    +-----------------+------------+
+    |  cluster getname|    Yes     |
+    +-----------------+------------+
+    |  cluster id     |    Yes     |
+    +-----------------+------------+
+    |  cluster list   |    Yes     |
+    +-----------------+------------+
+    |  cluster kill   |    Yes     |
+    +-----------------+------------+
+    |  cluster info   |    Yes     |
+    +-----------------+------------+
 
 ## License
 

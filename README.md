@@ -326,7 +326,7 @@ python3 test_helper.py [--ip ip] [--port 6379]
     +------------+------------------------------------------+
     |   hgetall  | hgetall key                              |
     +------------+------------------------------------------+
-    |   hincyby  | hincyby key step                         |
+    |   hincrby  | hincrby key step                         |
     +------------+------------------------------------------+
 
 ### List
@@ -445,7 +445,7 @@ python3 test_helper.py [--ip ip] [--port 6379]
     +-------------+----------------------+
     |    debug    | debug profiler_start |
     +-------------+----------------------+
-    |    debug    | debug profiler_stop |
+    |    debug    | debug profiler_stop  |
     +-------------+----------------------+
 
 ### Cluster
@@ -485,8 +485,6 @@ python3 test_helper.py [--ip ip] [--port 6379]
     |  client list    |    Yes     |
     +-----------------+------------+
     |  client kill    |    Yes     |
-    +-----------------+------------+
-    |  client info    |    Yes     |
     +-----------------+------------+
 
 ## License

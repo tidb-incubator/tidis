@@ -50,6 +50,12 @@ impl StringCommandCtx {
         let ekey = KEY_ENCODER.encode_txnkv_string(key);
         let key = key.to_owned();
 
+        // if get is executed from a new transaction, we can do get with latest committed
+        if self.txn.is_none() {
+            let readonly_txn = client.begin_with_latest();
+            self.txn = Some(Arc::new(Mutex::new(readonly_txn)));
+        }
+
         client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
                 async move {

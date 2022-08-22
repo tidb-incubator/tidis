@@ -52,8 +52,8 @@ pub static mut PROFILER_GUARD: Option<pprof::ProfilerGuard> = None;
 pub fn start_profiler() {
     unsafe {
         let guard = pprof::ProfilerGuardBuilder::default()
-            .frequency(1000)
-            .blocklist(&["libc", "libgcc", "pthread", "vdso"])
+            .frequency(99)
+            //.blocklist(&["libc", "libgcc", "pthread", "vdso"])
             .build()
             .unwrap();
         PROFILER_GUARD = Some(guard);

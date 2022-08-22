@@ -5,7 +5,8 @@ use tokio::sync::Mutex;
 use tikv_client::Error::StringError;
 use tikv_client::{
     Backoff, BoundRange, ColumnFamily, Error, Key, KvPair, RawClient, Result as TiKVResult,
-    RetryOptions, Transaction, TransactionClient, TransactionOptions, Value,
+    RetryOptions, Timestamp, TimestampExt, Transaction, TransactionClient, TransactionOptions,
+    Value,
 };
 
 use crate::config::LOGGER;
@@ -43,6 +44,44 @@ impl TxnClientWrapper<'static> {
             client: c,
             retries: txn_retry_count(),
         }
+    }
+
+    pub fn begin_with_latest(&self) -> Transaction {
+        // add retry options
+        let region_backoff = Backoff::no_jitter_backoff(
+            txn_region_backoff_delay_ms(),
+            MAX_DELAY_MS,
+            txn_region_backoff_delay_attemps(),
+        );
+        let lock_backoff = Backoff::no_jitter_backoff(
+            txn_lock_backoff_delay_ms(),
+            MAX_DELAY_MS,
+            txn_lock_backoff_delay_attemps(),
+        );
+        let retry_options = RetryOptions::new(region_backoff, lock_backoff);
+
+        let mut txn_options = if is_use_pessimistic_txn() {
+            TransactionOptions::new_pessimistic().retry_options(retry_options)
+        } else {
+            TransactionOptions::new_optimistic().retry_options(retry_options)
+        };
+
+        let mut mechanism: (&str, &str) = ("two_pc", "sync");
+        txn_options = if is_try_one_pc_commit() {
+            mechanism.0 = "one_pc";
+            txn_options.try_one_pc()
+        } else {
+            txn_options
+        };
+        txn_options = if is_use_async_commit() {
+            mechanism.1 = "async";
+            txn_options.use_async_commit()
+        } else {
+            txn_options
+        };
+
+        self.client
+            .new_transaction(Timestamp::from_version(u64::MAX), txn_options.read_only())
     }
 
     pub async fn begin(&self) -> TiKVResult<Transaction> {

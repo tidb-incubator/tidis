@@ -13,6 +13,7 @@ class InvalidTest(unittest.TestCase):
         cls.k1 = '__invalid1__'
 
         cls.f1 = 'f1'
+        cls.f2 = 'f2'
 
         cls.v1 = 'value1'
         cls.v2 = 'value2'
@@ -69,6 +70,11 @@ class InvalidTest(unittest.TestCase):
     def test_hmget_hmset(self):
         self.assertInvalid('hmget')
         self.assertInvalid('hmset', self.k1, self.f1)
+
+    def test_hsetnx(self):
+        self.assertInvalid('hsetnx')
+        self.assertInvalid('hsetnx', self.k1, self.f1)
+        self.assertInvalid('hsetnx', self.k1, self.f1, self.v1, self.f2, self.v2)
 
     def test_hexists(self):
         self.assertInvalid('hexists', self.k1)

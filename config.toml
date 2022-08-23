@@ -15,12 +15,11 @@ log_level = "info"
 log_file = "tikv-service.log"
 
 [backend]
-use_txn_api = true
 use_async_commit = true
 try_one_pc_commit = true
 use_pessimistic_txn = false
-local_pool_number = 10
-txn_retry_count = 10
+local_pool_number = 8
+txn_retry_count = 2
 txn_region_backoff_delay_ms = 2
 txn_region_backoff_delay_attemps = 5
 txn_lock_backoff_delay_ms = 2

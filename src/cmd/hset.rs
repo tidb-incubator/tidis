@@ -73,8 +73,13 @@ impl Hset {
         Ok(hset)
     }
 
-    pub(crate) async fn apply(self, dst: &mut Connection, is_hmset: bool) -> crate::Result<()> {
-        let response = self.hset(None, is_hmset).await?;
+    pub(crate) async fn apply(
+        self,
+        dst: &mut Connection,
+        is_hmset: bool,
+        is_nx: bool,
+    ) -> crate::Result<()> {
+        let response = self.hset(None, is_hmset, is_nx).await?;
         debug!(
             LOGGER,
             "res, {} -> {}, {:?}",
@@ -91,13 +96,15 @@ impl Hset {
         &self,
         txn: Option<Arc<Mutex<Transaction>>>,
         is_hmset: bool,
+        is_nx: bool,
     ) -> AsyncResult<Frame> {
-        if !self.valid {
+        if !self.valid || (is_nx && self.field_and_value.len() != 1) {
             return Ok(resp_invalid_arguments());
         }
+
         if is_use_txn_api() {
             HashCommandCtx::new(txn)
-                .do_async_txnkv_hset(&self.key, &self.field_and_value, is_hmset)
+                .do_async_txnkv_hset(&self.key, &self.field_and_value, is_hmset, is_nx)
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))

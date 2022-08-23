@@ -79,6 +79,7 @@ impl<'a> HashCommandCtx {
         key: &str,
         fvs: &[KvPair],
         is_hmset: bool,
+        is_nx: bool,
     ) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
@@ -115,6 +116,8 @@ impl<'a> HashCommandCtx {
                                 version = get_version_for_new(&key, txn_rc.clone()).await?;
                                 // re-lock mutex
                                 txn = txn_rc.lock().await;
+                            } else if is_nx {
+                                return Ok(0);
                             }
 
                             let mut fields_data_key = Vec::with_capacity(fvs_len);

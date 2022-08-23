@@ -117,7 +117,16 @@ impl<'a> HashCommandCtx {
                                 // re-lock mutex
                                 txn = txn_rc.lock().await;
                             } else if is_nx {
-                                return Ok(0);
+                                let kv = fvs_copy.get(0).unwrap();
+                                let field: Vec<u8> = kv.clone().0.into();
+                                let datakey = KEY_ENCODER.encode_txnkv_hash_data_key(
+                                    &key,
+                                    &String::from_utf8_lossy(&field),
+                                    version,
+                                );
+                                if txn.key_exists(datakey.clone()).await? {
+                                    return Ok(0);
+                                }
                             }
 
                             let mut fields_data_key = Vec::with_capacity(fvs_len);

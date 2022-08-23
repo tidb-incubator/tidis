@@ -117,6 +117,7 @@ impl<'a> HashCommandCtx {
                                 // re-lock mutex
                                 txn = txn_rc.lock().await;
                             } else if is_nx {
+                                // when is_nx == true, fvs_len must be 1
                                 let kv = fvs_copy.get(0).unwrap();
                                 let field: Vec<u8> = kv.clone().0.into();
                                 let datakey = KEY_ENCODER.encode_txnkv_hash_data_key(
@@ -129,20 +130,24 @@ impl<'a> HashCommandCtx {
                                 }
                             }
 
-                            let mut fields_data_key = Vec::with_capacity(fvs_len);
-                            for kv in fvs_copy.clone() {
-                                let field: Vec<u8> = kv.0.into();
-                                let datakey = KEY_ENCODER.encode_txnkv_hash_data_key(
-                                    &key,
-                                    &String::from_utf8_lossy(&field),
-                                    version,
-                                );
-                                fields_data_key.push(datakey);
+                            let mut added_count = 1;
+                            if !is_nx {
+                                let mut fields_data_key = Vec::with_capacity(fvs_len);
+                                for kv in fvs_copy.clone() {
+                                    let field: Vec<u8> = kv.0.into();
+                                    let datakey = KEY_ENCODER.encode_txnkv_hash_data_key(
+                                        &key,
+                                        &String::from_utf8_lossy(&field),
+                                        version,
+                                    );
+                                    fields_data_key.push(datakey);
+                                }
+                                // batch get
+                                let real_fields_count = count_unique_keys(&fields_data_key);
+                                added_count = real_fields_count as i64
+                                    - txn.batch_get(fields_data_key).await?.count() as i64;
                             }
-                            // batch get
-                            let real_fields_count = count_unique_keys(&fields_data_key);
-                            let added_count = real_fields_count as i64
-                                - txn.batch_get(fields_data_key).await?.count() as i64;
+
                             for kv in fvs_copy {
                                 let field: Vec<u8> = kv.0.into();
                                 let datakey = KEY_ENCODER.encode_txnkv_hash_data_key(

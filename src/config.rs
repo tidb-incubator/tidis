@@ -400,7 +400,7 @@ pub fn is_use_txn_api() -> bool {
                 return b;
             }
         }
-        false
+        true
     }
 }
 
@@ -411,7 +411,7 @@ pub fn is_use_async_commit() -> bool {
                 return b;
             }
         }
-        false
+        true
     }
 }
 
@@ -422,7 +422,7 @@ pub fn is_try_one_pc_commit() -> bool {
                 return b;
             }
         }
-        false
+        true
     }
 }
 
@@ -433,8 +433,8 @@ pub fn is_use_pessimistic_txn() -> bool {
                 return b;
             }
         }
-        // default use pessimistic txn mode
-        true
+        // default not to use pessimistic txn mode
+        false
     }
 }
 
@@ -731,7 +731,7 @@ pub fn conn_concurrency_or_default() -> usize {
         }
     }
     // default backend connection concurrency
-    10
+    5
 }
 
 pub fn backend_completion_queue_size_or_default() -> usize {

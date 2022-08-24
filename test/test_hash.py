@@ -41,6 +41,13 @@ class HashTest(unittest.TestCase):
         self.assertEqual(self.v3, self.r.hget(self.k1, self.f3))
         self.assertEqual(self.v4, self.r.hget(self.k1, self.f4))
 
+    def test_hsetnx(self):
+        self.assertIsNone(self.r.hget(self.k1, self.f1))
+        self.assertEqual(self.r.hsetnx(self.k1, self.f1, self.v1), 1)
+        self.assertEqual(self.v1, self.r.hget(self.k1, self.f1))
+        self.assertEqual(self.r.hsetnx(self.k1, self.f1, self.v2), 0)
+        self.assertNotEqual(self.v2, self.r.hget(self.k1, self.f1))
+
     def test_type(self):
         self.assertEqual(self.r.type(self.k1), CmdType.NULL.value)
         self.assertEqual(self.r.hset(self.k1, self.f1, self.v1), 1)

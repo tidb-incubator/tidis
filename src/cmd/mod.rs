@@ -260,6 +260,7 @@ pub enum Command {
     // hash
     Hset(Hset),
     Hmset(Hset),
+    Hsetnx(Hset),
     Hget(Hget),
     Hmget(Hmget),
     Hlen(Hlen),
@@ -426,6 +427,9 @@ impl Command {
                 &mut parse,
             )),
             "hset" => Command::Hset(transform_parse(Hset::parse_frames(&mut parse), &mut parse)),
+            "hsetnx" => {
+                Command::Hsetnx(transform_parse(Hset::parse_frames(&mut parse), &mut parse))
+            }
             "hmset" => Command::Hmset(transform_parse(Hset::parse_frames(&mut parse), &mut parse)),
             "hget" => Command::Hget(transform_parse(Hget::parse_frames(&mut parse), &mut parse)),
             "hmget" => Command::Hmget(transform_parse(Hmget::parse_frames(&mut parse), &mut parse)),
@@ -614,6 +618,7 @@ impl Command {
             "pexpireat" => Command::PexpireAt(Expire::parse_argv(argv)?),
             "persist" => Command::Persist(Persist::parse_argv(argv)?),
             "hset" => Command::Hset(Hset::parse_argv(argv)?),
+            "hsetnx" => Command::Hsetnx(Hset::parse_argv(argv)?),
             "hmset" => Command::Hmset(Hset::parse_argv(argv)?),
             "hget" => Command::Hget(Hget::parse_argv(argv)?),
             "hmget" => Command::Hmget(Hmget::parse_argv(argv)?),
@@ -713,8 +718,9 @@ impl Command {
             IncrBy(cmd) => cmd.apply(dst, true).await,
             DecrBy(cmd) => cmd.apply(dst, false).await,
             Strlen(cmd) => cmd.apply(dst).await,
-            Hset(cmd) => cmd.apply(dst, false).await,
-            Hmset(cmd) => cmd.apply(dst, true).await,
+            Hset(cmd) => cmd.apply(dst, false, false).await,
+            Hmset(cmd) => cmd.apply(dst, true, false).await,
+            Hsetnx(cmd) => cmd.apply(dst, false, true).await,
             Hget(cmd) => cmd.apply(dst).await,
             Hmget(cmd) => cmd.apply(dst).await,
             Hlen(cmd) => cmd.apply(dst).await,
@@ -813,6 +819,7 @@ impl Command {
             Command::Strlen(_) => "strlen",
             Command::Hset(_) => "hset",
             Command::Hmset(_) => "hmset",
+            Command::Hsetnx(_) => "hsetnx",
             Command::Hget(_) => "hget",
             Command::Hmget(_) => "hmget",
             Command::Hlen(_) => "hlen",

@@ -182,6 +182,9 @@ mod zincrby;
 pub use zincrby::Zincrby;
 
 mod script;
+pub use script::script_clear_killed;
+pub use script::script_interuptted;
+pub use script::script_set_killed;
 pub use script::Script;
 
 mod unknown;

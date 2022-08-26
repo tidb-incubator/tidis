@@ -9,18 +9,18 @@ use crate::{Connection, Frame, Parse};
 use bytes::Bytes;
 use slog::debug;
 
-static mut SCRIPT_KILLED: AtomicBool = AtomicBool::new(false);
+static SCRIPT_KILLED: AtomicBool = AtomicBool::new(false);
 
 pub fn script_interuptted() -> bool {
-    unsafe { SCRIPT_KILLED.load(Ordering::Relaxed) }
+    SCRIPT_KILLED.load(Ordering::Relaxed)
 }
 
 pub fn script_set_killed() {
-    unsafe { SCRIPT_KILLED.store(true, Ordering::Relaxed) }
+    SCRIPT_KILLED.store(true, Ordering::Relaxed)
 }
 
 pub fn script_clear_killed() {
-    unsafe { SCRIPT_KILLED.store(false, Ordering::Relaxed) }
+    SCRIPT_KILLED.store(false, Ordering::Relaxed)
 }
 
 #[derive(Debug, Clone)]

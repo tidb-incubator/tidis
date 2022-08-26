@@ -487,6 +487,10 @@ python3 test_helper.py [--ip ip] [--port 6379]
     |  client kill    |    Yes     |
     +-----------------+------------+
 
+## Performance
+
+See details [Benchmark](./docs/performance.md) here. 
+
 ## License
 
 TiKV-Service is under the Apache-2.0 license. See the [LICENSE](./LICENSE) file for details.

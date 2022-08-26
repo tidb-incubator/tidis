@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use crate::cmd::Invalid;
 use crate::config::LOGGER;
 use crate::db::Db;
@@ -7,6 +9,20 @@ use crate::{Connection, Frame, Parse};
 use bytes::Bytes;
 use slog::debug;
 
+static SCRIPT_KILLED: AtomicBool = AtomicBool::new(false);
+
+pub fn script_interuptted() -> bool {
+    SCRIPT_KILLED.load(Ordering::Relaxed)
+}
+
+pub fn script_set_killed() {
+    SCRIPT_KILLED.store(true, Ordering::Relaxed)
+}
+
+pub fn script_clear_killed() {
+    SCRIPT_KILLED.store(false, Ordering::Relaxed)
+}
+
 #[derive(Debug, Clone)]
 pub struct Script {
     script: String,
@@ -14,6 +30,7 @@ pub struct Script {
     sha1_vec: Vec<String>,
     is_exists: bool,
     is_flush: bool,
+    is_kill: bool,
     valid: bool,
 }
 
@@ -22,6 +39,7 @@ impl Script {
         let mut is_load = false;
         let mut is_exists = false;
         let mut is_flush = false;
+        let mut is_kill = false;
         match subcommand.to_uppercase().as_str() {
             "LOAD" => {
                 is_load = true;
@@ -32,6 +50,9 @@ impl Script {
             "FLUSH" => {
                 is_flush = true;
             }
+            "KILL" => {
+                is_kill = true;
+            }
             _ => {}
         }
         Script {
@@ -40,6 +61,7 @@ impl Script {
             sha1_vec: vec![],
             is_exists,
             is_flush,
+            is_kill,
             valid: true,
         }
     }
@@ -98,17 +120,17 @@ impl Script {
             let sha1_str = sha1hex(&self.script);
             db.set_script(sha1_str.clone(), Bytes::from(self.script.clone()));
             return Ok(resp_bulk(sha1_str.as_bytes().to_vec()));
-        }
-        if self.is_flush {
+        } else if self.is_flush {
             db.flush_script();
             return Ok(resp_ok());
-        }
-        if self.is_exists {
+        } else if self.is_exists {
             let mut resp = vec![];
             for sha1 in &self.sha1_vec {
                 resp.push(resp_int(if db.get_script(sha1).is_some() { 1 } else { 0 }));
             }
             return Ok(resp_array(resp));
+        } else if self.is_kill {
+            script_set_killed();
         }
         Ok(resp_ok())
     }
@@ -122,6 +144,7 @@ impl Invalid for Script {
             sha1_vec: vec![],
             is_exists: false,
             is_flush: false,
+            is_kill: false,
             valid: true,
         }
     }

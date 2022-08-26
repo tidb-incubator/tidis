@@ -30,7 +30,7 @@ use slog::{debug, error, info, warn};
 use tokio::sync::{broadcast, mpsc, Mutex};
 use tokio::time::{self, Duration, Instant, MissedTickBehavior};
 
-use mlua::Lua;
+use mlua::{HookTriggers, Lua};
 
 use crate::config::LOGGER;
 
@@ -41,6 +41,8 @@ use crate::tikv::errors::{
     REDIS_AUTH_INVALID_PASSWORD_ERR, REDIS_AUTH_REQUIRED_ERR, REDIS_AUTH_WHEN_DISABLED_ERR,
     REDIS_DISCARD_WITHOUT_MULTI_ERR, REDIS_EXEC_WITHOUT_MULTI_ERR, REDIS_MULTI_NESTED_ERR,
 };
+
+use crate::cmd::{script_clear_killed, script_interuptted};
 
 /// Server listener state. Created in the `run` call. It includes a `run` method
 /// which performs the TCP listening and initialization of per-connection state.
@@ -763,7 +765,28 @@ impl Handler {
                             Command::Eval(_) | Command::Evalsha(_) => {
                                 if self.lua.is_none() {
                                     // initialize the mlua once in same connection
-                                    self.lua = Some(Lua::new());
+                                    let lua = Lua::new();
+                                    // set script interupt handler
+                                    lua.set_hook(HookTriggers::every_line(), |_lua, _debug| {
+                                        if script_interuptted() {
+                                            warn!(
+                                                LOGGER,
+                                                "Script kiiled by user with SCRIPT KILL..."
+                                            );
+
+                                            script_clear_killed();
+
+                                            Err(mlua::Error::RuntimeError(
+                                                "Script kiiled by user with SCRIPT KILL..."
+                                                    .to_string(),
+                                            ))
+                                        } else {
+                                            Ok(())
+                                        }
+                                    })
+                                    .unwrap();
+
+                                    self.lua = Some(lua);
                                 }
                             }
                             Command::Multi(_) => {

@@ -66,5 +66,6 @@ But in the write scenario, `TiKV-Service` throughput is better obviously, almost
 
 ![](./20220826150505.jpg)
 
-In the comparison, we can see all them have not much difference in small concurrency for read, and `TiKV-Service`'s advantage shows up. In write scenerio, latency of `TiKV-Service` are always the best and stable as the concurrency increase. 
+In the comparison, we can see all them have not much difference in small concurrency for read, and `TiKV-Service`'s advantage shows up as the concurrency increases.
+In write scenerio, latency of `TiKV-Service` are always the best and stay stable as the concurrency increases.
 

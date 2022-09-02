@@ -73,10 +73,10 @@ jobs:
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://tiup-mirrors.pingcap.com/install.sh | sh
           /home/runner/.tiup/bin/tiup playground nightly --mode tikv-slim --without-monitor &
-      - name: Setup tikv-service
+      - name: Setup tidis
         run: |
           cargo build -r
-          ./target/release/tikv-service-server --config="config.toml" &
+          ./target/release/tidis-server --config="config.toml" &
       - name: Setup test tool env
         uses: actions/setup-python@v3
         with:

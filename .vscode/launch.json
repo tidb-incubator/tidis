@@ -7,15 +7,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'tikv-service-server'",
+            "name": "Debug executable 'tidis-server'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=tikv-service-server",
-                    "--package=tikv-service"
+                    "--bin=tidis-server",
+                    "--package=tidis"
                 ],
                 "filter": {
-                    "name": "tikv-service-server",
+                    "name": "tidis-server",
                     "kind": "bin"
                 }
             },
@@ -30,16 +30,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Run executable 'tikv-service-server'",
+            "name": "Run executable 'tidis-server'",
             "cargo": {
                 "args": [
                     "build",
                     "-r",
-                    "--bin=tikv-service-server",
-                    "--package=tikv-service"
+                    "--bin=tidis-server",
+                    "--package=tidis"
                 ],
                 "filter": {
-                    "name": "tikv-service-server",
+                    "name": "tidis-server",
                     "kind": "bin"
                 }
             },

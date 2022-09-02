@@ -2410,6 +2410,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "tidis"
+version = "2.0.0"
+dependencies = [
+ "async-std",
+ "async-stream",
+ "async-tls",
+ "atoi",
+ "bytes",
+ "chrono",
+ "crc",
+ "futures 0.3.23",
+ "hex",
+ "hyper",
+ "lazy_static",
+ "mlua",
+ "pprof",
+ "prometheus 0.13.1",
+ "rand 0.8.5",
+ "regex",
+ "rustls",
+ "serde",
+ "sha1",
+ "slog",
+ "slog-term",
+ "structopt",
+ "thiserror",
+ "tikv-client",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "toml",
+]
+
+[[package]]
 name = "tikv-client"
 version = "0.1.0"
 source = "git+https://github.com/yongman/client-rust.git?branch=dev#2648fe695ca7d67852ec0c108a2de8e261ef6d1b"
@@ -2498,40 +2532,6 @@ dependencies = [
  "tikv-client-common",
  "tikv-client-proto",
  "tokio",
-]
-
-[[package]]
-name = "tikv-service"
-version = "0.0.1"
-dependencies = [
- "async-std",
- "async-stream",
- "async-tls",
- "atoi",
- "bytes",
- "chrono",
- "crc",
- "futures 0.3.23",
- "hex",
- "hyper",
- "lazy_static",
- "mlua",
- "pprof",
- "prometheus 0.13.1",
- "rand 0.8.5",
- "regex",
- "rustls",
- "serde",
- "sha1",
- "slog",
- "slog-term",
- "structopt",
- "thiserror",
- "tikv-client",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "toml",
 ]
 
 [[package]]

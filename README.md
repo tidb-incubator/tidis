@@ -1,26 +1,27 @@
-# TiKV-Service
+# Tidis
 
 [![CI](https://github.com/tidbcloud/tikv-service/actions/workflows/ci.yml/badge.svg)](https://github.com/tidbcloud/tikv-service/actions/workflows/ci.yml)
 
-`TiKV-Service` is the service layer for TiKV, aims to provide multiple model distributed storage service powered by PingCAP.
+`Tidis` is the service layer for TiKV, aims to provide multiple model distributed storage service powered by PingCAP. 
+
+`Tidis` has been completely refactored and rewritten by `Rust` for better performace and lower latency, and added more features support, such as Lua scripts, TLS connections, meta key split and more.
 
 - [x] Redis
 - [ ] Memcached
-- [ ] DynamoDB
 
 ## Features
 
-* Multiple protocol supported
+* Multiple protocol supported*
 * Linear scale-out ability
 * Storage and computation separation
-* Data safety, no data loss, Raft replication
-* Transaction support
+* Data safety, no data loss, raft replication
+* Global transaction support
 
 ## Architecture
 
-*Architechture of TiKV-Service*
+*Architechture of Tidis*
 
-![architecture](docs/tikv-service-arch.png)
+![architecture](docs/tidis-arch.png)
 
 *Architechture of TiKV*
 
@@ -34,16 +35,16 @@
 
 - Start `PD`, `TiKV` and one `TiDB` (for trigger GC) using `TiUP`, you can be follow the official instructions [English](https://docs.pingcap.com/tidb/stable/production-deployment-using-tiup) or [中文](https://docs.pingcap.com/zh/tidb/stable/production-deployment-using-tiup).
 
-- Build the TiKV-Service server
+- Build the Tidis server
 
 ```
 cargo build -r
 ```
 
-- Start the TiKV-Service server
+- Start the Tidis server
 
 ```
-tikv-service-server --config config.toml
+tidis-server --config config.toml
 ```
 
 You can use the demo configuration below.
@@ -63,7 +64,7 @@ instance_id = "1"                         # instance_id can be used as tenant id
 prometheus_listen = "0.0.0.0"
 prometheus_port = 8080
 log_level = "info"
-log_file = "tikv-service.log"
+log_file = "tidis.log"
 
 [backend]
 use_txn_api = true                        # use transaction api for full api supported
@@ -84,42 +85,42 @@ For redis protocol, you can use the official redis clients, such as `redis-cli`.
 
 ```
 redis-cli -p 6379
-tikv-service> SET mykey "Hello"
+tidis> SET mykey "Hello"
 "OK"
-tikv-service> GET mykey
+tidis> GET mykey
 "Hello"
-tikv-service> EXPIRE mykey 10
+tidis> EXPIRE mykey 10
 (integer) 1
 # 10 seconds later
-tikv-service> GET mykey
+tidis> GET mykey
 (nil)
-tikv-service> RPUSH mylist "one"
+tidis> RPUSH mylist "one"
 (integer) 1
-tikv-service> RPUSH mylist "two"
+tidis> RPUSH mylist "two"
 (integer) 2
-tikv-service> RPUSH mylist "three"
+tidis> RPUSH mylist "three"
 (integer) 3
-tikv-service> LRANGE mylist 0 0
+tidis> LRANGE mylist 0 0
 1) "one"
-tikv-service> LRANGE mylist -3 2
-1) "one"
-2) "two"
-3) "three"
-tikv-service> LRANGE mylist -100 100
+tidis> LRANGE mylist -3 2
 1) "one"
 2) "two"
 3) "three"
-tikv-service> LRANGE mylist 5 10
+tidis> LRANGE mylist -100 100
+1) "one"
+2) "two"
+3) "three"
+tidis> LRANGE mylist 5 10
 (nil)
-tikv-service> ZADD myzset 1 "one"
+tidis> ZADD myzset 1 "one"
 (integer) 1
-tikv-service> ZADD myzset 2 "two"
+tidis> ZADD myzset 2 "two"
 (integer) 1
-tikv-service> ZADD myzset 3 "three"
+tidis> ZADD myzset 3 "three"
 (integer) 1
-tikv-service> ZREMRANGEBYSCORE myzset 0 1
+tidis> ZREMRANGEBYSCORE myzset 0 1
 (integer) 1
-tikv-service> ZRANGE myzset 0 5 WITHSCORES
+tidis> ZRANGE myzset 0 5 WITHSCORES
 1) "two"
 2) "2"
 3) "three"
@@ -217,11 +218,11 @@ tls_auth_client is true, client must be configure certs and key file for client 
 
 ## Global transaction
 
-Thanks to the global transaction of `TiKV` cluster, `TiKV-Service` can support the global transaction easily. Use `MULTI/EXEC/DISCARD` command just like `Redis Cluster` but without caring about the `CROSSSLOT` error, just use it like a single `Redis` instance.
+Thanks to the global transaction of `TiKV` cluster, `Tidis` can support the global transaction easily. Use `MULTI/EXEC/DISCARD` command just like `Redis Cluster` but without caring about the `CROSSSLOT` error, just use it like a single `Redis` instance.
 
 ## Lua Script
 
-`TiKV-Service` use `mlua` library to interpret lua scripts. We can use `EVAL/EVALSHA` to execute lua script with global transaction support, without caring about the `CROSSSLOT` error either.
+`Tidis` use `mlua` library to interpret lua scripts. We can use `EVAL/EVALSHA` to execute lua script with global transaction support, without caring about the `CROSSSLOT` error either.
 
 ## Async key deletion
 
@@ -487,9 +488,13 @@ python3 test_helper.py [--ip ip] [--port 6379]
     |  client kill    |    Yes     |
     +-----------------+------------+
 
+## Performance
+
+See details [Benchmark](./docs/performance.md) here. 
+
 ## License
 
-TiKV-Service is under the Apache-2.0 license. See the [LICENSE](./LICENSE) file for details.
+Tidis is under the Apache-2.0 license. See the [LICENSE](./LICENSE) file for details.
 
 ## Acknowledgment
 

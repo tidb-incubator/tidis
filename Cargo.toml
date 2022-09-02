@@ -1,17 +1,17 @@
 [package]
-authors = ["yongman <yming0221@gmail.com>"]
+authors = ["The Tidis Authors"]
 edition = "2018"
-name = "tikv-service"
-version = "0.0.1"
+name = "tidis"
+version = "2.0.0"
 license = "Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/pingcap-inc/tikv-service"
+repository = "https://github.com/tikv/tidis"
 description = """
 The service layer for TiKV, a distributed key-value store, powered by PingCAP.
 """
 
 [[bin]]
-name = "tikv-service-server"
+name = "tidis-server"
 path = "src/bin/server.rs"
 
 [dependencies]

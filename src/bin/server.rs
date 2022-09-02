@@ -1,4 +1,4 @@
-use tikv_service::{
+use tidis::{
     config_instance_id_or_default, config_listen_or_default, config_pd_addrs_or_default,
     config_port_or_default, config_prometheus_listen_or_default, config_prometheus_port_or_default,
     config_tls_auth_client_or_default, config_tls_ca_cert_file_or_default,
@@ -19,7 +19,7 @@ use tokio::signal;
 use async_tls::TlsAcceptor;
 
 #[tokio::main]
-pub async fn main() -> tikv_service::Result<()> {
+pub async fn main() -> tidis::Result<()> {
     let cli = Cli::from_args();
 
     let mut config: Option<Config> = None;
@@ -103,7 +103,7 @@ pub async fn main() -> tikv_service::Result<()> {
     let mut tls_acceptor = None;
     if port != "0" {
         info!(
-            tikv_service::config::LOGGER,
+            tidis::config::LOGGER,
             "TiKV Service Server Listen on: {}:{}", &listen_addr, port
         );
         // Bind a TCP listener
@@ -112,7 +112,7 @@ pub async fn main() -> tikv_service::Result<()> {
 
     if tls_port != "0" && !tls_cert_file.is_empty() && !tls_cert_file.is_empty() {
         info!(
-            tikv_service::config::LOGGER,
+            tidis::config::LOGGER,
             "TiKV Service Server SSL Listen on: {}:{}", &tls_listen_addr, tls_port
         );
         tls_listener =

@@ -22,11 +22,11 @@ We deployed a minimal TiKV cluster with three storage nodes for our basic benchm
 +-------+------------------------+-----------------------+
 | node3 | TiKV                   | /data with local ssd  |
 +-------+------------------------+-----------------------+
-| node4 | TiKV-Service           | no extra /data mounts |
+| node4 | Tidis                  | no extra /data mounts |
 +-------+------------------------+-----------------------+
-| node5 | TiKV-Service           | no extra /data mounts |
+| node5 | Tidis                  | no extra /data mounts |
 +-------+------------------------+-----------------------+
-| node6 | TiKV-Service           | no extra /data mounts |
+| node6 | Tidis                  | no extra /data mounts |
 +-------+------------------------+-----------------------+
 | node7 | PD & Benchmark clients | no extra /data mounts |
 +-------+------------------------+-----------------------+
@@ -57,15 +57,15 @@ Before the benchmark, we import a large amount of datasets for different data ty
 
 - Throughput (higher is better)
 
-![](./20220826145733.jpg)
+![](./20220902160513.jpg)
 
-In the comparison, we can see the all them are in the same level in read scenario, `TiKV-Service` and `Tidis`'s throughput has no much gap, and better than `Titan` obviously.
-But in the write scenario, `TiKV-Service` throughput is better obviously, almost double to `Tidis` and `Titan`.
+In the comparison, we can see the all them are in the same level in read scenario, `Tidis2.0` and `Tidis1.0`'s throughput has no much gap, and better than `Titan` obviously.
+But in the write scenario, `Tidis2.0` throughput is better obviously, almost double to `Tidis` and `Titan`.
 
 - Latency (lower is better)
 
-![](./20220826150505.jpg)
+![](./20220902160620.jpg)
 
-In the comparison, we can see all them have not much difference in small concurrency for read, and `TiKV-Service`'s advantage shows up as the concurrency increases.
-In write scenerio, latency of `TiKV-Service` are always the best and stay stable as the concurrency increases.
+In the comparison, we can see all them have not much difference in small concurrency for read, and `Tidis2.0`'s advantage shows up as the concurrency increases.
+In write scenerio, latency of `Tidis2.0` are always the best and stay stable as the concurrency increases.
 

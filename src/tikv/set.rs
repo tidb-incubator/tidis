@@ -13,6 +13,7 @@ use crate::utils::count_unique_keys;
 use crate::utils::{key_is_expired, resp_array, resp_bulk, resp_err, resp_int, resp_nil};
 use crate::Frame;
 use ::futures::future::FutureExt;
+use futures::StreamExt;
 use rand::prelude::SliceRandom;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -469,7 +470,7 @@ impl SetCommandCtx {
                             let bound_range =
                                 KEY_ENCODER.encode_txnkv_set_data_key_range(&key, version);
 
-                            let iter = txn.scan_keys(bound_range, u32::MAX).await?;
+                            let iter = txn.scan_keys_stream(bound_range, u32::MAX).await?;
 
                             let resp = iter
                                 .map(|k| {
@@ -478,7 +479,8 @@ impl SetCommandCtx {
                                         KeyDecoder::decode_key_set_member_from_datakey(&key, k);
                                     resp_bulk(user_key)
                                 })
-                                .collect();
+                                .collect()
+                                .await;
 
                             Ok(resp_array(resp))
                         }
@@ -738,8 +740,9 @@ impl SetCommandCtx {
 
                                 let data_bound_range =
                                     KEY_ENCODER.encode_txnkv_set_data_key_range(&key, version);
-                                let iter = txn.scan_keys(data_bound_range, u32::MAX).await?;
-                                for k in iter {
+                                let mut iter =
+                                    txn.scan_keys_stream(data_bound_range, u32::MAX).await?;
+                                while let Some(k) = iter.next().await {
                                     txn.delete(k).await?;
                                 }
 
@@ -803,8 +806,10 @@ impl SetCommandCtx {
 
                                 let data_bound_range =
                                     KEY_ENCODER.encode_txnkv_set_data_key_range(&key, version);
-                                let iter = txn.scan_keys(data_bound_range, u32::MAX).await?;
-                                for k in iter {
+                                let mut iter =
+                                    txn.scan_keys_stream(data_bound_range, u32::MAX).await?;
+
+                                while let Some(k) = iter.next().await {
                                     txn.delete(k).await?;
                                 }
 

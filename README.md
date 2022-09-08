@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/tidbcloud/tikv-service/actions/workflows/ci.yml/badge.svg)](https://github.com/tidbcloud/tikv-service/actions/workflows/ci.yml)
 
-`Tidis` is the service layer for TiKV, aims to provide multiple model distributed storage service powered by PingCAP. 
+`Tidis` is the service layer for TiKV, aims to provide multiple-model distributed storage service powered by PingCAP. 
 
-`Tidis` has been completely refactored and rewritten by `Rust` for better performace and lower latency, and added more features support, such as Lua scripts, TLS connections, meta key split and more.
+`Tidis` has been completely refactored and rewritten in `Rust` for better performance and lower latency, and added more features support, such as Lua scripts, TLS connections, meta key split and more.
 
 - [x] Redis
 - [ ] Memcached

@@ -1,0 +1,154 @@
+// ------------------------------------------------------------------
+// NOTICE file corresponding to the section 4d of The Apache License,
+// Version 2.0, in this case for
+// ------------------------------------------------------------------
+
+async-stream
+Address: https://github.com/tokio-rs/async-stream
+Revision: d346ad2d77b11855969b82c9d16bd78ec84e4863
+License: https://github.com/tokio-rs/async-stream/blob/master/LICENSE
+--------------------------------------
+
+atoi
+Address: https://github.com/pacman82/atoi-rs
+Revision: 7392d60370880c638200905ecc8270ecc0a80422
+License: https://github.com/pacman82/atoi-rs/blob/main/LICENSE
+--------------------------------------
+
+bytes
+Address: https://github.com/tokio-rs/bytes
+Revision: a36f661354a99f8dd14b15acfe69bc16d5505fbe
+License: https://github.com/tokio-rs/bytes/blob/master/LICENSE
+--------------------------------------
+
+chrono
+Address: https://github.com/chronotope/chrono
+Revision: 53050237fcd8815955cf048c827e6fabe349949f
+License: https://github.com/chronotope/chrono/blob/main/LICENSE.txt
+--------------------------------------
+
+crc
+Address: https://github.com/mrhooray/crc-rs
+Revision: 8a8d9622a9de96e87be63f62dc7853eef85fcbb9
+License: https://github.com/mrhooray/crc-rs/blob/master/LICENSE-APACHE and https://github.com/mrhooray/crc-rs/blob/master/LICENSE-MIT
+--------------------------------------
+
+structopt
+Address: https://github.com/TeXitoi/structopt
+Revision: 203c6bc19e561da1734873794bbd420e0bfc79b9
+License: https://github.com/TeXitoi/structopt/blob/master/LICENSE-APACHE and https://github.com/TeXitoi/structopt/blob/master/LICENSE-MIT
+--------------------------------------
+
+slog
+Address: https://github.com/slog-rs/slog
+Revision: 14807364944610ced8f59bd0e8dba1e50e3d76de
+License: https://github.com/slog-rs/slog/blob/master/LICENSE-APACHE and https://github.com/slog-rs/slog/blob/master/LICENSE-MIT and https://github.com/slog-rs/slog/blob/master/LICENSE-MPL2
+--------------------------------------
+
+slog-term
+Address: https://github.com/slog-rs/term
+Revision: 3dda0a1409bd6b58564e642108f8ccc92f9a55de
+License: https://github.com/slog-rs/term/blob/master/LICENSE-APACHE and https://github.com/slog-rs/term/blob/master/LICENSE-MIT and https://github.com/slog-rs/term/blob/master/LICENSE-MPL2
+--------------------------------------
+
+tokio
+Address: https://github.com/tokio-rs/tokio
+Revision: d7b3b33c9c95935c4eba70293d75a870a5d5ba24
+License: https://github.com/tokio-rs/tokio/blob/master/LICENSE
+--------------------------------------
+
+client-rust
+Address: https://github.com/yongman/client-rust
+Revision: f779528d48881823ac4886d48341f20977b26fca
+License: https://github.com/yongman/client-rust/blob/master/LICENSE
+--------------------------------------
+
+lazy-static
+Address: https://github.com/rust-lang-nursery/lazy-static.rs
+Revision: 421669662b35fcb455f2902daed2e20bbbba79b6
+License: https://github.com/rust-lang-nursery/lazy-static.rs/blob/master/LICENSE-APACHE and https://github.com/rust-lang-nursery/lazy-static.rs/blob/master/LICENSE-MIT
+--------------------------------------
+
+thiserror
+Address: https://github.com/dtolnay/thiserror
+Revision: c6b8fcf0c432c216f07c4282acaa2d56f5798148
+License: https://github.com/dtolnay/thiserror/blob/master/LICENSE-APACHE and https://github.com/dtolnay/thiserror/blob/master/LICENSE-MIT
+--------------------------------------
+
+prometheus
+Address: https://github.com/tikv/rust-prometheus
+Revision: fe0a284cbf71ec886c36f7d418d990bbc201dc06
+License: https://github.com/tikv/rust-prometheus/blob/master/LICENSE
+--------------------------------------
+
+pprof
+Address: https://github.com/tikv/pprof-rs
+Revision: fb65ca7ae728373724b39bf8b7a1dddabd75a518
+License: https://github.com/tikv/pprof-rs/blob/master/LICENSE
+--------------------------------------
+
+hyper
+Address: https://github.com/hyperium/hyper
+Revision: c734b7904d615b8eaa5a5c1a8aa55d4e9ae56a6c
+License: https://github.com/hyperium/hyper/blob/master/LICENSE
+--------------------------------------
+
+async-std
+Address: https://github.com/async-rs/async-std
+Revision: 2c6304662b96aab64feb20f7d727bfc8e070453e
+License: https://github.com/async-rs/async-std/blob/main/LICENSE-APACHE and https://github.com/async-rs/async-std/blob/main/LICENSE-MIT
+--------------------------------------
+
+async-tls
+Address: https://github.com/async-rs/async-tls
+Revision: a8ca3ca5691e7c50f9aae34ccc5fefa331e06f3f
+License: https://github.com/async-rs/async-tls/blob/master/LICENSE-APACHE and https://github.com/async-rs/async-tls/blob/master/LICENSE-MIT
+--------------------------------------
+
+rand
+Address: https://github.com/rust-random/rand
+Revision: 937320cbfeebd4352a23086d9c6e68f067f74644
+License: https://github.com/rust-random/rand/blob/master/LICENSE-APACHE and https://github.com/rust-random/rand/blob/master/LICENSE-MIT
+--------------------------------------
+
+regex
+Address: https://github.com/rust-lang/regex
+Revision: 159a63c85eb77ec321301bc4c4ebfb90343edc2b
+License: https://github.com/rust-lang/regex/blob/master/LICENSE-APACHE and https://github.com/rust-lang/regex/blob/master/LICENSE-MIT
+--------------------------------------
+
+toml
+Address: https://github.com/alexcrichton/toml-rs
+Revision: 94b319f5eeb80dbc7420246416a69d5bd0a9557d
+License: https://github.com/alexcrichton/toml-rs/blob/master/LICENSE-APACHE and https://github.com/alexcrichton/toml-rs/blob/master/LICENSE-MIT
+--------------------------------------
+
+serde
+Address: https://github.com/serde-rs/serde
+Revision: d208762c81883a181e8c6a9ca3f303e040105c7d
+License: https://github.com/serde-rs/serde/blob/master/LICENSE-APACHE and https://github.com/serde-rs/serde/blob/master/LICENSE-MIT
+--------------------------------------
+
+futures
+Address: https://github.com/rust-lang/futures-rs
+Revision: 67462f754fbbe978992bc1ec7fdfda2b45976e9f
+License: https://github.com/rust-lang/futures-rs/blob/master/LICENSE-APACHE and https://github.com/rust-lang/futures-rs/blob/master/LICENSE-MIT
+--------------------------------------
+
+mlua
+Address: https://github.com/khvzak/mlua
+Revision: c85616137a367a72367a7d3f6019a5816ee5aa7b
+License: https://github.com/khvzak/mlua/blob/master/LICENSE
+--------------------------------------
+
+hashes
+Address: https://github.com/RustCrypto/hashes
+Revision: 75298d36b9400654ad3bbee072b59c5ffed27aa4
+License: https://github.com/RustCrypto/hashes/blob/master/README.md
+--------------------------------------
+
+hex
+Address: https://github.com/KokaKiwi/rust-hex
+Revision: b2b4370b5bf021b98ee7adc92233e8de3f2de792
+License: https://github.com/KokaKiwi/rust-hex/blob/main/LICENSE-APACHE and https://github.com/KokaKiwi/rust-hex/blob/main/LICENSE-MIT
+--------------------------------------

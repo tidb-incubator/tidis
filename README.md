@@ -1,6 +1,6 @@
 # Tidis
 
-[![CI](https://github.com/tidbcloud/tikv-service/actions/workflows/ci.yml/badge.svg)](https://github.com/tidbcloud/tikv-service/actions/workflows/ci.yml)
+[![CI](https://github.com/tidb-incubator/tidis/actions/workflows/ci.yml/badge.svg)](https://github.com/tidb-incubator/tidis/actions/workflows/ci.yml)
 
 `Tidis` is the service layer for TiKV, aims to provide multiple-model distributed storage service powered by PingCAP. 
 

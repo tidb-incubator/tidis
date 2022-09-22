@@ -377,7 +377,7 @@ For big keys with thousands of elements deletion, the time spent decrease from s
 
 ## Super batch support
 
-Enable super batch could have obvious performance benefit, and you can tune it based on your real workload.
+Enable super batch could have significant performance benefits, and you can tune it based on your real workload.
 
 Super batch is a feature that can reduce the number of request round-trips to TiKV. It is enabled by default, and can be disabled by setting to `allow_batch=false` in the configuration file. There are more configuration options available for advanced tuning. `max_batch_wait_time` is the maximum waiting time for a batch, and `max_batch_size` is the maximum number of keys in one batch. `overload_threshold` is the threshold of the backend TiKV server's load, if the load is higher than this value, the batch request will be sent immediately.
 

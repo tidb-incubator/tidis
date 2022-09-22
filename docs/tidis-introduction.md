@@ -5,7 +5,7 @@
 
 `Tidis` is the service layer for TiKV, aims to provide redis protocol compatiable distributed storage service powered by PingCAP. Redis protocol has been implemented with multiple datatypes (string/hash/list/set/sortedset) support.
 
-`Tidis` has been completely refactored and rewritten in `Rust` for better performance and lower latency, and added more features support, such as Lua scripts, TLS connections, meta key split and more.
+`Tidis` has been completely redesigned and rewritten in `Rust` for better performance and lower latency, and added more important features, such as Lua scripts, TLS connections, lock optimization and more.
 
 ## Background
 
@@ -25,7 +25,7 @@ Of cause we are not the only one who has similar ideas. Both `Titan` and `Tidis 
 
 ## Features
 
-* Multiple protocol support
+* Multiple protocols support
 * Linear scale-out
 * Storage and compute disaggregation
 * Highly durable and available with strong consistency
@@ -338,19 +338,19 @@ tidis> ZRANGE myzset 0 5 WITHSCORES
 
 ## TLS/SSL support
 
-TLS/SSL encryption is necessary for security, especially in public access envrionment, such as providing cloud services in AWS, GCP or Azure cloud.
+TLS/SSL encryption is necessary for security, especially in public access environment, such as providing cloud services in AWS, GCP or Azure cloud.
 
-`Tidis` support `one-way` and `two-way` TLS authentication handshake. In `one-way` authentication, you can use the ca certificate and password for security transport and authticate. If you choose `two-way` authentication, it is safe using ca certificate with client-side key and certificate without password.
+`Tidis` support `one-way` and `two-way` TLS authentication handshake. In `one-way` authentication, you can use the ca certificate and password for security transport and authenticate. If you choose `two-way` authentication, it is safe using ca certificate with client-side key and certificate without password.
 
 ## Global transaction
 
-Thanks to the global transaction mechanism in `TiKV` cluster, `Tidis` can support the global transaction easily. Use `MULTI/EXEC/DISCARD` command just like `Redis Cluster` but without caring about the `CROSSSLOT` error, just use it like a single `Redis` instance.
+Thanks to the global transaction mechanism in `TiKV` cluster, `Tidis` can support global transaction easily. Use `MULTI/EXEC/DISCARD` command just like `Redis Cluster` but without caring about the `CROSSSLOT` error, just use it like a single `Redis` instance.
 
-In `Tidis`, there are two kinds of transaction models, `optimistic` and `perssimistic` models.
+In `Tidis`, there are two kinds of transaction models, `optimistic` and `pessimistic` models.
 
-Perssimistic transaction is prefered when you have a lot hot-key writes in parallel. Otherwise, you should use optimistic transaction instead for better performance.
+Pessimistic transaction is prefered when you have many concurrent writes to limited hot keys. Otherwise, you should use optimistic transaction instead for better performance.
 
-You can refer to the documents in TiDB [optimistic transaction](https://docs.pingcap.com/tidb/dev/optimistic-transaction) and [perssimistic transaction](https://docs.pingcap.com/tidb/dev/perssimistic-transaction).
+You can refer to the documents in TiDB [optimistic transaction](https://docs.pingcap.com/tidb/dev/optimistic-transaction) and [pessimistic transaction](https://docs.pingcap.com/tidb/dev/pessimistic-transaction).
 
 In addition, the `1pc` and `async commit` options are helpful for better performance in most use cases. You can refer to the documents in PingCAP blog [AsyncCommit, the Accelerator for Transaction Commit in TiDB 5.0](https://www.pingcap.com/blog/async-commit-the-accelerator-for-transaction-commit-in-tidb-5-0/) for details.
 
@@ -358,48 +358,47 @@ In addition, the `1pc` and `async commit` options are helpful for better perform
 
 `Tidis` use `mlua` library to interpret lua scripts. We can use `EVAL/EVALSHA` to execute lua script with global transaction support, without caring about the `CROSSSLOT` error either.
 
-The lua script will be running in a new transaction context, so all read and writes in the lua script are atomic guranteed.
+The lua script will be running in a new transaction context, so all read and writes in the lua script are guaranteed to be atomic.
 
 All lua script e2e test cases are located in [test/test_lua.py](https://github.com/tidb-incubator/tidis/blob/master/test/test_lua.py).
 
 ## Asynchronous key deletion
 
-For collection keys with thousands of items, deletion will be a time-costing operation, enable the async deletion configuration could greatly reduce the operation time.
+For collection keys with thousands of items, deletion can be a time-consuming operation, enable the async deletion configuration could greatly reduce the operation time.
 
-The big key deletion task will be run in background and the request will be response to user immediately without waiting for the background task's completion. We have to maintain multiple versions of the same key if the old version has been deleted in asynchronous way. If there are some version are in the deletion queue, next new version of the key will be monotonic increase from the latest version of the key. Otherwise, the new version will be start fresh from 0.
+The big key deletion task will run in background and response to user immediately without waiting for the background task's completion. We maintain multiple versions of the same key if the old version has been deleted in asynchronous way. If there are pending deletes with old versions, next new version of the key will be monotonic increase from the largest version of the key. Otherwise, the new version will start from 0.
 
-For big keys with thousands of elements deletion, the time cost decrease from seconds to milliseconds.
+For big keys with thousands of elements deletion, the time spent decrease from seconds to milliseconds.
 
 |      type      |    hash    |    list    |    set     | sorted set |
 | :------------: | :--------: | :--------: | :--------: | :--------: |
 | sync deletion  | 1.911778 s | 2.047429 s | 2.145035 s | 4.892823 s |
 | async deletion | 0.005159 s | 0.004694 s | 0.005370 s | 0.005403 s |
 
-## Super batch feature support
+## Super batch support
 
-Use super batch enabled could have obvious performance optimization, but you can tunning it by your business pressure.
+Enable super batch could have significant performance benefits, and you can tune it based on your real workload.
 
-Super batch is a feature that can reduce the number of user requests round-trips to TiKV. It is enabled by default, and can be disabled by setting to `allow_batch=false` in the configuration file. And more configuration options are available for tuning. `max_batch_wait_time` is the maximum waiting time for the batch, and `max_batch_size` is the maximum number of keys in one batch. `overload_threshold` is the threshold of the backend TiKV server's load, if the load is higher than this value, the batch request will be sent immediately.
+Super batch is a feature that can reduce the number of request round-trips to TiKV. It is enabled by default, and can be disabled by setting to `allow_batch=false` in the configuration file. There are more configuration options available for advanced tuning. `max_batch_wait_time` is the maximum waiting time for a batch, and `max_batch_size` is the maximum number of keys in one batch. `overload_threshold` is the threshold of the backend TiKV server's load, if the load is higher than this value, the batch request will be sent immediately.
 
-You can tunning the parameters according to your business pressure. In the following test, we set `max_batch_wait_time` to 10ms, `overload_threshold` to 0, and `max_batch_size` varies. The test result shows that the throughput increase 50% and p999 latency decrease 40% when `max_batch_size=20` configured.
+You can tune the parameters according to your workload. In the following test, we set `max_batch_wait_time` to 10ms, `overload_threshold` to 0, and `max_batch_size` varies. The test result shows that the throughput increases 50% and p999 latency decreases 40% with `max_batch_size=20`.
 
 ![](https://cdn.jsdelivr.net/gh/yongman/i@img/picgo/20220921111329.png)
 
 ## Performance
 
-We benchmark the cluster with 3 TiKV nodes, 3 Tidis nodes, 1 PD node and 1 TiDB node (for gc). We benchmark the cluster using multiple `memtier-benchmark` processes, with various number of parallel connections. The benchmark result shows the `read` and `write` throughput can be reached `540k ops/s` and `125k op/s`.
+The topology of cluster to run benchmark has 3 TiKV nodes, 3 Tidis nodes, 1 PD node and 1 TiDB node (for gc). We benchmark the cluster using multiple `memtier-benchmark` processes, with various number of parallel connections. The benchmark result shows the max `read` and `write` throughput are `540k ops/s` and `125k op/s` respectively.
 
 ![](https://cdn.jsdelivr.net/gh/yongman/i@img/picgo/20220921114120.png)
 
-The latency distribution shows that the latency will increase when the cluster load reached to the limit. The `p9999` latency is incresed obviously when having 1200 parallel connections, up to `47ms`.  
+The latency distribution shows that the latency will increase when the cluster load reaches to a certain limit. The `p9999` latency increased significantly with 1200 concurrent connections, up to `47ms`.  
 
 ![](https://cdn.jsdelivr.net/gh/yongman/i@img/picgo/20220921115048.png)
 
-We also compare the benchmark result with other `Redis on TiKV` projects (titan and tidis1.0), the result show that `Tidis` has better write performance than titan and tidis1.0.
+We also compared the benchmark result with other similar `Redis on TiKV` projects (Titan and Tidis 1.0), the result shows that `Tidis` has better write throughput than Titan and Tidis 1.0.
 
 ![](https://cdn.jsdelivr.net/gh/yongman/i@img/picgo/20220921120700.png)
 
-The write thoughput of `Tidis` is almost 2 times of titan and tidis1.0 and the latency are the best all the time.
+The write thoughput of `Tidis` is almost twice of Titan and Tidis 1.0 and the latency are the best all the time.
 
 See more [Benchmark](https://github.com/tidb-incubator/tidis/blob/master/docs/performance.md) details here. 
-

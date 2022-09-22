@@ -391,7 +391,7 @@ The topology of cluster to run benchmark has 3 TiKV nodes, 3 Tidis nodes, 1 PD n
 
 ![](https://cdn.jsdelivr.net/gh/yongman/i@img/picgo/20220921114120.png)
 
-The latency distribution shows that the latency will increase when the cluster load reaches to a certain limit. The `p9999` latency is increased significantly with 1200 concurrent connections, up to `47ms`.  
+The latency distribution shows that the latency will increase when the cluster load reaches to a certain limit. The `p9999` latency increased significantly with 1200 concurrent connections, up to `47ms`.  
 
 ![](https://cdn.jsdelivr.net/gh/yongman/i@img/picgo/20220921115048.png)
 

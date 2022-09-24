@@ -3,7 +3,7 @@
 ## What is Tidis
 [Tidis](https://github.com/tidb-incubator/tidis) is open source now!
 
-`Tidis` is the service layer for TiKV, aims to provide redis protocol compatible distributed storage service powered by PingCAP. It has implemented multiple data types (string/hash/list/set/sortedset) that have been widely used by the community.
+`Tidis` is the service layer for TiKV, aiming to provide redis protocol compatible distributed storage service powered by PingCAP. It has implemented multiple data types (string/hash/list/set/sortedset) that have been widely used by the community.
 
 Compared to `Tidis 1.0`, it has been completely redesigned and rewritten in `Rust` for better performance and lower latency. Along with more important features, such as Lua scripts, TLS connections, lock optimization and more.
 
@@ -39,7 +39,7 @@ Of course we are not the only ones who have similar ideas. Both `Titan` and `Tid
 *Architecture of TiKV*
 
 ![](https://tikv.org/img/basic-architecture.png)
-- Placement Driver (PD): PD is the brain of the TiKV system which manages the metadata about `Nodes`, `Stores`, `Regions` mapping, and makes decisions for data placement and load balancing. PD `periodically checks replication constraints to balance load and data automatically.
+- Placement Driver (PD): PD is the brain of the TiKV system which manages the metadata about `Nodes`, `Stores`, `Regions` mapping, and makes decisions for data placement and load balancing. `PD` periodically checks replication constraints to balance load and data automatically.
 - Node: A physical `Node` in the cluster. Within each `Node`, there are one or more `Stores`. Within each `Store`, there are many `Regions`.
 - Store: There is a RocksDB within each `Store` and it stores data on local disks.
 - Region: `Region` is the basic unit of Key-Value data movement and corresponds to a data range in a `Store`. Each `Region` is replicated to multiple `Nodes`. These multiple replicas form a `Raft group`. A replica of a `Region` is called a `Peer`.
@@ -48,7 +48,7 @@ Of course we are not the only ones who have similar ideas. Both `Titan` and `Tid
 
 - Run clients
 
-For redis protocol, you can use the official redis clients, such as `redis-cli`.
+For the redis protocol, you can use the official redis clients, such as `redis-cli`.
 
 ```
 redis-cli -p 6379

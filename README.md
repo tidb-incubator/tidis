@@ -46,7 +46,7 @@ Of cause we are not the only one who has similar ideas. Both `Titan` and `Tidis 
 
 ## Running
 
-- Start `PD`, `TiKV` and one `TiDB` (for trigger GC) using `TiUP`, you can be follow the official instructions [English](https://docs.pingcap.com/tidb/stable/production-deployment-using-tiup) or [中文](https://docs.pingcap.com/zh/tidb/stable/production-deployment-using-tiup).
+- Start `PD`, `TiKV` and one `TiDB` (for trigger GC) using `TiUP`, you can follow the official instructions [English](https://docs.pingcap.com/tidb/stable/production-deployment-using-tiup) or [中文](https://docs.pingcap.com/zh/tidb/stable/production-deployment-using-tiup).
 
 - Build the Tidis server
 

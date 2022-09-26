@@ -110,7 +110,7 @@ pub async fn main() -> tidis::Result<()> {
         listener = Some(TcpListener::bind(&format!("{}:{}", &listen_addr, port)).await?);
     }
 
-    if tls_port != "0" && !tls_cert_file.is_empty() && !tls_key_file.is_empty() && !tls_ca_cert_file.is_empty() {
+    if tls_port != "0" && !tls_cert_file.is_empty() && !tls_key_file.is_empty() {
         info!(
             tidis::config::LOGGER,
             "TiKV Service Server SSL Listen on: {}:{}", &tls_listen_addr, tls_port

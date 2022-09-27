@@ -2,6 +2,7 @@ use mlua::prelude::LuaError;
 use std::num::{ParseFloatError, ParseIntError};
 use thiserror::Error;
 use tikv_client::Error as TiKVError;
+use toml::ser;
 
 #[derive(Error, Debug)]
 pub enum RTError {
@@ -56,6 +57,30 @@ impl From<ParseFloatError> for RTError {
     }
 }
 
+impl From<std::io::Error> for RTError {
+    fn from(_: std::io::Error) -> Self {
+        REDIS_VALUE_IS_NOT_VALID_FLOAT_ERR
+    }
+}
+
+impl From<ser::Error> for RTError {
+    fn from(_: ser::Error) -> Self {
+        REDIS_VALUE_IS_NOT_VALID_FLOAT_ERR
+    }
+}
+
+impl PartialEq for RTError {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::String(s1), Self::String(s2)) => s1 == s2,
+            (Self::Owned(s1), Self::Owned(s2)) => s1 == s2,
+            // note that the comparison of RTError::TikvClient ignore the internal value for now
+            (Self::TikvClient(_), Self::TikvClient(_)) => true,
+            _ => false,
+        }
+    }
+}
+
 pub type AsyncResult<T> = std::result::Result<T, RTError>;
 
 pub const REDIS_WRONG_TYPE_ERR: RTError =
@@ -94,3 +119,6 @@ pub const REDIS_EXEC_ERR: RTError =
 
 pub const REDIS_INVALID_CLIENT_ID_ERR: RTError = RTError::String("ERR Invalid client ID");
 pub const REDIS_NO_SUCH_CLIENT_ERR: RTError = RTError::String("ERR No such client");
+
+pub const REDIS_DUMPING_ERR: RTError =
+    RTError::String("Another dumping process is active, can't SAVE/BGSAVE right now.");

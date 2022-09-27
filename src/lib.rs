@@ -1,3 +1,4 @@
+#![feature(concat_bytes)]
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
@@ -42,6 +43,9 @@ pub use tikv::set_instance_id;
 pub mod cluster;
 
 pub mod client;
+
+pub mod rdb;
+use rdb::RDB;
 
 pub mod utils;
 

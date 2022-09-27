@@ -6,14 +6,14 @@ use tokio::sync::Mutex;
 use crate::client::Client;
 use crate::cmd::Invalid;
 use crate::tikv::errors::{
-    REDIS_INVALID_CLIENT_ID_ERR, REDIS_NOT_SUPPORTED_ERR, REDIS_NO_SUCH_CLIENT_ERR,
-    REDIS_VALUE_IS_NOT_INTEGER_ERR,
+    REDIS_DUMPING_ERR, REDIS_INVALID_CLIENT_ID_ERR, REDIS_NOT_SUPPORTED_ERR,
+    REDIS_NO_SUCH_CLIENT_ERR, REDIS_VALUE_IS_NOT_INTEGER_ERR,
 };
 use crate::{
     config::LOGGER,
     tikv::errors::REDIS_UNKNOWN_SUBCOMMAND,
     utils::{resp_bulk, resp_err, resp_int, resp_invalid_arguments, resp_nil, resp_ok},
-    Connection, Frame, Parse,
+    Connection, Frame, Parse, RDB,
 };
 
 #[derive(Debug, Clone)]
@@ -232,6 +232,15 @@ impl Fake {
                     _ => resp_err(REDIS_UNKNOWN_SUBCOMMAND),
                 }
             }
+            "SAVE" => match RDB::dump().await {
+                Ok(()) => resp_ok(),
+                Err(e) => {
+                    if e != REDIS_DUMPING_ERR {
+                        RDB::reset_dumping();
+                    }
+                    resp_err(e)
+                }
+            },
             // can not reached here
             _ => resp_nil(),
         };

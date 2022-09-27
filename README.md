@@ -16,7 +16,7 @@ Redis is an in-memory data structure store, used by lots of companies and projec
 - No global transaction support
 - No data persistence guarantee
 
-People believe that it is a good idea to build a redis compatiable distributed storage service based on lower cost storage medium. As a result, we can see many products build with this idea, such as `ssdb`, `pika`, `kvrocks` and so on. But they are all compute storage aggregated architechture, which means it's very complex and complicated to build the basic ability of storage replication, high availability, data sharding, data scaling and so on. Not only it is difficult to implement, but also complicated to operate in production.
+We believe it is a good idea to build a redis compatiable distributed storage service based on lower cost storage medium. Further more, there are popular products built with this idea, such as `ssdb`, `pika`, `kvrocks` and so on. But they are all compute storage aggregated architechture, which means it's very complex and complicated to build the basic ability of storage replication, high availability, data sharding, data scaling and so on. Not only it is difficult to implement, but also complicated to operate in production.
 
 Considering the complexities, we take a different approach and build a lite computing service layer on top of [TiKV](https://tikv.org/), a distributed storage system based on `Raft` consensus algorithm. `TiKV` is an excellent building block for storage systems, it has a lot of features such as high availability, data sharding, data scaling, global transaction and so on. We just work on the data model and computation which is also known as the service layer. 
 

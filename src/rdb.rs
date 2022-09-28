@@ -1,4 +1,4 @@
-use crate::config::LOGGER;
+use crate::config::{config_rdb_file_name_or_default, LOGGER};
 use crate::tikv::encoding::{DataType, KeyDecoder};
 use crate::tikv::errors::{
     AsyncResult, REDIS_DUMPING_ERR, REDIS_LIST_TOO_LARGE_ERR, REDIS_VALUE_IS_NOT_INTEGER_ERR,
@@ -585,7 +585,7 @@ impl RDB {
                 .create(true)
                 .truncate(true)
                 .write(true)
-                .open("dump.rdb")
+                .open(config_rdb_file_name_or_default())
                 .unwrap(),
         )
     }

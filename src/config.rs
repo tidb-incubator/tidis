@@ -51,6 +51,7 @@ struct Server {
     cluster_topology_interval: Option<u64>,
     cluster_topology_expire: Option<u64>,
     meta_key_number: Option<u16>,
+    rdb_file_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -345,6 +346,18 @@ pub fn config_meta_key_number_or_default() -> u16 {
 
     // default metakey split number
     100
+}
+
+pub fn config_rdb_file_name_or_default() -> String {
+    unsafe {
+        if let Some(c) = &SERVER_CONFIG {
+            if let Some(f) = c.server.rdb_file_name.clone() {
+                return f;
+            }
+        }
+    }
+
+    "dump.rdb".to_owned()
 }
 
 fn log_level_str() -> String {

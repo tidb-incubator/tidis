@@ -4,8 +4,9 @@ use crate::tikv::errors::{
     AsyncResult, REDIS_DUMPING_ERR, REDIS_LIST_TOO_LARGE_ERR, REDIS_VALUE_IS_NOT_INTEGER_ERR,
 };
 use crate::tikv::{get_txn_client, KEY_ENCODER};
-use crc::{Crc, Digest, CRC_64_GO_ISO};
-use futures::FutureExt;
+use ::futures::future::FutureExt;
+use crc::{Algorithm, Crc, Digest};
+use futures::StreamExt;
 use slog::debug;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -53,6 +54,16 @@ const RDB_TYPE_HASH: u8 = 4;
 const RDB_TYPE_LIST_ZIPLIST: u8 = 10;
 const RDB_TYPE_ZSET_ZIPLIST: u8 = 12;
 
+const REDIS_ALG: Algorithm<u64> = Algorithm {
+    poly: 0xad93d23594c935a9,
+    init: 0x0000000000000000,
+    refin: true,
+    refout: true,
+    xorout: 0x0000000000000000,
+    check: 0xe9c6d914c4b8d9ca,
+    residue: 0x0000000000000000,
+};
+
 static DUMPING: AtomicBool = AtomicBool::new(false);
 
 pub struct RDB;
@@ -75,7 +86,7 @@ impl RDBEncoder {
             .await?;
         self.save_aux_field("redis-ver", REDIS_VERSION, digest)
             .await?;
-        self.save_aux_field("redis-bits", &(usize::BITS * 8).to_string(), digest)
+        self.save_aux_field("redis-bits", &usize::BITS.to_string(), digest)
             .await?;
         self.save_aux_field(
             "ctime",
@@ -171,7 +182,7 @@ impl RDBEncoder {
         let bound_range: BoundRange = (KEY_ENCODER.encode_txnkv_hash_data_key_start(&key, version)
             ..KEY_ENCODER.encode_txnkv_hash_data_key_end(&key, version))
             .into();
-        let iter = readonly_txn.scan(bound_range, u32::MAX).await?;
+        let iter = readonly_txn.scan_stream(bound_range, u32::MAX).await?;
         let hash_map: HashMap<String, String> = iter
             .map(|kv| {
                 let field =
@@ -180,7 +191,8 @@ impl RDBEncoder {
                 let field_val = String::from_utf8_lossy(kv.1.as_slice()).to_string();
                 (field, field_val)
             })
-            .collect();
+            .collect()
+            .await;
         let hash_map_vec: Vec<String> = hash_map
             .iter()
             .map(|(field, value)| field.to_string() + ":" + value)
@@ -218,11 +230,12 @@ impl RDBEncoder {
         let range: RangeFrom<Key> = data_key_start..;
         let from_range: BoundRange = range.into();
         let iter = readonly_txn
-            .scan(from_range, (right - left).try_into().unwrap())
+            .scan_stream(from_range, (right - left).try_into().unwrap())
             .await?;
         let data_vals: Vec<String> = iter
             .map(|kv| String::from_utf8_lossy(kv.1.as_slice()).to_string())
-            .collect();
+            .collect()
+            .await;
         debug!(
             LOGGER,
             "[saving list obj] key: {}, members: [{}]",
@@ -248,12 +261,13 @@ impl RDBEncoder {
         let key = user_key.to_owned();
         let (_, version, _) = KeyDecoder::decode_key_meta(&val);
         let bound_range = KEY_ENCODER.encode_txnkv_set_data_key_range(&key, version);
-        let iter = readonly_txn.scan_keys(bound_range, u32::MAX).await?;
+        let iter = readonly_txn.scan_keys_stream(bound_range, u32::MAX).await?;
         let members: Vec<String> = iter
             .map(|k| {
                 String::from_utf8(KeyDecoder::decode_key_set_member_from_datakey(&key, k)).unwrap()
             })
-            .collect();
+            .collect()
+            .await;
         debug!(
             LOGGER,
             "[saving set obj] key: {}, members: [{}]",
@@ -290,7 +304,7 @@ impl RDBEncoder {
             .sum();
         let bound_range = KEY_ENCODER.encode_txnkv_zset_score_key_range(&key, version);
         let iter = readonly_txn
-            .scan(bound_range, size.try_into().unwrap())
+            .scan_stream(bound_range, size.try_into().unwrap())
             .await?;
         let member_score_map: HashMap<String, f64> = iter
             .map(|kv| {
@@ -298,14 +312,15 @@ impl RDBEncoder {
                 let score = KeyDecoder::decode_key_zset_score_from_scorekey(&key, kv.0);
                 (member, score)
             })
-            .collect();
+            .collect()
+            .await;
         let member_score_vec: Vec<String> = member_score_map
             .iter()
             .map(|(member, score)| member.to_string() + ":" + score.to_string().as_str())
             .collect();
         debug!(
             LOGGER,
-            "[save zset obj] key: {}, members: [{}]",
+            "[saving zset obj] key: {}, members: [{}]",
             user_key,
             member_score_vec.join(", ")
         );
@@ -495,8 +510,8 @@ impl RDBEncoder {
 
     async fn write_buf<'a>(&mut self, end: usize, digest: &mut Digest<'a, u64>) -> AsyncResult<()> {
         self.writer.write_all(&self.buf[..end]).await?;
-        self.buf.fill(0);
         digest.update(&self.buf[..end]);
+        self.buf.fill(0);
         Ok(())
     }
 }
@@ -512,7 +527,7 @@ impl RDB {
             .exec_in_txn(None, |txn_rc| {
                 async move {
                     let rdb_file = RDB::create_rdb();
-                    let crc64 = Crc::<u64>::new(&CRC_64_GO_ISO);
+                    let crc64 = Crc::<u64>::new(&REDIS_ALG);
                     let mut digest = crc64.digest();
                     let mut encoder = RDBEncoder::new(rdb_file);
                     encoder.save_header(&mut digest).await?;
@@ -524,10 +539,10 @@ impl RDB {
                     while last_round_iter_count > 0 {
                         let range = left_bound.clone()..KEY_ENCODER.encode_txnkv_keyspace_end();
                         let bound_range: BoundRange = range.into();
-                        //TODO configurable scan limit or stream scan
-                        let iter = readonly_txn.scan(bound_range, 100).await?;
+                        //TODO configurable scan limit
+                        let mut iter = readonly_txn.scan_stream(bound_range, 256).await?;
                         last_round_iter_count = 0;
-                        for kv in iter {
+                        while let Some(kv) = iter.next().await {
                             if kv.0 == left_bound {
                                 continue;
                             }

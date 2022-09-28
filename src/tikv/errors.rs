@@ -2,7 +2,6 @@ use mlua::prelude::LuaError;
 use std::num::{ParseFloatError, ParseIntError};
 use thiserror::Error;
 use tikv_client::Error as TiKVError;
-use toml::ser;
 
 #[derive(Error, Debug)]
 pub enum RTError {
@@ -59,13 +58,7 @@ impl From<ParseFloatError> for RTError {
 
 impl From<std::io::Error> for RTError {
     fn from(_: std::io::Error) -> Self {
-        REDIS_VALUE_IS_NOT_VALID_FLOAT_ERR
-    }
-}
-
-impl From<ser::Error> for RTError {
-    fn from(_: ser::Error) -> Self {
-        REDIS_VALUE_IS_NOT_VALID_FLOAT_ERR
+        RDB_DUMP_IO_ERR
     }
 }
 
@@ -122,3 +115,4 @@ pub const REDIS_NO_SUCH_CLIENT_ERR: RTError = RTError::String("ERR No such clien
 
 pub const REDIS_DUMPING_ERR: RTError =
     RTError::String("Another dumping process is active, can't SAVE/BGSAVE right now.");
+pub const RDB_DUMP_IO_ERR: RTError = RTError::String("RDB dump failed because of the I/O error");

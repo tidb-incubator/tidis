@@ -233,6 +233,7 @@ impl Fake {
                 }
             }
             "SAVE" => match RDB::dump().await {
+                // TODO make it possible to disable this command from configuration file
                 Ok(()) => resp_ok(),
                 Err(e) => {
                     if e != REDIS_DUMPING_ERR {

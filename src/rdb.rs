@@ -353,6 +353,7 @@ impl RDBEncoder {
         digest: &mut Digest<'a, u64>,
     ) -> AsyncResult<()> {
         if values.len() > u16::MAX as usize {
+            // TODO add quicklist and zset2 encodings to support big key dump
             return Err(REDIS_LIST_TOO_LARGE_ERR);
         }
 

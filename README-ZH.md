@@ -4,7 +4,7 @@
 [![EN doc](https://img.shields.io/badge/document-English-blue.svg)](README.md)
 [![CN doc](https://img.shields.io/badge/文档-中文版-blue.svg)](README-ZH.md)
 
-`Tidis` 是 TiKV 的服务层, 在其基础上建设一个兼容 redis 协议的分布式存储服务。目前 Tidis 已经实现了对多种 Redis 数据类型（string/hash/list/set/sortedset）的支持。
+`Tidis` 是 TiKV 的服务层，在其基础上建设一个兼容 redis 协议的分布式存储服务。目前 Tidis 已经实现了对多种 Redis 数据类型（string/hash/list/set/sortedset）的支持。
 
 为了更加强劲的性能和更低的延迟，同时为了增加更多诸如 Lua 脚本，TLS 连接，锁优化等重要功能的支持，我们重新设计了 `Tidis` 并使用 `Rust` 语言实现。
 
@@ -42,13 +42,13 @@ Redis 是一个被很多公司和项目使用的支持多种数据结构的内�
 
 ![](https://tikv.org/img/basic-architecture.png)
 - Placement Driver (PD): PD 是 TiKV 系统的大脑，它管理着关于节点、存储、区域映射的元数据，并做出数据放置和负载平衡的决定。PD 将会定期检查副本约束，自动平衡负载和数据。
-- Node: 集群中的一个物理节点。在每个节点内，有一个或多个 Store，而在一个 Store 内有多个 Region.
+- Node: 集群中的一个物理节点。在每个节点内，有一个或多个 Store，而在一个 Store 内有多个 Region。
 - Store: 每个 Store 中存在一个 RocksDB 实例负责数据的持久化。
 - Region: 其对应于存储中的一个数据范围，并且是键值数据移动的基本单位。 每个 Region 将会被复制到多个节点，这样的一组副本被称为一个 Raft 组，而一个 Region 中的副本被称为一个 Peer。
 
 ## 运行
 
-- 使用 `TiUP` 启动 `PD`, `TiKV` 和一个 `TiDB` 实例 (用于触发垃圾回收)， 具体启动方法可以参考[官方指引](https://docs.pingcap.com/zh/tidb/stable/production-deployment-using-tiup) 。
+- 使用 `TiUP` 启动 `PD`， `TiKV` 和一个 `TiDB` 实例 (用于触发垃圾回收)， 具体启动方法可以参考[官方指引](https://docs.pingcap.com/zh/tidb/stable/production-deployment-using-tiup) 。
 
 - 构建 Tidis 服务端
 
@@ -471,13 +471,13 @@ tls_ca_cert_file = "path/ca.crt"
 
 - 客户端
 
-`tls_auth_client` 被置为 `false`, 客户端将会使用根 CA 证书
+`tls_auth_client` 被置为 `false`， 客户端将会使用根 CA 证书
 
 ``` shell
 ./src/redis-cli --tls --cacert ./tests/tls/ca.crt
 ```
 
-`tls_auth_client` 被置为 `true`, 客户端必须配置证书和密钥文件用于服务端校验
+`tls_auth_client` 被置为 `true`， 客户端必须配置证书和密钥文件用于服务端校验
 
 ``` shell
 ./src/redis-cli --tls  --cert ./tests/tls/client.crt --key ./tests/tls/client.key --cacert ./tests/tls/ca.crt
@@ -493,11 +493,11 @@ tls_ca_cert_file = "path/ca.crt"
 
 具体可以参考 TiDB 文档中的 [乐观事务](https://docs.pingcap.com/tidb/dev/optimistic-transaction) 和 [悲观事务](https://docs.pingcap.com/tidb/dev/pessimistic-transaction) 。
 
-此外, `1pc` 和 `async commit` 选项在大多数场景中对于取得更好的性能是有益的。 具体可参考 PingCAP 相关博客：[AsyncCommit, the Accelerator for Transaction Commit in TiDB 5.0](https://www.pingcap.com/blog/async-commit-the-accelerator-for-transaction-commit-in-tidb-5-0/) 。
+此外， `1pc` 和 `async commit` 选项在大多数场景中对于取得更好的性能是有益的。 具体可参考 PingCAP 相关博客：[AsyncCommit, the Accelerator for Transaction Commit in TiDB 5.0](https://www.pingcap.com/blog/async-commit-the-accelerator-for-transaction-commit-in-tidb-5-0/) 。
 
 ## Lua 脚本
 
-`Tidis` 使用 `mlua` 库来转译 lua 脚本. 我们可以使用 `EVAL/EVALSHA` 来执行在全局事务支持下的 lua 脚本。同样我们不会遇到使用 `Redis Cluster` 时会遇到的 `CROSSSLOT` 错误。
+`Tidis` 使用 `mlua` 库来转译 lua 脚本。 我们可以使用 `EVAL/EVALSHA` 来执行在全局事务支持下的 lua 脚本。同样我们不会遇到使用 `Redis Cluster` 时会遇到的 `CROSSSLOT` 错误。
 
 Lua 脚本将会在一个新的事务上下文中运行，脚本中所有的读、写操作都是可以保证原子性。
 

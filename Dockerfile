@@ -35,8 +35,8 @@ RUN source /opt/rh/devtoolset-8/enable && make release
 
 FROM centos:7.6.1810
 
-COPY --from=builder /tikv/target/release/tikv-service-server /tikv-service-server
+COPY --from=builder /tikv/target/release/tidis-server /tidis-server
 
 EXPOSE 6666 6443 8080
 
-ENTRYPOINT ["/tikv-service-server"]
+ENTRYPOINT ["/tidis-server"]

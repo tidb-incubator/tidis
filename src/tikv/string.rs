@@ -390,6 +390,56 @@ impl StringCommandCtx {
         }
     }
 
+    pub async fn do_async_txnkv_put_if_exists(
+        mut self,
+        key: &str,
+        value: &Bytes,
+    ) -> AsyncResult<Frame> {
+        let mut client = get_txn_client()?;
+        let key = key.to_owned();
+        let ekey = KEY_ENCODER.encode_txnkv_string(&key);
+        let eval = KEY_ENCODER.encode_txnkv_string_value(&mut value.to_vec(), 0);
+
+        let resp = client
+            .exec_in_txn(self.txn.clone(), |txn_rc| {
+                async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
+                    let mut txn = txn_rc.lock().await;
+                    let old_value = txn.get(ekey.clone()).await?;
+                    if let Some(ref v) = old_value {
+                        let ttl = KeyDecoder::decode_key_ttl(v);
+                        if key_is_expired(ttl) {
+                            drop(txn);
+                            self.do_async_txnkv_string_expire_if_needed(&key).await?;
+
+                            Ok(0)
+                        } else {
+                            txn.put(ekey, eval).await?;
+
+                            Ok(1)
+                        }
+                    } else {
+                        Ok(0)
+                    }
+                }
+                .boxed()
+            })
+            .await;
+
+        match resp {
+            Ok(n) => {
+                if n == 0 {
+                    Ok(resp_nil())
+                } else {
+                    Ok(resp_ok())
+                }
+            }
+            Err(e) => Ok(resp_err(e)),
+        }
+    }
+
     pub async fn do_async_rawkv_exists(self, keys: &[String]) -> AsyncResult<Frame> {
         let client = get_client()?;
         let ekeys = KEY_ENCODER.encode_rawkv_strings(keys);

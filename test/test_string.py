@@ -28,6 +28,14 @@ class StringTest(unittest.TestCase):
         self.assertEqual(self.v1, v1, '{} != {}'.format(v1, self.v1))
 
     def test_set(self):
+        self.assertIsNone(self.r.set(self.k1, self.v2, xx=True))
+        self.assertIsNone(self.r.get(self.k1)) # SET XX should not have occured
+        self.assertTrue(self.r.set(self.k1, self.v1))
+        self.assertEqual(self.r.get(self.k1), self.v1)
+        self.assertTrue(self.r.set(self.k1, self.v2, xx=True))
+        v2 = self.r.get(self.k1) # SET XX should have been performed
+        self.assertEqual(self.v2, v2, '{} != {}'.format(self.v2, v2))
+
         self.assertTrue(self.r.set(self.k1, self.v1))
         v1 = self.r.get(self.k1)
         self.assertEqual(self.v1, v1, '{} != {}'.format(v1, self.v1))

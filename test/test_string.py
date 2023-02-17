@@ -27,6 +27,12 @@ class StringTest(unittest.TestCase):
         v1 = self.r.get(self.k1)
         self.assertEqual(self.v1, v1, '{} != {}'.format(v1, self.v1))
 
+    def test_getdel(self):
+        self.assertIsNone(self.r.getdel(self.k1))
+        self.r.set(self.k1, self.v1)
+        v1 = self.r.getdel(self.k1)
+        self.assertEqual(self.v1, v1, '{} != {}'.format(self.v1, v1))
+
     def test_set(self):
         self.assertIsNone(self.r.set(self.k1, self.v2, xx=True))
         self.assertIsNone(self.r.get(self.k1)) # SET XX should not have performed

@@ -5,7 +5,7 @@ use super::{
     KEY_ENCODER,
 };
 use crate::{
-    utils::{resp_array, resp_bulk, resp_nil, resp_ok},
+    utils::{resp_array, resp_bulk, resp_nil, resp_ok, ReturnOption},
     Frame,
 };
 use ::futures::future::FutureExt;
@@ -383,8 +383,7 @@ impl StringCommandCtx {
         key: &str,
         value: &Bytes,
         timestamp: u64,
-        return_number: bool,
-        return_prev: bool,
+        return_option: Option<ReturnOption>,
     ) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
@@ -400,46 +399,49 @@ impl StringCommandCtx {
                     let mut txn = txn_rc.lock().await;
                     let old_value = txn.get(ekey.clone()).await?;
                     if let Some(ref v) = old_value {
+                        let dt = KeyDecoder::decode_key_type(v);
+                        if return_option == Some(ReturnOption::Previous)
+                            && !matches!(dt, DataType::String)
+                        {
+                            return Err(REDIS_WRONG_TYPE_ERR); // GET option string only
+                        }
+
                         let ttl = KeyDecoder::decode_key_ttl(v);
                         if key_is_expired(ttl) {
                             // Overwrite the expired value
                             txn.put(ekey, eval).await?;
 
-                            Ok((1, None))
+                            Ok(None)
                         } else {
                             let data = KeyDecoder::decode_key_string_value(v);
 
-                            Ok((0, Some(data)))
+                            Ok(Some(data))
                         }
                     } else {
                         txn.put(ekey, eval).await?;
 
-                        Ok((1, None))
+                        Ok(None)
                     }
                 }
                 .boxed()
             })
             .await;
 
-        // If `return_number` (for SETNX) then return 1 if the value was written
-        // or 0 if not.
-        // If `return_prev` (SET [GET]) then return the overwritten value or nil
-        // if no value was overwritten.
-        // If neither (SET [NX]) return OK if the value was written or nil if not.
-        match resp {
-            Ok((n, prev)) => match (return_number, return_prev) {
-                (true, false) => Ok(resp_int(n as i64)),
-                (false, true) => match prev {
-                    Some(data) => Ok(resp_bulk(data)),
-                    None => Ok(resp_nil()),
-                },
-                (false, false) => match n {
-                    0 => Ok(resp_nil()),
-                    _ => Ok(resp_ok()),
-                },
-                (true, true) => Err("Incompatible return options".into()),
-            },
-            Err(e) => Ok(resp_err(e)),
+        let resp = match resp {
+            Ok(r) => r,
+            Err(e) => return Ok(resp_err(e)),
+        };
+
+        match (resp, return_option) {
+            // SET _ _ NX
+            (Some(_), None) => Ok(resp_nil()),
+            (None, None) => Ok(resp_ok()),
+            // SET _ _ NX GET
+            (Some(data), Some(ReturnOption::Previous)) => Ok(resp_bulk(data)),
+            (None, Some(ReturnOption::Previous)) => Ok(resp_nil()),
+            // SETNX _ _
+            (Some(_), Some(ReturnOption::Number)) => Ok(resp_int(0)),
+            (None, Some(ReturnOption::Number)) => Ok(resp_int(1)),
         }
     }
 
@@ -464,43 +466,44 @@ impl StringCommandCtx {
                     let mut txn = txn_rc.lock().await;
                     let old_value = txn.get(ekey.clone()).await?;
                     if let Some(ref v) = old_value {
+                        let dt = KeyDecoder::decode_key_type(v);
+                        if return_prev && !matches!(dt, DataType::String) {
+                            return Err(REDIS_WRONG_TYPE_ERR); // GET option string only
+                        }
+
                         let ttl = KeyDecoder::decode_key_ttl(v);
                         if key_is_expired(ttl) {
                             drop(txn);
                             self.do_async_txnkv_string_expire_if_needed(&key).await?;
 
-                            Ok((0, None))
+                            Ok(None)
                         } else {
                             txn.put(ekey, eval).await?;
 
                             let data = KeyDecoder::decode_key_string_value(v);
 
-                            Ok((1, Some(data)))
+                            Ok(Some(data))
                         }
                     } else {
-                        Ok((0, None))
+                        Ok(None)
                     }
                 }
                 .boxed()
             })
             .await;
 
-        // `return_prev` for GET option
-        match resp {
-            Ok((n, prev)) => {
-                if return_prev {
-                    match prev {
-                        Some(data) => Ok(resp_bulk(data)),
-                        None => Ok(resp_nil()),
-                    }
-                } else {
-                    match n {
-                        0 => Ok(resp_nil()),
-                        _ => Ok(resp_ok()),
-                    }
-                }
-            }
-            Err(e) => Ok(resp_err(e)),
+        let resp = match resp {
+            Ok(r) => r,
+            Err(e) => return Ok(resp_err(e)),
+        };
+
+        match (resp, return_prev) {
+            // SET _ _ XX
+            (Some(_), false) => Ok(resp_ok()),
+            (None, false) => Ok(resp_nil()),
+            // SET _ _ XX GET
+            (Some(data), true) => Ok(resp_bulk(data)),
+            (None, true) => Ok(resp_nil()),
         }
     }
 
@@ -650,11 +653,15 @@ impl StringCommandCtx {
         }
     }
 
-    pub async fn do_async_txnkv_string_del(mut self, key: &str) -> AsyncResult<i64> {
+    pub async fn do_async_txnkv_string_del(
+        mut self,
+        key: &str,
+        return_prev: bool,
+    ) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
 
-        client
+        let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
                 async move {
                     if self.txn.is_none() {
@@ -662,15 +669,48 @@ impl StringCommandCtx {
                     }
                     let mut txn = txn_rc.lock().await;
                     let ekey = KEY_ENCODER.encode_txnkv_string(&key);
-                    if (txn.get(ekey.to_owned()).await?).is_some() {
-                        txn.delete(ekey).await?;
-                        return Ok(1);
+
+                    match txn.get(ekey.clone()).await? {
+                        Some(val) => {
+                            let dt = KeyDecoder::decode_key_type(&val);
+                            if return_prev && !matches!(dt, DataType::String) {
+                                return Err(REDIS_WRONG_TYPE_ERR); // GETDEL string only
+                            }
+
+                            let ttl = KeyDecoder::decode_key_ttl(&val);
+                            if key_is_expired(ttl) {
+                                drop(txn);
+                                self.do_async_txnkv_string_expire_if_needed(&key).await?;
+
+                                Ok(None)
+                            } else {
+                                txn.delete(ekey).await?;
+
+                                let data = KeyDecoder::decode_key_string_value(&val);
+
+                                Ok(Some(data))
+                            }
+                        }
+                        None => Ok(None),
                     }
-                    Ok(0)
                 }
                 .boxed()
             })
-            .await
+            .await;
+
+        let resp = match resp {
+            Ok(r) => r,
+            Err(e) => return Ok(resp_err(e)),
+        };
+
+        match (resp, return_prev) {
+            // DEL _
+            (Some(_), false) => Ok(resp_int(1)),
+            (None, false) => Ok(resp_int(0)),
+            // GETDEL _
+            (Some(data), true) => Ok(resp_bulk(data)),
+            (None, true) => Ok(resp_nil()),
+        }
     }
 
     pub async fn do_async_txnkv_string_expire_if_needed(mut self, key: &str) -> AsyncResult<i64> {
@@ -912,7 +952,9 @@ impl StringCommandCtx {
                     for idx in 0..keys_len {
                         match dts[idx] {
                             DataType::String => {
-                                self.clone().do_async_txnkv_string_del(&keys[idx]).await?;
+                                self.clone()
+                                    .do_async_txnkv_string_del(&keys[idx], false)
+                                    .await?;
                                 resp += 1;
                             }
                             DataType::Hash => {

@@ -2,7 +2,7 @@ use crate::cmd::{Parse, ParseError};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::{AsyncResult, REDIS_NOT_SUPPORTED_ERR};
 use crate::tikv::string::StringCommandCtx;
-use crate::utils::{resp_err, resp_invalid_arguments, timestamp_from_ttl};
+use crate::utils::{resp_err, resp_invalid_arguments, timestamp_from_ttl, ReturnOption};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
@@ -257,9 +257,10 @@ impl Set {
     async fn put_not_exists(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
         if is_use_txn_api() {
             let ts = self.expire.map_or(0, |v| timestamp_from_ttl(v as u64));
+            let ret_opt = self.get.then_some(ReturnOption::Previous);
 
             StringCommandCtx::new(txn)
-                .do_async_txnkv_put_not_exists(&self.key, &self.value, ts, false, self.get)
+                .do_async_txnkv_put_not_exists(&self.key, &self.value, ts, ret_opt)
                 .await
         } else {
             StringCommandCtx::new(txn)

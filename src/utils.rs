@@ -22,6 +22,14 @@ use std::path::Path;
 
 const TIMESTAMP_FORMAT: &str = "%Y/%m/%d %H:%M:%S%.3f %:z";
 
+#[derive(PartialEq, Copy, Clone)]
+pub enum ReturnOption {
+    // Return number (for example number of affected keys)
+    Number,
+    // Return value (for example previous/overwritten value)
+    Previous,
+}
+
 pub fn resp_ok() -> Frame {
     Frame::Simple("OK".to_string())
 }

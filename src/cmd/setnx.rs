@@ -4,7 +4,7 @@ use crate::cmd::{Invalid, Parse};
 use crate::config::is_use_txn_api;
 use crate::tikv::errors::AsyncResult;
 use crate::tikv::string::StringCommandCtx;
-use crate::utils::resp_invalid_arguments;
+use crate::utils::{resp_invalid_arguments, ReturnOption};
 use crate::{Connection, Frame};
 
 use crate::config::LOGGER;
@@ -13,18 +13,10 @@ use slog::debug;
 use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
-/// Set `key` to hold the string `value`.
+/// Set key to hold string value if key does not exist.
 ///
-/// If `key` already holds a value, it is overwritten, regardless of its type.
-/// Any previous time to live associated with the key is discarded on successful
-/// SET operation.
-///
-/// # Options
-///
-/// Currently, the following options are supported:
-///
-/// * EX `seconds` -- Set the specified expire time, in seconds.
-/// * PX `milliseconds` -- Set the specified expire time, in milliseconds.
+/// When key already holds a value, no operation is performed. SETNX is short
+/// for "SET if Not eXists".
 #[derive(Debug, Clone)]
 pub struct SetNX {
     /// the lookup key
@@ -37,10 +29,7 @@ pub struct SetNX {
 }
 
 impl SetNX {
-    /// Create a new `Set` command which sets `key` to `value`.
-    ///
-    /// If `expire` is `Some`, the value should expire after the specified
-    /// duration.
+    /// Create a new `Setnx` command which sets `key` to `value`.
     pub fn new(key: impl ToString, value: Bytes) -> SetNX {
         SetNX {
             key: key.to_string(),
@@ -116,7 +105,12 @@ impl SetNX {
         }
         if is_use_txn_api() {
             StringCommandCtx::new(txn)
-                .do_async_txnkv_put_not_exists(&self.key, &self.value, 0, true, false)
+                .do_async_txnkv_put_not_exists(
+                    &self.key,
+                    &self.value,
+                    0,
+                    Some(ReturnOption::Number),
+                )
                 .await
         } else {
             StringCommandCtx::new(txn)

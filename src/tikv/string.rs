@@ -214,7 +214,7 @@ impl StringCommandCtx {
         let ekey = KEY_ENCODER.encode_txnkv_string(key);
         let key = key.to_owned();
         let eval = KEY_ENCODER.encode_txnkv_string_value(&mut val.to_vec(), timestamp);
-        let resp = client
+        client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
                 async move {
                     if self.txn.is_none() {
@@ -228,7 +228,7 @@ impl StringCommandCtx {
                             Some(val) => {
                                 let dt = KeyDecoder::decode_key_type(&val);
                                 if !matches!(dt, DataType::String) {
-                                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                                    return Err(REDIS_WRONG_TYPE_ERR);
                                 }
 
                                 let ttl = KeyDecoder::decode_key_ttl(&val);
@@ -264,9 +264,7 @@ impl StringCommandCtx {
                 }
                 .boxed()
             })
-            .await;
-
-        resp
+            .await
     }
 
     pub async fn do_async_rawkv_batch_get(self, keys: &[String]) -> AsyncResult<Frame> {
@@ -425,12 +423,7 @@ impl StringCommandCtx {
                 }
                 .boxed()
             })
-            .await;
-
-        let resp = match resp {
-            Ok(r) => r,
-            Err(e) => return Ok(resp_err(e)),
-        };
+            .await?;
 
         match (resp, return_option) {
             // SET _ _ NX
@@ -467,8 +460,10 @@ impl StringCommandCtx {
                     let old_value = txn.get(ekey.clone()).await?;
                     if let Some(ref v) = old_value {
                         let dt = KeyDecoder::decode_key_type(v);
+
+                        // GET option only works for string values
                         if return_prev && !matches!(dt, DataType::String) {
-                            return Err(REDIS_WRONG_TYPE_ERR); // GET option string only
+                            return Err(REDIS_WRONG_TYPE_ERR);
                         }
 
                         let ttl = KeyDecoder::decode_key_ttl(v);
@@ -490,12 +485,7 @@ impl StringCommandCtx {
                 }
                 .boxed()
             })
-            .await;
-
-        let resp = match resp {
-            Ok(r) => r,
-            Err(e) => return Ok(resp_err(e)),
-        };
+            .await?;
 
         match (resp, return_prev) {
             // SET _ _ XX

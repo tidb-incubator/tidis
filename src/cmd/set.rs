@@ -24,21 +24,28 @@ use super::Invalid;
 ///
 /// Currently, the following options are supported:
 ///
+/// * NX -- Only set the key if it does not already exist.
+/// * XX -- Only set the key if it already exist.
+/// * GET -- Return the old string stored at key, or nil if key did not exist.
+///          Errors if value stored at key is not a string.
 /// * EX `seconds` -- Set the specified expire time, in seconds.
 /// * PX `milliseconds` -- Set the specified expire time, in milliseconds.
 #[derive(Debug, Clone)]
 pub struct Set {
-    /// the lookup key
+    /// Lookup key
     key: String,
 
-    /// the value to be stored
+    /// Value to be stored
     value: Bytes,
 
-    /// When to expire the key
+    /// Key expires after `expire` milliseconds
     expire: Option<i64>,
 
-    /// Set if key is not present
+    /// NX = false, XX = true
     exists: Option<bool>,
+
+    /// Return old string stored at key, or nil
+    get: bool,
 
     valid: bool,
 }
@@ -54,6 +61,7 @@ impl Set {
             value,
             expire: None,
             exists: None,
+            get: false,
             valid: true,
         }
     }
@@ -84,6 +92,10 @@ impl Set {
         }
     }
 
+    pub fn set_get(&mut self, get: bool) {
+        self.get = get
+    }
+
     /// Parse a `Set` instance from a received frame.
     ///
     /// The `Parse` argument provides a cursor-like API to read fields from the
@@ -102,7 +114,7 @@ impl Set {
     /// Expects an array frame containing at least 3 entries.
     ///
     /// ```text
-    /// SET key value [NX | XX] [EX seconds|PX milliseconds]
+    /// SET key value [NX | XX] [GET] [EX seconds|PX milliseconds]
     /// ```
     pub(crate) fn parse_frames(parse: &mut Parse) -> crate::Result<Set> {
         use ParseError::EndOfStream;
@@ -119,6 +131,20 @@ impl Set {
         loop {
             match parse.next_string() {
                 Ok(s) => match s.to_uppercase().as_str() {
+                    // [NX | XX]
+                    "NX" => {
+                        // Only set the key if it does not already exist.
+                        set.set_exists(false)?
+                    }
+                    "XX" => {
+                        // Only set the key if it already exists.
+                        set.set_exists(true)?
+                    }
+                    // [GET]
+                    "GET" => {
+                        // Return overwritten value, or nil.
+                        set.set_get(true)
+                    }
                     // [EX s| PX ms]
                     "EX" => {
                         // TTL specified in seconds. The next value is an integer.
@@ -130,17 +156,10 @@ impl Set {
                         let ms = parse.next_int()?;
                         set.set_expire(ms)?
                     }
-                    // [NX | XX]
-                    "NX" => {
-                        // Only set the key if it does not already exist.
-                        set.set_exists(false)?
-                    }
-                    "XX" => {
-                        // Only set the key if it already exists.
-                        set.set_exists(true)?
-                    }
                     _ => {
-                        return Err("currently `SET` only supports [NX | XX] [EX s | PX ms]".into())
+                        return Err(
+                            "currently `SET` only supports [NX | XX] [GET] [EX s | PX ms]".into(),
+                        )
                     }
                 },
                 // The `EndOfStream` error indicates there is no further data to
@@ -170,6 +189,17 @@ impl Set {
                 break;
             }
             match String::from_utf8_lossy(&argv[idx]).to_uppercase().as_str() {
+                "NX" => {
+                    if set.set_exists(false).is_err() {
+                        return Ok(Set::new_invalid());
+                    }
+                }
+                "XX" => {
+                    if set.set_exists(true).is_err() {
+                        return Ok(Set::new_invalid());
+                    }
+                }
+                "GET" => set.set_get(true),
                 "EX" => {
                     idx += 1;
                     match String::from_utf8_lossy(&argv[idx]).parse::<i64>() {
@@ -182,16 +212,6 @@ impl Set {
                     match String::from_utf8_lossy(&argv[idx]).parse::<i64>() {
                         Ok(ms) if set.set_expire(ms).is_ok() => (),
                         _ => return Ok(Set::new_invalid()),
-                    }
-                }
-                "NX" => {
-                    if set.set_exists(false).is_err() {
-                        return Ok(Set::new_invalid());
-                    }
-                }
-                "XX" => {
-                    if set.set_exists(true).is_err() {
-                        return Ok(Set::new_invalid());
                     }
                 }
                 _ => return Ok(Set::new_invalid()),
@@ -234,11 +254,15 @@ impl Set {
         .unwrap_or_else(Into::into))
     }
 
-    // TODO: TTL
     async fn put_not_exists(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+        // TODO: TTL
+        if self.expire.is_some() {
+            return Ok(resp_err("EX/PX with NX/XX not implemented".into()));
+        };
+
         if is_use_txn_api() {
             StringCommandCtx::new(txn)
-                .do_async_txnkv_put_not_exists(&self.key, &self.value, false)
+                .do_async_txnkv_put_not_exists(&self.key, &self.value, false, self.get)
                 .await
         } else {
             StringCommandCtx::new(txn)
@@ -247,11 +271,15 @@ impl Set {
         }
     }
 
-    // TODO: TTL
     async fn put_if_exists(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
+        // TODO: TTL
+        if self.expire.is_some() {
+            return Ok(resp_err("EX/PX with NX/XX not implemented".into()));
+        };
+
         if is_use_txn_api() {
             StringCommandCtx::new(txn)
-                .do_async_txnkv_put_if_exists(&self.key, &self.value)
+                .do_async_txnkv_put_if_exists(&self.key, &self.value, self.get)
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
@@ -262,7 +290,7 @@ impl Set {
         if is_use_txn_api() {
             let ts = self.expire.map_or(0, |v| timestamp_from_ttl(v as u64));
             StringCommandCtx::new(txn)
-                .do_async_txnkv_put(&self.key, &self.value, ts)
+                .do_async_txnkv_put(&self.key, &self.value, ts, self.get)
                 .await
         } else {
             StringCommandCtx::new(txn)
@@ -279,6 +307,7 @@ impl Invalid for Set {
             value: Bytes::new(),
             expire: None,
             exists: None,
+            get: false,
             valid: false,
         }
     }

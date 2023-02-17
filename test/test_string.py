@@ -29,8 +29,8 @@ class StringTest(unittest.TestCase):
 
     def test_set(self):
         self.assertIsNone(self.r.set(self.k1, self.v2, xx=True))
-        self.assertIsNone(self.r.get(self.k1)) # SET XX should not have occured
-        self.assertTrue(self.r.set(self.k1, self.v1))
+        self.assertIsNone(self.r.get(self.k1)) # SET XX should not have performed
+        self.assertIsNone(self.r.set(self.k1, self.v1, get=True)) # GET without overwrite
         self.assertEqual(self.r.get(self.k1), self.v1)
         self.assertTrue(self.r.set(self.k1, self.v2, xx=True))
         v2 = self.r.get(self.k1) # SET XX should have been performed
@@ -40,7 +40,12 @@ class StringTest(unittest.TestCase):
         v1 = self.r.get(self.k1)
         self.assertEqual(self.v1, v1, '{} != {}'.format(v1, self.v1))
 
+        v1 = self.r.set(self.k1, self.v2, get=True) # GET with overwrite
+        self.assertEqual(self.v1, v1, '{} != {}'.format(v1, self.v1))
+        self.assertEqual(self.r.set(self.k1, self.v1, xx=True, get=True), self.v2) # GET with XX
+
         self.assertIsNone(self.r.set(self.k1, self.v2, nx=True))
+        self.assertEqual(self.r.set(self.k1, self.v2, nx=True, get=True), self.v1) # GET with NX
         self.assertNotEqual(self.r.get(self.k1), self.v2)
         self.assertEqual(self.r.get(self.k1), v1)
 

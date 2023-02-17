@@ -19,9 +19,7 @@ use tokio::sync::Mutex;
 use super::errors::*;
 use super::{get_client, get_txn_client};
 use super::{hash::HashCommandCtx, list::ListCommandCtx, set::SetCommandCtx, zset::ZsetCommandCtx};
-use crate::utils::{
-    key_is_expired, resp_err, resp_int, resp_ok_ignore, resp_str, sleep, ttl_from_timestamp,
-};
+use crate::utils::{key_is_expired, resp_err, resp_int, resp_str, sleep, ttl_from_timestamp};
 use bytes::Bytes;
 
 use crate::metrics::REMOVED_EXPIRED_KEY_COUNTER;
@@ -210,9 +208,11 @@ impl StringCommandCtx {
         key: &str,
         val: &Bytes,
         timestamp: u64,
+        return_prev: bool,
     ) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let ekey = KEY_ENCODER.encode_txnkv_string(key);
+        let key = key.to_owned();
         let eval = KEY_ENCODER.encode_txnkv_string_value(&mut val.to_vec(), timestamp);
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -221,13 +221,52 @@ impl StringCommandCtx {
                         self.txn = Some(txn_rc.clone());
                     }
                     let mut txn = txn_rc.lock().await;
+
+                    // GET option to return overwritten value
+                    let prev_value = if return_prev {
+                        match txn.get(ekey.clone()).await? {
+                            Some(val) => {
+                                let dt = KeyDecoder::decode_key_type(&val);
+                                if !matches!(dt, DataType::String) {
+                                    return Ok(resp_err(REDIS_WRONG_TYPE_ERR));
+                                }
+
+                                let ttl = KeyDecoder::decode_key_ttl(&val);
+                                if key_is_expired(ttl) {
+                                    // delete key
+                                    drop(txn);
+                                    self.do_async_txnkv_string_expire_if_needed(&key).await?;
+                                    txn = txn_rc.lock().await;
+
+                                    None
+                                } else {
+                                    let data = KeyDecoder::decode_key_string_value(&val);
+
+                                    Some(data)
+                                }
+                            }
+                            None => None,
+                        }
+                    } else {
+                        None
+                    };
+
                     txn.put(ekey, eval).await?;
-                    Ok(())
+
+                    if return_prev {
+                        match prev_value {
+                            Some(data) => Ok(resp_bulk(data)),
+                            None => Ok(resp_nil()),
+                        }
+                    } else {
+                        Ok(resp_ok())
+                    }
                 }
                 .boxed()
             })
             .await;
-        resp.map(resp_ok_ignore)
+
+        resp
     }
 
     pub async fn do_async_rawkv_batch_get(self, keys: &[String]) -> AsyncResult<Frame> {
@@ -344,6 +383,7 @@ impl StringCommandCtx {
         key: &str,
         value: &Bytes,
         return_number: bool,
+        return_prev: bool,
     ) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
@@ -361,31 +401,43 @@ impl StringCommandCtx {
                     if let Some(ref v) = old_value {
                         let ttl = KeyDecoder::decode_key_ttl(v);
                         if key_is_expired(ttl) {
-                            // no need to delete, just overwrite
+                            // Overwrite the expired value
                             txn.put(ekey, eval).await?;
-                            return Ok(1);
+
+                            Ok((1, None))
+                        } else {
+                            let data = KeyDecoder::decode_key_string_value(v);
+
+                            Ok((0, Some(data)))
                         }
-                        Ok(0)
                     } else {
                         txn.put(ekey, eval).await?;
-                        Ok(1)
+
+                        Ok((1, None))
                     }
                 }
                 .boxed()
             })
             .await;
 
+        // If `return_number` (for SETNX) then return 1 if the value was written
+        // or 0 if not.
+        // If `return_prev` (SET [GET]) then return the overwritten value or nil
+        // if no value was overwritten.
+        // If neither (SET [NX]) return OK if the value was written or nil if not.
         match resp {
-            Ok(n) => {
-                if return_number {
-                    return Ok(resp_int(n as i64));
-                }
-                if n == 0 {
-                    Ok(resp_nil())
-                } else {
-                    Ok(resp_ok())
-                }
-            }
+            Ok((n, prev)) => match (return_number, return_prev) {
+                (true, false) => Ok(resp_int(n as i64)),
+                (false, true) => match prev {
+                    Some(data) => Ok(resp_bulk(data)),
+                    None => Ok(resp_nil()),
+                },
+                (false, false) => match n {
+                    0 => Ok(resp_nil()),
+                    _ => Ok(resp_ok()),
+                },
+                (true, true) => Err("Incompatible return options".into()),
+            },
             Err(e) => Ok(resp_err(e)),
         }
     }
@@ -394,6 +446,7 @@ impl StringCommandCtx {
         mut self,
         key: &str,
         value: &Bytes,
+        return_prev: bool,
     ) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
@@ -414,26 +467,35 @@ impl StringCommandCtx {
                             drop(txn);
                             self.do_async_txnkv_string_expire_if_needed(&key).await?;
 
-                            Ok(0)
+                            Ok((0, None))
                         } else {
                             txn.put(ekey, eval).await?;
 
-                            Ok(1)
+                            let data = KeyDecoder::decode_key_string_value(v);
+
+                            Ok((1, Some(data)))
                         }
                     } else {
-                        Ok(0)
+                        Ok((0, None))
                     }
                 }
                 .boxed()
             })
             .await;
 
+        // `return_prev` for GET option
         match resp {
-            Ok(n) => {
-                if n == 0 {
-                    Ok(resp_nil())
+            Ok((n, prev)) => {
+                if return_prev {
+                    match prev {
+                        Some(data) => Ok(resp_bulk(data)),
+                        None => Ok(resp_nil()),
+                    }
                 } else {
-                    Ok(resp_ok())
+                    match n {
+                        0 => Ok(resp_nil()),
+                        _ => Ok(resp_ok()),
+                    }
                 }
             }
             Err(e) => Ok(resp_err(e)),

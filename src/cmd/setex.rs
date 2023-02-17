@@ -119,7 +119,7 @@ impl SetEX {
         if is_use_txn_api() {
             let ts = timestamp_from_ttl(self.expire as u64);
             StringCommandCtx::new(txn)
-                .do_async_txnkv_put(&self.key, &self.value, ts)
+                .do_async_txnkv_put(&self.key, &self.value, ts, false)
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))

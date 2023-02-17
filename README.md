@@ -20,7 +20,7 @@ Redis is an in-memory data structure store, used by lots of companies and projec
 
 We believe it is a good idea to build a redis compatiable distributed storage service based on lower cost storage medium. Further more, there are popular products built with this idea, such as `ssdb`, `pika`, `kvrocks` and so on. But they are all compute storage aggregated architechture, which means it's very complex and complicated to build the basic ability of storage replication, high availability, data sharding, data scaling and so on. Not only it is difficult to implement, but also complicated to operate in production.
 
-Considering the complexities, we take a different approach and build a lite computing service layer on top of [TiKV](https://tikv.org/), a distributed storage system based on `Raft` consensus algorithm. `TiKV` is an excellent building block for storage systems, it has a lot of features such as high availability, data sharding, data scaling, global transaction and so on. We just work on the data model and computation which is also known as the service layer. 
+Considering the complexities, we take a different approach and build a lite computing service layer on top of [TiKV](https://tikv.org/), a distributed storage system based on `Raft` consensus algorithm. `TiKV` is an excellent building block for storage systems, it has a lot of features such as high availability, data sharding, data scaling, global transaction and so on. We just work on the data model and computation which is also known as the service layer.
 
 Of course we are not the only ones who have similar ideas. Both `Titan` and `Tidis 1.0` were designed with similar architecture, and they were all popular back to early days and grew their community to some extent. Unfortunately, there are many useful features not implemented by either of them. We believe the community is always looking forward to seeing alternative projects that are more feature complete. Therefore we decided to take over what Tidis 1.0 left behind, redesign and implement the next generation of Tidis with some important yet missing features added, such as Lua script, TLS/SSL, lock optimization, one phase commit, asynchronous commit and many other improvements.
 
@@ -168,29 +168,31 @@ tidis> ZRANGE myzset 0 5 WITHSCORES
 
 ### String
 
-    +-----------+-------------------------------------+
-    |  command  |               format                |
-    +-----------+-------------------------------------+
-    |    get    | get key                             |
-    +-----------+-------------------------------------+
-    |    set    | set key value [EX sec|PX ms][NX|XX] | 
-    +-----------+-------------------------------------+
-    |    del    | del key1 key2 ...                   |
-    +-----------+-------------------------------------+
-    |    mget   | mget key1 key2 ...                  |
-    +-----------+-------------------------------------+
-    |    mset   | mset key1 value1 key2 value2 ...    |
-    +-----------+-------------------------------------+
-    |    incr   | incr key                            |
-    +-----------+-------------------------------------+
-    |   incrby  | incr key step                       |
-    +-----------+-------------------------------------+
-    |    decr   | decr key                            |
-    +-----------+-------------------------------------+
-    |   decrby  | decrby key step                     |
-    +-----------+-------------------------------------+
-    |   strlen  | strlen key                          |
-    +-----------+-------------------------------------+
+    +-----------+--------------------------------------------+
+    |  command  |               format                       |
+    +-----------+--------------------------------------------+
+    |    get    | get key                                    |
+    +-----------+--------------------------------------------+
+    |   getdel  | getdel key                                 |
+    +-----------+--------------------------------------------+
+    |    set    | set key value [NX|XX] [GET] [EX s|PX ms]   |
+    +-----------+--------------------------------------------+
+    |    del    | del key1 key2 ...                          |
+    +-----------+--------------------------------------------+
+    |    mget   | mget key1 key2 ...                         |
+    +-----------+--------------------------------------------+
+    |    mset   | mset key1 value1 key2 value2 ...           |
+    +-----------+--------------------------------------------+
+    |    incr   | incr key                                   |
+    +-----------+--------------------------------------------+
+    |   incrby  | incr key step                              |
+    +-----------+--------------------------------------------+
+    |    decr   | decr key                                   |
+    +-----------+--------------------------------------------+
+    |   decrby  | decrby key step                            |
+    +-----------+--------------------------------------------+
+    |   strlen  | strlen key                                 |
+    +-----------+--------------------------------------------+
 
 ### Hash
 
@@ -532,7 +534,7 @@ The topology of cluster to run benchmark has 3 TiKV nodes, 3 Tidis nodes, 1 PD n
 
 ![](https://cdn.jsdelivr.net/gh/yongman/i@img/picgo/20220921114120.png)
 
-The latency distribution shows that the latency will increase when the cluster load reaches to a certain limit. The `p9999` latency increased significantly with 1200 concurrent connections, up to `47ms`.  
+The latency distribution shows that the latency will increase when the cluster load reaches to a certain limit. The `p9999` latency increased significantly with 1200 concurrent connections, up to `47ms`.
 
 ![](https://cdn.jsdelivr.net/gh/yongman/i@img/picgo/20220921115048.png)
 
@@ -542,7 +544,7 @@ We also compared the benchmark result with other similar `Redis on TiKV` project
 
 The write thoughput of `Tidis` is almost twice of Titan and Tidis 1.0 and the latency are the best all the time.
 
-See more [Benchmark](https://github.com/tidb-incubator/tidis/blob/master/docs/performance.md) details here. 
+See more [Benchmark](https://github.com/tidb-incubator/tidis/blob/master/docs/performance.md) details here.
 
 ## License
 

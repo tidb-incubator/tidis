@@ -382,13 +382,14 @@ impl StringCommandCtx {
         mut self,
         key: &str,
         value: &Bytes,
+        timestamp: u64,
         return_number: bool,
         return_prev: bool,
     ) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
         let ekey = KEY_ENCODER.encode_txnkv_string(&key);
-        let eval = KEY_ENCODER.encode_txnkv_string_value(&mut value.to_vec(), 0);
+        let eval = KEY_ENCODER.encode_txnkv_string_value(&mut value.to_vec(), timestamp);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
@@ -446,12 +447,13 @@ impl StringCommandCtx {
         mut self,
         key: &str,
         value: &Bytes,
+        timestamp: u64,
         return_prev: bool,
     ) -> AsyncResult<Frame> {
         let mut client = get_txn_client()?;
         let key = key.to_owned();
         let ekey = KEY_ENCODER.encode_txnkv_string(&key);
-        let eval = KEY_ENCODER.encode_txnkv_string_value(&mut value.to_vec(), 0);
+        let eval = KEY_ENCODER.encode_txnkv_string_value(&mut value.to_vec(), timestamp);
 
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {

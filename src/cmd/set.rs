@@ -255,14 +255,11 @@ impl Set {
     }
 
     async fn put_not_exists(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
-        // TODO: TTL
-        if self.expire.is_some() {
-            return Ok(resp_err("EX/PX with NX/XX not implemented".into()));
-        };
-
         if is_use_txn_api() {
+            let ts = self.expire.map_or(0, |v| timestamp_from_ttl(v as u64));
+
             StringCommandCtx::new(txn)
-                .do_async_txnkv_put_not_exists(&self.key, &self.value, false, self.get)
+                .do_async_txnkv_put_not_exists(&self.key, &self.value, ts, false, self.get)
                 .await
         } else {
             StringCommandCtx::new(txn)
@@ -272,14 +269,11 @@ impl Set {
     }
 
     async fn put_if_exists(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
-        // TODO: TTL
-        if self.expire.is_some() {
-            return Ok(resp_err("EX/PX with NX/XX not implemented".into()));
-        };
-
         if is_use_txn_api() {
+            let ts = self.expire.map_or(0, |v| timestamp_from_ttl(v as u64));
+
             StringCommandCtx::new(txn)
-                .do_async_txnkv_put_if_exists(&self.key, &self.value, self.get)
+                .do_async_txnkv_put_if_exists(&self.key, &self.value, ts, self.get)
                 .await
         } else {
             Ok(resp_err(REDIS_NOT_SUPPORTED_ERR))
@@ -289,10 +283,15 @@ impl Set {
     async fn put(&self, txn: Option<Arc<Mutex<Transaction>>>) -> AsyncResult<Frame> {
         if is_use_txn_api() {
             let ts = self.expire.map_or(0, |v| timestamp_from_ttl(v as u64));
+
             StringCommandCtx::new(txn)
                 .do_async_txnkv_put(&self.key, &self.value, ts, self.get)
                 .await
         } else {
+            if self.expire.is_some() {
+                return Ok(resp_err("TTL without use_txn_api not implemented".into()));
+            };
+
             StringCommandCtx::new(txn)
                 .do_async_rawkv_put(&self.key, &self.value)
                 .await

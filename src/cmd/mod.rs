@@ -9,6 +9,9 @@ pub use get::Get;
 mod del;
 pub use del::Del;
 
+mod getset;
+pub use getset::Getset;
+
 mod getdel;
 pub use getdel::Getdel;
 
@@ -240,6 +243,7 @@ fn transform_parse<T: Invalid>(parse_res: crate::Result<T>, parse: &mut Parse) -
 pub enum Command {
     Del(Del),
     Get(Get),
+    Getset(Getset),
     Getdel(Getdel),
     Mget(Mget),
     Publish(Publish),
@@ -369,6 +373,7 @@ impl Command {
         let command = match &command_name[..] {
             "del" => Command::Del(transform_parse(Del::parse_frames(&mut parse), &mut parse)),
             "get" => Command::Get(transform_parse(Get::parse_frames(&mut parse), &mut parse)),
+            "getset" => Command::Getset(transform_parse(Getset::parse_frames(&mut parse), &mut parse)),
             "getdel" => Command::Getdel(transform_parse(
                 Getdel::parse_frames(&mut parse),
                 &mut parse,
@@ -617,6 +622,7 @@ impl Command {
             "type" => Command::Type(Type::parse_argv(argv)?),
             "exists" => Command::Exists(Exists::parse_argv(argv)?),
             "get" => Command::Get(Get::parse_argv(argv)?),
+            "getset" => Command::Getset(Getset::parse_argv(argv)?),
             "getdel" => Command::Getdel(Getdel::parse_argv(argv)?),
             "set" => Command::Set(Set::parse_argv(argv)?),
             "setnx" => Command::SetNX(SetNX::parse_argv(argv)?),
@@ -709,6 +715,7 @@ impl Command {
         match self {
             Del(cmd) => cmd.apply(dst).await,
             Get(cmd) => cmd.apply(dst).await,
+            Getset(cmd) => cmd.apply(dst).await,
             Getdel(cmd) => cmd.apply(dst).await,
             Publish(cmd) => cmd.apply(db, dst).await,
             Set(cmd) => cmd.apply(dst).await,
@@ -808,6 +815,7 @@ impl Command {
         match self {
             Command::Del(_) => "del",
             Command::Get(_) => "get",
+            Command::Getset(_) => "getset",
             Command::Getdel(_) => "getdel",
             Command::Publish(_) => "pub",
             Command::Set(_) => "set",

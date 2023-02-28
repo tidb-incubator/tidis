@@ -39,6 +39,8 @@ impl Multi {
                 Command::Del(cmd) => cmd.del(txn_rc.clone()).await,
                 Command::Exists(cmd) => cmd.exists(txn_rc.clone()).await,
                 Command::Get(cmd) => cmd.get(txn_rc.clone()).await,
+                Command::Getdel(cmd) => cmd.getdel(txn_rc.clone()).await,
+                Command::Getset(cmd) => cmd.getset(txn_rc.clone()).await,
                 Command::Set(cmd) => cmd.set(txn_rc.clone()).await,
                 Command::SetNX(cmd) => cmd.put_not_exists(txn_rc.clone()).await,
                 Command::SetEX(cmd) => cmd.setex(txn_rc.clone()).await,

@@ -22,7 +22,7 @@ use std::path::Path;
 
 const TIMESTAMP_FORMAT: &str = "%Y/%m/%d %H:%M:%S%.3f %:z";
 
-#[derive(PartialEq, Copy, Clone)]
+#[derive(PartialEq, Eq, Copy, Clone)]
 pub enum ReturnOption {
     // Return number (for example number of affected keys)
     Number,

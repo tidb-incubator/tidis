@@ -78,7 +78,8 @@ impl Set {
 
     pub fn set_expire(&mut self, expire: i64) -> crate::Result<()> {
         if self.expire.is_none() {
-            Ok(self.expire = Some(expire))
+            self.expire = Some(expire);
+            Ok(())
         } else {
             Err("Multiple expiry options".into())
         }
@@ -86,7 +87,8 @@ impl Set {
 
     pub fn set_exists(&mut self, exists: bool) -> crate::Result<()> {
         if self.exists.is_none() {
-            Ok(self.exists = Some(exists))
+            self.exists = Some(exists);
+            Ok(())
         } else {
             Err("Multiple existence options".into())
         }

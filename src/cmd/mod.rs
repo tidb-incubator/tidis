@@ -373,7 +373,10 @@ impl Command {
         let command = match &command_name[..] {
             "del" => Command::Del(transform_parse(Del::parse_frames(&mut parse), &mut parse)),
             "get" => Command::Get(transform_parse(Get::parse_frames(&mut parse), &mut parse)),
-            "getset" => Command::Getset(transform_parse(Getset::parse_frames(&mut parse), &mut parse)),
+            "getset" => Command::Getset(transform_parse(
+                Getset::parse_frames(&mut parse),
+                &mut parse,
+            )),
             "getdel" => Command::Getdel(transform_parse(
                 Getdel::parse_frames(&mut parse),
                 &mut parse,

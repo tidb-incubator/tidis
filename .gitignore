@@ -1,2 +1,6 @@
 /target
 **/*.rs.bk
+*.log
+*.swp
+*.swo
+*~

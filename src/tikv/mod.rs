@@ -107,7 +107,7 @@ pub fn get_client() -> Result<RawClientWrapper, RTError> {
 }
 
 pub fn get_txn_client() -> Result<TxnClientWrapper<'static>, RTError> {
-    if unsafe { TIKV_RAW_CLIENT.is_none() } {
+    if unsafe { TIKV_TXN_CLIENTS.is_none() } {
         return Err(REDIS_BACKEND_NOT_CONNECTED_ERR);
     }
     let client = unsafe {

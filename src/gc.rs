@@ -1,4 +1,4 @@
-use futures::FutureExt;
+use futures::{FutureExt, StreamExt};
 use slog::{debug, error, info};
 use std::collections::HashSet;
 use std::convert::TryInto;
@@ -107,7 +107,7 @@ impl GcMaster {
             let bound_range = KEY_ENCODER.encode_txnkv_gc_version_key_range();
 
             // TODO scan speed throttling
-            let iter_res = txn.scan(bound_range, u32::MAX).await;
+            let iter_res = txn.scan_stream(bound_range, u32::MAX).await;
             if iter_res.is_err() {
                 error!(
                     LOGGER,
@@ -119,8 +119,8 @@ impl GcMaster {
                 continue;
             }
 
-            let iter = iter_res.unwrap();
-            for kv in iter {
+            let mut iter = iter_res.unwrap();
+            while let Some(kv) = iter.next().await {
                 let (user_key, version) = KeyDecoder::decode_key_gc_userkey_version(kv.0);
 
                 let (slot_range_left, slot_range_right) = self.topo.myself_owned_slots();
@@ -248,8 +248,8 @@ impl GcWorker {
                             // delete all data key of this key and version
                             let bound_range =
                                 KEY_ENCODER.encode_txnkv_hash_data_key_range(&user_key, version);
-                            let iter = txn.scan_keys(bound_range, u32::MAX).await?;
-                            for k in iter {
+                            let mut iter = txn.scan_keys_stream(bound_range, u32::MAX).await?;
+                            while let Some(k) = iter.next().await {
                                 txn.delete(k).await?;
                             }
                         }
@@ -261,8 +261,8 @@ impl GcWorker {
                             // delete all data key of this key and version
                             let bound_range =
                                 KEY_ENCODER.encode_txnkv_list_data_key_range(&user_key, version);
-                            let iter = txn.scan_keys(bound_range, u32::MAX).await?;
-                            for k in iter {
+                            let mut iter = txn.scan_keys_stream(bound_range, u32::MAX).await?;
+                            while let Some(k) = iter.next().await {
                                 txn.delete(k).await?;
                             }
                         }
@@ -281,8 +281,8 @@ impl GcWorker {
                             // delete all data key of this key and version
                             let bound_range =
                                 KEY_ENCODER.encode_txnkv_set_data_key_range(&user_key, version);
-                            let iter = txn.scan_keys(bound_range, u32::MAX).await?;
-                            for k in iter {
+                            let mut iter = txn.scan_keys_stream(bound_range, u32::MAX).await?;
+                            while let Some(k) = iter.next().await {
                                 txn.delete(k).await?;
                             }
                         }
@@ -304,16 +304,16 @@ impl GcWorker {
                                 &String::from_utf8_lossy(&task.user_key),
                                 task.version,
                             );
-                            let iter = txn.scan_keys(bound_range, u32::MAX).await?;
-                            for k in iter {
+                            let mut iter = txn.scan_keys_stream(bound_range, u32::MAX).await?;
+                            while let Some(k) = iter.next().await {
                                 txn.delete(k).await?;
                             }
 
                             // delete all data key of this key and version
                             let bound_range =
                                 KEY_ENCODER.encode_txnkv_zset_data_key_range(&user_key, version);
-                            let iter = txn.scan_keys(bound_range, u32::MAX).await?;
-                            for k in iter {
+                            let mut iter = txn.scan_keys_stream(bound_range, u32::MAX).await?;
+                            while let Some(k) = iter.next().await {
                                 txn.delete(k).await?;
                             }
                         }

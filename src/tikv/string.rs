@@ -9,6 +9,7 @@ use crate::{
     Frame,
 };
 use ::futures::future::FutureExt;
+use futures::StreamExt;
 use regex::bytes::Regex;
 use std::collections::HashMap;
 use std::str;
@@ -875,11 +876,11 @@ impl StringCommandCtx {
                         let bound_range: BoundRange = range.into();
 
                         // the iterator will scan all keyspace include sub metakey and datakey
-                        let iter = txn.scan(bound_range, 100).await?;
+                        let mut iter = txn.scan_stream(bound_range, 256).await?;
 
                         // reset count to zero
                         last_round_iter_count = 0;
-                        for kv in iter {
+                        while let Some(kv) = iter.next().await {
                             // skip the left bound key, this should be exclusive
                             if kv.0 == left_bound {
                                 continue;

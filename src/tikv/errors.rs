@@ -56,6 +56,24 @@ impl From<ParseFloatError> for RTError {
     }
 }
 
+impl From<std::io::Error> for RTError {
+    fn from(_: std::io::Error) -> Self {
+        RDB_DUMP_IO_ERR
+    }
+}
+
+impl PartialEq for RTError {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::String(s1), Self::String(s2)) => s1 == s2,
+            (Self::Owned(s1), Self::Owned(s2)) => s1 == s2,
+            // note that the comparison of RTError::TikvClient ignore the internal value for now
+            (Self::TikvClient(_), Self::TikvClient(_)) => true,
+            _ => false,
+        }
+    }
+}
+
 pub type AsyncResult<T> = std::result::Result<T, RTError>;
 
 pub const REDIS_WRONG_TYPE_ERR: RTError =
@@ -94,3 +112,7 @@ pub const REDIS_EXEC_ERR: RTError =
 
 pub const REDIS_INVALID_CLIENT_ID_ERR: RTError = RTError::String("ERR Invalid client ID");
 pub const REDIS_NO_SUCH_CLIENT_ERR: RTError = RTError::String("ERR No such client");
+
+pub const REDIS_DUMPING_ERR: RTError =
+    RTError::String("Another dumping process is active, can't SAVE/BGSAVE right now.");
+pub const RDB_DUMP_IO_ERR: RTError = RTError::String("RDB dump failed because of the I/O error");

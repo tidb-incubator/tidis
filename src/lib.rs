@@ -43,6 +43,9 @@ pub mod cluster;
 
 pub mod client;
 
+pub mod rdb;
+use rdb::RDB;
+
 pub mod utils;
 
 pub mod config;

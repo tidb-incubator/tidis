@@ -325,6 +325,7 @@ pub enum Command {
     ReadOnly(Fake),
     Client(Fake),
     Info(Fake),
+    Save(Fake),
 
     // multi/exec/abort
     Multi(Multi),
@@ -572,6 +573,10 @@ impl Command {
                 Fake::parse_frames(&mut parse, "info"),
                 &mut parse,
             )),
+            "save" => Command::Save(transform_parse(
+                Fake::parse_frames(&mut parse, "save"),
+                &mut parse,
+            )),
             "multi" => Command::Multi(Multi::new()),
             "exec" => Command::Exec(Multi::new()),
             "discard" => Command::Discard(Multi::new()),
@@ -779,6 +784,7 @@ impl Command {
             ReadOnly(cmd) => cmd.apply("readonly", dst, cur_client, clients).await,
             Client(cmd) => cmd.apply("client", dst, cur_client, clients).await,
             Info(cmd) => cmd.apply("info", dst, cur_client, clients).await,
+            Save(cmd) => cmd.apply("save", dst, cur_client, clients).await,
 
             Scan(cmd) => cmd.apply(dst).await,
             Xscan(cmd) => cmd.apply(dst).await,
@@ -877,6 +883,7 @@ impl Command {
             Command::ReadOnly(_) => "readonly",
             Command::Client(_) => "client",
             Command::Info(_) => "info",
+            Command::Save(_) => "save",
             Command::Multi(_) => "multi",
             Command::Exec(_) => "exec",
             Command::Discard(_) => "discard",

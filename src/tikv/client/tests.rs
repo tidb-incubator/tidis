@@ -54,6 +54,7 @@ impl TransactionLifecycle for MockTxn {
 
 struct Fixture {
     max_attempts: u32,
+    pessimistic: bool,
     attempts: VecDeque<Attempt>,
     calls: Arc<StdMutex<Calls>>,
 }
@@ -62,6 +63,7 @@ impl Fixture {
     fn new(max_attempts: u32, attempts: Vec<Attempt>) -> Self {
         Self {
             max_attempts,
+            pessimistic: false,
             attempts: attempts.into(),
             calls: Arc::new(StdMutex::new(Calls::default())),
         }
@@ -72,6 +74,7 @@ impl Fixture {
         let calls = &self.calls;
         exec_in_new_txn(
             self.max_attempts,
+            self.pessimistic,
             || {
                 calls.lock().unwrap().begins.push(Instant::now());
                 let mut attempt = attempts.pop_front().expect("unexpected transaction replay");
@@ -148,6 +151,33 @@ async fn terminal_and_undetermined_commits_are_never_replayed_or_rolled_back() {
             (1, 1, 1, 0)
         );
     }
+}
+
+#[tokio::test]
+async fn pessimistic_failed_commit_is_not_replayed_despite_successful_rollback() {
+    let expected = format!("{:?}", RTError::from(conflict()));
+    let mut fixture = Fixture::new(
+        3,
+        vec![Attempt {
+            commit: Err(conflict()),
+            // The pinned client's PessimisticRollback can succeed while leaving
+            // prewrite locks behind after StartedCommit. It cannot justify replay.
+            rollback: Ok(()),
+            ..Attempt::default()
+        }],
+    );
+    fixture.pessimistic = true;
+    assert_original(fixture.exec().await, &expected);
+    let calls = fixture.calls.lock().unwrap();
+    assert_eq!(
+        (
+            calls.begins.len(),
+            calls.operations,
+            calls.commits,
+            calls.rollbacks
+        ),
+        (1, 1, 1, 0)
+    );
 }
 
 #[tokio::test]

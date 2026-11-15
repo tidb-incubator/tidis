@@ -138,6 +138,8 @@ impl TxnClientWrapper<'static> {
     /// Execute in the supplied transaction, or begin and finish a new one.
     /// Each call gets its own attempt budget (including the initial attempt).
     /// A zero budget rejects new transactions without executing the operation.
+    /// Pessimistic commit failures return without replay: the pinned client's
+    /// rollback cannot remove locks already converted by prewrite.
     pub async fn exec_in_txn<T, F>(
         &mut self,
         txn: Option<Arc<Mutex<Transaction>>>,
@@ -158,7 +160,15 @@ impl TxnClientWrapper<'static> {
                     Err(err) => Err(err),
                 }
             }
-            None => exec_in_new_txn(self.max_attempts, || self.begin(), f).await,
+            None => {
+                exec_in_new_txn(
+                    self.max_attempts,
+                    is_use_pessimistic_txn(),
+                    || self.begin(),
+                    f,
+                )
+                .await
+            }
         }
     }
 }
@@ -204,6 +214,7 @@ fn txn_retry_delay_ms(retry: u32) -> u32 {
 
 async fn exec_in_new_txn<T, Txn, F, Begin, BeginFuture>(
     max_attempts: u32,
+    pessimistic: bool,
     mut begin: Begin,
     f: F,
 ) -> AsyncResult<T>
@@ -224,7 +235,7 @@ where
             // Every retry, including a failed begin, passes through this backoff.
             sleep(txn_retry_delay_ms(attempt)).await;
             TXN_RETRY_COUNTER.inc();
-            let kind = if is_use_pessimistic_txn() {
+            let kind = if pessimistic {
                 "pessimistic"
             } else {
                 "optimistic"
@@ -251,9 +262,11 @@ where
                         Ok(()) => return Ok(res),
                         Err(err) => {
                             error!(LOGGER, "error to commit transaction: {}", err);
-                            if !txn_error_retryable(&err) {
+                            if !txn_error_retryable(&err) || pessimistic {
                                 // The pinned client leaves failed commits in StartedCommit.
                                 // Drop is legal there. Do not roll back an unknown outcome.
+                                // PessimisticRollback also leaves prewrite locks intact,
+                                // so even a known conflict cannot safely be replayed.
                                 return Err(RTError::from(err));
                             }
                             RTError::from(err)
@@ -262,7 +275,7 @@ where
                     Err(err) => err,
                 };
 
-                // The pinned client permits rollback from Active and StartedCommit.
+                // Roll back operation failures, or optimistic failed commits.
                 // Cleanup must never replace the operation/commit error. A failed
                 // cleanup also stops retries, since locks may still be outstanding.
                 if let Err(cleanup_err) = txn.rollback().await {

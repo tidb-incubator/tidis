@@ -729,10 +729,10 @@ impl Handler {
 
             debug!(
                 LOGGER,
-                "req {} -> {}, {:?}",
+                "req {} -> {}, {}",
                 self.connection.peer_addr(),
                 self.connection.local_addr(),
-                cmd
+                cmd_name
             );
 
             match cmd {

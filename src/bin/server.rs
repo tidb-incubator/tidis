@@ -3,8 +3,8 @@ use tidis::{
     config_port_or_default, config_prometheus_listen_or_default, config_prometheus_port_or_default,
     config_tls_auth_client_or_default, config_tls_ca_cert_file_or_default,
     config_tls_cert_file_or_default, config_tls_key_file_or_default, config_tls_listen_or_default,
-    config_tls_port_or_default, do_async_connect, server, set_global_config, set_instance_id,
-    utils, Config, PrometheusServer,
+    config_tls_port_or_default, do_async_connect, is_auth_enabled, server, set_global_config,
+    set_instance_id, utils, Config, PrometheusServer,
 };
 
 use slog::info;
@@ -38,13 +38,15 @@ pub async fn main() -> tidis::Result<()> {
         };
     };
 
-    match &config {
-        Some(c) => {
-            println!("{:?}", c);
-            set_global_config(c.clone())
-        }
-        None => (),
+    if let Some(c) = config {
+        set_global_config(c);
     }
+
+    info!(
+        tidis::config::LOGGER,
+        "Authentication enabled: {}",
+        is_auth_enabled()
+    );
 
     let c_port = config_port_or_default();
     let port = cli.port.as_deref().unwrap_or(&c_port);

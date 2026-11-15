@@ -34,6 +34,7 @@ pub mod errors;
 pub mod hash;
 pub mod list;
 pub mod lua;
+pub(crate) mod scan;
 pub mod set;
 pub mod string;
 pub mod zset;

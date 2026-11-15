@@ -5,6 +5,7 @@ use super::{
     gen_next_meta_index,
 };
 use super::{get_txn_client, KEY_ENCODER};
+use crate::tikv::scan;
 use crate::{
     async_del_hash_threshold_or_default, async_expire_hash_threshold_or_default,
     config::LOGGER,
@@ -13,7 +14,7 @@ use crate::{
     Frame,
 };
 
-use futures::{future::FutureExt, stream, StreamExt};
+use futures::future::FutureExt;
 use slog::debug;
 use std::{collections::HashMap, convert::TryInto, ops::Range, sync::Arc};
 use tikv_client::{BoundRange, Key, KvPair, Transaction, Value};
@@ -540,7 +541,7 @@ impl<'a> HashCommandCtx {
                             ..KEY_ENCODER.encode_txnkv_hash_data_key_end(&key, version);
                         let bound_range: BoundRange = range.into();
                         // scan return iterator
-                        let iter = txn.scan_stream(bound_range, u32::MAX).await?;
+                        let iter = scan::scan(&mut txn, bound_range, u32::MAX).await?;
 
                         let resp: Vec<Frame>;
                         if with_field && with_value {
@@ -550,10 +551,9 @@ impl<'a> HashCommandCtx {
                                         KeyDecoder::decode_key_hash_userkey_from_datakey(
                                             &key, kv.0,
                                         );
-                                    stream::iter([resp_bulk(field), resp_bulk(kv.1)])
+                                    [resp_bulk(field), resp_bulk(kv.1)]
                                 })
-                                .collect()
-                                .await;
+                                .collect();
                         } else if with_field {
                             resp = iter
                                 .flat_map(|kv| {
@@ -561,15 +561,11 @@ impl<'a> HashCommandCtx {
                                         KeyDecoder::decode_key_hash_userkey_from_datakey(
                                             &key, kv.0,
                                         );
-                                    stream::iter([resp_bulk(field)])
+                                    [resp_bulk(field)]
                                 })
-                                .collect()
-                                .await;
+                                .collect();
                         } else {
-                            resp = iter
-                                .flat_map(|kv| stream::iter([resp_bulk(kv.1)]))
-                                .collect()
-                                .await;
+                            resp = iter.flat_map(|kv| [resp_bulk(kv.1)]).collect();
                         }
 
                         Ok(resp_array(resp))
@@ -896,9 +892,9 @@ impl<'a> HashCommandCtx {
                                 let bound_range =
                                     KEY_ENCODER.encode_txnkv_hash_data_key_range(&key, version);
                                 // scan return iterator
-                                let mut iter = txn.scan_keys_stream(bound_range, u32::MAX).await?;
+                                let iter = scan::scan_keys(&mut txn, bound_range, u32::MAX).await?;
 
-                                while let Some(k) = iter.next().await {
+                                for k in iter {
                                     txn.delete(k).await?;
                                 }
 

@@ -9,10 +9,10 @@ use super::{
 };
 use crate::async_del_zset_threshold_or_default;
 use crate::async_expire_zset_threshold_or_default;
+use crate::tikv::scan;
 use crate::utils::{key_is_expired, resp_array, resp_bulk, resp_err, resp_int, resp_nil};
 use crate::Frame;
 use ::futures::future::FutureExt;
-use futures::StreamExt;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::sync::Arc;
@@ -468,9 +468,9 @@ impl ZsetCommandCtx {
                             );
                             let range = start_key..=end_key;
                             let bound_range: BoundRange = range.into();
-                            let iter = txn.scan_stream(bound_range, u32::MAX).await?;
+                            let iter = scan::scan(&mut txn, bound_range, u32::MAX).await?;
 
-                            Ok(resp_int(iter.count().await as i64))
+                            Ok(resp_int(iter.count() as i64))
                         }
                         None => Ok(resp_int(0)),
                     }
@@ -536,12 +536,11 @@ impl ZsetCommandCtx {
                             let bound_range =
                                 KEY_ENCODER.encode_txnkv_zset_score_key_range(&key, version);
                             txn = txn_rc.lock().await;
-                            let mut iter = txn
-                                .scan_stream(bound_range, size.try_into().unwrap())
-                                .await?;
+                            let iter =
+                                scan::scan(&mut txn, bound_range, size.try_into().unwrap()).await?;
 
                             let mut idx = 0;
-                            while let Some(kv) = iter.next().await {
+                            for kv in iter {
                                 if idx < min {
                                     idx += 1;
                                     continue;
@@ -649,11 +648,10 @@ impl ZsetCommandCtx {
                             let range = start_key..end_key;
                             let bound_range: BoundRange = range.into();
                             txn = txn_rc.lock().await;
-                            let mut iter = txn
-                                .scan_stream(bound_range, size.try_into().unwrap())
-                                .await?;
+                            let iter =
+                                scan::scan(&mut txn, bound_range, size.try_into().unwrap()).await?;
 
-                            while let Some(kv) = iter.next().await {
+                            for kv in iter {
                                 let member = kv.1;
                                 if reverse {
                                     resp.insert(0, resp_bulk(member));
@@ -1181,12 +1179,11 @@ impl ZsetCommandCtx {
                             let bound_range =
                                 KEY_ENCODER.encode_txnkv_zset_score_key_range(&key, version);
                             txn = txn_rc.lock().await;
-                            let mut iter = txn
-                                .scan_stream(bound_range, size.try_into().unwrap())
-                                .await?;
+                            let iter =
+                                scan::scan(&mut txn, bound_range, size.try_into().unwrap()).await?;
 
                             let mut idx = 0;
-                            while let Some(kv) = iter.next().await {
+                            for kv in iter {
                                 if idx < min {
                                     idx += 1;
                                     continue;
@@ -1399,8 +1396,8 @@ impl ZsetCommandCtx {
                             } else {
                                 let bound_range =
                                     KEY_ENCODER.encode_txnkv_zset_data_key_range(&key, version);
-                                let mut iter = txn.scan_stream(bound_range, u32::MAX).await?;
-                                while let Some(kv) = iter.next().await {
+                                let iter = scan::scan(&mut txn, bound_range, u32::MAX).await?;
+                                for kv in iter {
                                     // kv.0 is member key
                                     // kv.1 is score
                                     // decode the score vec to i64
@@ -1483,8 +1480,8 @@ impl ZsetCommandCtx {
                             } else {
                                 let bound_range =
                                     KEY_ENCODER.encode_txnkv_zset_data_key_range(&key, version);
-                                let mut iter = txn.scan_stream(bound_range, u32::MAX).await?;
-                                while let Some(kv) = iter.next().await {
+                                let iter = scan::scan(&mut txn, bound_range, u32::MAX).await?;
+                                for kv in iter {
                                     // kv.0 is member key
                                     // kv.1 is score
                                     // decode the score vec to i64

@@ -156,14 +156,50 @@ async fn scan_failure_contract() {
     );
     txn.rollback().await.unwrap();
 
+    // The first pivot fits in one page; an unrelated later-page failure must
+    // not turn this small operation into a whole-list scan. Roll back the
+    // shared transaction so the original movement fixtures stay unchanged.
+    let shared = std::sync::Arc::new(tokio::sync::Mutex::new(
+        client.begin_optimistic().await.unwrap(),
+    ));
+    let response = fail_after_pages(
+        1,
+        ListCommandCtx::new(Some(shared.clone())).do_async_txnkv_linsert(
+            &key,
+            true,
+            &Bytes::from(0u64.to_be_bytes().to_vec()),
+            &Bytes::from_static(b"first"),
+        ),
+    )
+    .await
+    .unwrap();
+    assert!(matches!(response, crate::Frame::Integer(601)));
+    shared.lock().await.rollback().await.unwrap();
+    let response = fail_after_pages(
+        1,
+        ListCommandCtx::new(None).do_async_txnkv_linsert(
+            &key,
+            true,
+            &Bytes::from(300u64.to_be_bytes().to_vec()),
+            &Bytes::from_static(b"later"),
+        ),
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        response,
+        crate::Frame::ErrorOwned(_) | crate::Frame::ErrorString(_)
+    ));
+    assert_eq!(contents(&client, range.clone()).await, original);
+
     assert!(
         fail_after_pages(1, ListCommandCtx::new(None).do_async_txnkv_list_del(&key))
             .await
             .is_err()
     );
     assert_eq!(contents(&client, range.clone()).await, original);
-    // LREM first scans for matches (three pages), then scans to move entries.
-    // Fail on the second page of the latter, in each direction.
+    // LREM first scans for matches across three Regions (four pages), then
+    // scans to move entries. Fail in that movement scan, in each direction.
     for from_head in [true, false] {
         let response = fail_after_pages(
             4,

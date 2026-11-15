@@ -21,6 +21,22 @@ use tokio::sync::Mutex;
 
 use crate::metrics::REMOVED_EXPIRED_KEY_COUNTER;
 
+fn rank_range(size: i64, mut min: i64, mut max: i64) -> Option<(i64, i64)> {
+    if min < 0 {
+        min = min.saturating_add(size);
+    }
+    if max < 0 {
+        max = max.saturating_add(size);
+    }
+    min = min.max(0);
+    max = max.min(size - 1);
+    if min > max {
+        None
+    } else {
+        Some((min, max))
+    }
+}
+
 #[derive(Clone)]
 pub struct ZsetCommandCtx {
     txn: Option<Arc<Mutex<Transaction>>>,
@@ -518,12 +534,12 @@ impl ZsetCommandCtx {
                                 return Ok(resp_array(vec![]));
                             }
                             let size = self.txnkv_sum_key_size(&key, version).await?;
-                            // convert index to positive if negtive
-                            if min < 0 {
-                                min += size;
-                            }
-                            if max < 0 {
-                                max += size;
+                            match rank_range(size, min, max) {
+                                Some((start, stop)) => {
+                                    min = start;
+                                    max = stop;
+                                }
+                                None => return Ok(resp_array(resp)),
                             }
 
                             if reverse {
@@ -536,8 +552,12 @@ impl ZsetCommandCtx {
                             let bound_range =
                                 KEY_ENCODER.encode_txnkv_zset_score_key_range(&key, version);
                             txn = txn_rc.lock().await;
-                            let iter =
-                                scan::scan(&mut txn, bound_range, size.try_into().unwrap()).await?;
+                            let iter = scan::scan(
+                                &mut txn,
+                                bound_range,
+                                (max + 1).try_into().unwrap_or(u32::MAX),
+                            )
+                            .await?;
 
                             let mut idx = 0;
                             for kv in iter {
@@ -1168,19 +1188,23 @@ impl ZsetCommandCtx {
                                 return Ok(0);
                             }
                             let size = self.txnkv_sum_key_size(&key, version).await?;
-                            // convert index to positive if negtive
-                            if min < 0 {
-                                min += size;
-                            }
-                            if max < 0 {
-                                max += size;
+                            match rank_range(size, min, max) {
+                                Some((start, stop)) => {
+                                    min = start;
+                                    max = stop;
+                                }
+                                None => return Ok(0),
                             }
 
                             let bound_range =
                                 KEY_ENCODER.encode_txnkv_zset_score_key_range(&key, version);
                             txn = txn_rc.lock().await;
-                            let iter =
-                                scan::scan(&mut txn, bound_range, size.try_into().unwrap()).await?;
+                            let iter = scan::scan(
+                                &mut txn,
+                                bound_range,
+                                (max + 1).try_into().unwrap_or(u32::MAX),
+                            )
+                            .await?;
 
                             let mut idx = 0;
                             for kv in iter {

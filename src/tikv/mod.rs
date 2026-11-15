@@ -151,6 +151,7 @@ pub async fn do_async_txn_connect(addrs: Vec<String>) -> AsyncResult<()> {
             backend_key_file_or_default(),
         );
     }
+    scan::connect(&addrs, &config).await?;
     let mut clients = Vec::with_capacity(conn_concurrency_or_default());
     for _ in 0..conn_concurrency_or_default() {
         let client =

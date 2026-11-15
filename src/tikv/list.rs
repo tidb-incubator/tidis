@@ -655,13 +655,12 @@ impl<'a> ListCommandCtx {
                             let bound_range =
                                 KEY_ENCODER.encode_txnkv_list_data_key_range(&key, version);
 
-                            // iter will only return the matched kvpair
-                            let mut iter = scan::scan(&mut txn, bound_range, u32::MAX)
-                                .await?
-                                .filter(|kv| kv.1.as_slice() == pivot.as_ref());
+                            let pivot = scan::find(&mut txn, bound_range, |kv| {
+                                kv.1.as_slice() == pivot.as_ref()
+                            })
+                            .await?;
 
-                            // yeild the first matched kvpair
-                            if let Some(kv) = iter.next() {
+                            if let Some(kv) = pivot {
                                 // decode the idx from data key
                                 let idx = KeyDecoder::decode_key_list_idx_from_datakey(&key, kv.0);
 

@@ -27,6 +27,14 @@ Actions are pinned by commit with their release versions in comments. The job
 uses the runner's rustup directly. PD and TiKV are launched directly, avoiding
 floating TiUP/playground versions and installers.
 
+The E2E step logs the runner's initial soft/hard `RLIMIT_NOFILE`, then limits
+both to 65,536 for the supervisor and its children. TiKV 6.2.0's startup check
+requires 1,000 reserved descriptors plus RocksDB and RaftDB file budgets
+(with Titan disabled). The defaults total `1000 + 40960 + 40960 = 82920`,
+which failed in hosted run 43729835200. This disposable fixture sets both
+`max-open-files` budgets to 1,024, requiring only 3,048 descriptors. TiKV's
+system check remains enabled; these smaller engine budgets apply only to CI.
+
 `run_e2e.py` starts a single-replica backend on allocated loopback ports. Each
 readiness gate has a 120-second deadline and checks for early process exits.
 PD must report healthy, TiKV must register as Up, and Tidis must pass PING and
@@ -47,7 +55,11 @@ To reproduce locally, install the pinned Python requirements, build with
 backend archives into a directory containing `pd-server` and `tikv-server`:
 
 ```sh
+ulimit -Sn 65536
+ulimit -Hn 65536
 python .github/ci/run_e2e.py --bin-dir /path/to/backend --work-dir /path/to/new-run
 ```
 
 The work directory must be new; it retains logs and backend state for diagnosis.
+Run the limit commands in a subshell if the invoking shell should retain its
+original limits. The runner must provide a hard limit of at least 65,536.

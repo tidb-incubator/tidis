@@ -93,6 +93,10 @@ jobs:
         env:
           TIKV_API_VERSION: ${{ matrix.api }}
         run: |
+          echo "Initial RLIMIT_NOFILE soft=$(ulimit -Sn) hard=$(ulimit -Hn)"
+          ulimit -Sn 65536
+          ulimit -Hn 65536
+          echo "E2E RLIMIT_NOFILE soft=$(ulimit -Sn) hard=$(ulimit -Hn)"
           python .github/ci/run_e2e.py \
             --bin-dir "$RUNNER_TEMP/tidis-backend" \
             --work-dir "$RUNNER_TEMP/tidis-e2e"

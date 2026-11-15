@@ -7,6 +7,13 @@ reserve-space = "0MB"
 [storage.block-cache]
 capacity = "128MB"
 
+# Keep the disposable fixture's engine file budgets below the CI nofile limit.
+[rocksdb]
+max-open-files = 1024
+
+[raftdb]
+max-open-files = 1024
+
 [server]
 grpc-concurrency = 2
 

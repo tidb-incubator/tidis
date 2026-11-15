@@ -5,9 +5,10 @@
 use super::*;
 use crate::tikv::hash::HashCommandCtx;
 use crate::tikv::list::ListCommandCtx;
-use crate::tikv::scan::{fail_after_pages, scan, scan_keys, scan_reverse};
+use crate::tikv::scan::{fail_after_pages, find, scan, scan_keys, scan_reverse};
 use bytes::Bytes;
 use std::collections::BTreeMap;
+use std::ops::{Bound, RangeBounds};
 use tikv_client::{Key, KvPair, TransactionClient};
 
 async fn contents(client: &TransactionClient, range: tikv_client::BoundRange) -> Vec<KvPair> {
@@ -85,6 +86,65 @@ async fn scan_failure_contract() {
     // Split inside both the first and second page, then verify exact ordering
     // across three regions, including buffered inserts, overwrites and deletes.
     split_regions(&pd, &[original[100].0.clone(), original[400].0.clone()]).await;
+    // The pinned client's empty upper key is unbounded. Exercise every adapter
+    // entry point past a page boundary, alongside finite and minimum-key bounds.
+    let all = contents(&client, (..).into()).await;
+    let start = original[0].0.clone();
+    let stop = original[599].0.clone();
+    let mut txn = client.begin_optimistic().await.unwrap();
+    for bounds in [
+        (start.clone()..Key::EMPTY).into(),
+        (start.clone()..).into(),
+        (Key::EMPTY..Key::EMPTY).into(),
+        (Key::EMPTY..stop.clone()).into(),
+        (start.clone()..start.clone()).into(),
+        (start.clone()..=start.clone()).into(),
+        (
+            Bound::Excluded(start.clone()),
+            Bound::Included(stop.clone()),
+        )
+            .into(),
+        (Bound::Excluded(start.clone()), Bound::Excluded(Key::EMPTY)).into(),
+    ] {
+        let bounds: tikv_client::BoundRange = bounds;
+        let expected: Vec<_> = all
+            .iter()
+            .filter(|row| bounds.contains(row.key()))
+            .cloned()
+            .collect();
+        assert_eq!(
+            scan(&mut txn, bounds.clone(), 257)
+                .await
+                .unwrap()
+                .collect::<Vec<_>>(),
+            expected.iter().take(257).cloned().collect::<Vec<_>>()
+        );
+        assert_eq!(
+            scan_keys(&mut txn, bounds.clone(), 257)
+                .await
+                .unwrap()
+                .collect::<Vec<_>>(),
+            expected
+                .iter()
+                .take(257)
+                .map(|row| row.0.clone())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            scan_reverse(&mut txn, bounds.clone(), 257)
+                .await
+                .unwrap()
+                .collect::<Vec<_>>(),
+            expected.iter().rev().take(257).cloned().collect::<Vec<_>>()
+        );
+        assert_eq!(
+            find(&mut txn, bounds, |row| row.key() == &stop)
+                .await
+                .unwrap(),
+            expected.iter().find(|row| row.key() == &stop).cloned()
+        );
+    }
+    txn.rollback().await.unwrap();
     let mut txn = client.begin_optimistic().await.unwrap();
     let mut expected: BTreeMap<Key, Vec<u8>> = original
         .iter()

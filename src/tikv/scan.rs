@@ -85,6 +85,10 @@ async fn fetch_page(
     key_only: bool,
 ) -> Result<Page> {
     let (start, end) = range.clone().into_keys();
+    // into_keys retains the pinned client's empty upper-key sentinel. Normalize
+    // it before checking emptiness, clipping, and constructing the next range.
+    let end = end.filter(|key| !key.is_empty());
+    let range: BoundRange = (start.clone(), end.clone()).into();
     if end.as_ref().map_or(false, |end| start >= *end) {
         return Ok(Page {
             rows: vec![],

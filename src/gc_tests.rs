@@ -199,10 +199,10 @@ async fn scan_failure_contract() {
     );
     assert_eq!(contents(&client, range.clone()).await, original);
     // LREM first scans for matches across three Regions (four pages), then
-    // scans to move entries. Fail in that movement scan, in each direction.
+    // scans to move entries. Fail on its second page, in each direction.
     for from_head in [true, false] {
         let response = fail_after_pages(
-            4,
+            5,
             ListCommandCtx::new(None).do_async_txnkv_lrem(
                 &key,
                 1,

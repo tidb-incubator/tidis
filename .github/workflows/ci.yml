@@ -6,7 +6,9 @@ on:
       - master
   workflow_dispatch:
 
-# Concurrency ensures that only a single job or workflow using the same concurrency group will run at a time.
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -14,64 +16,91 @@ concurrency:
 jobs:
   dev:
     name: Run fmt, clippy and check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    # One verified compatibility point; see .github/ci/README.md before extending it.
+    strategy:
+      matrix:
+        include:
+          - rust: nightly-2022-07-27
+            python: '3.11.13'
+            gcc: '12.3.0'
+            tikv: '6.2.0'
+            api: 1
+    env:
+      RUSTUP_TOOLCHAIN: ${{ matrix.rust }}
+      RUSTFLAGS: -Dwarnings
+      RUST_BACKTRACE: "1"
+      LOG_LEVEL: INFO
+      CC: gcc-12
+      CXX: g++-12
     steps:
-      - uses: actions/checkout@v2
-      - uses: lukka/get-cmake@latest
-      - name: Configure git for private modules
-        env:
-          TOKEN: ${{ secrets.GIT_ACTION_BOT }}
-        run: git config --global url."https://${TOKEN}@github.com/".insteadOf "https://github.com/"
-      - name: Install `rust` toolchain
-        uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          toolchain: nightly-2022-07-27-x86_64-unknown-linux-gnu
-          default: true
-          profile: minimal
-          components: clippy, rustfmt
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: |
+            test/requirements.txt
+            .github/ci/requirements.txt
+      - name: Install and check Python dependencies
+        run: |
+          python -m pip install -r test/requirements.txt -r .github/ci/requirements.txt
+          python -c 'import redis; assert redis.__version__ == "3.5.3"; print(redis.__version__)'
+          cmake --version
+          python -c 'import cmake, os; print("CMAKE=" + os.path.join(cmake.CMAKE_BIN_DIR, "cmake"))' >> "$GITHUB_ENV"
+      - name: Install and verify native compiler
+        env:
+          GCC_VERSION: ${{ matrix.gcc }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends gcc-12 g++-12
+          test "$("$CC" -dumpfullversion)" = "$GCC_VERSION"
+          test "$("$CXX" -dumpfullversion)" = "$GCC_VERSION"
+          "$CC" --version
+          "$CXX" --version
+          "$CMAKE" --version
+      - name: Install Rust toolchain
+        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component clippy --component rustfmt
       - name: Run format
-        env:
-          RUSTFLAGS: -Dwarnings
-          RUST_BACKTRACE: "1"
-          LOG_LEVEL: INFO
-          EXTRA_CARGO_ARGS: --no-run
-        working-directory: ./
-        run: |
-          cargo fmt --check
+        run: cargo fmt -- --check
       - name: Run clippy
-        env:
-          RUSTFLAGS: -Dwarnings
-          RUST_BACKTRACE: "1"
-          LOG_LEVEL: INFO
-          EXTRA_CARGO_ARGS: --no-run
-        working-directory: ./
-        run: |
-          cargo clippy
+        run: cargo clippy --locked --all-targets --all-features -- -D clippy::all
       - name: Run check
+        run: cargo check --locked --all-targets --all-features
+      - name: Run Rust test targets
+        run: cargo test --locked --all-targets --all-features
+      - name: Build Tidis
+        run: cargo build --locked --bin tidis-server
+      - name: Download pinned backend
         env:
-          RUSTFLAGS: -Dwarnings
-          RUST_BACKTRACE: "1"
-          LOG_LEVEL: INFO
-          EXTRA_CARGO_ARGS: --no-run
-        working-directory: ./
+          TIKV_VERSION: ${{ matrix.tikv }}
         run: |
-          cargo check
-      - name: Setup tikv instance
+          mkdir -p "$RUNNER_TEMP/tidis-backend"
+          cd "$RUNNER_TEMP/tidis-backend"
+          for component in pd tikv; do
+            curl --fail --location --retry 2 --connect-timeout 10 --max-time 180 \
+              "https://tiup-mirrors.pingcap.com/${component}-v${TIKV_VERSION}-linux-amd64.tar.gz" \
+              --output "${component}-v${TIKV_VERSION}-linux-amd64.tar.gz"
+          done
+          sha256sum --check "$GITHUB_WORKSPACE/.github/ci/backend.sha256"
+          tar -xzf "pd-v${TIKV_VERSION}-linux-amd64.tar.gz"
+          tar -xzf "tikv-v${TIKV_VERSION}-linux-amd64.tar.gz"
+      - name: Run E2E with bounded service readiness
+        env:
+          TIKV_API_VERSION: ${{ matrix.api }}
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://tiup-mirrors.pingcap.com/install.sh | sh
-          /home/runner/.tiup/bin/tiup playground nightly --mode tikv-slim --without-monitor &
-      - name: Setup tidis
-        run: |
-          cargo build
-          ./target/debug/tidis-server --config="config.toml" &
-      - name: Setup test tool env
-        uses: actions/setup-python@v3
+          python .github/ci/run_e2e.py \
+            --bin-dir "$RUNNER_TEMP/tidis-backend" \
+            --work-dir "$RUNNER_TEMP/tidis-e2e"
+      - name: Upload service and test logs
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          python-version: '3.x'
-          cache: 'pip'
-      - name: Setup test tool dependency
-        working-directory: test
-        run: pip install -r requirements.txt
-      - name: Run E2E test
-        working-directory: test
-        run: python test_helper.py --port 6666
+          name: e2e-tikv-${{ matrix.tikv }}-api-${{ matrix.api }}
+          path: ${{ runner.temp }}/tidis-e2e/*.log
+          if-no-files-found: ignore
+          retention-days: 7

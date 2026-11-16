@@ -104,7 +104,9 @@ def main():
             store["store"]["state_name"] == "Up"
             for store in http_json(f"{pd_url}/pd/api/v1/stores").get("stores", [])
         ))
-        tidis_config = (ROOT / "config.toml").read_text()
+        tidis_config = (ROOT / "config.toml").read_text().replace(
+            "[server]", "[server]\nmeta_key_number = 1", 1
+        )
         for key, value in {
             "listen": "127.0.0.1", "port": tidis_port,
             "prometheus_listen": "127.0.0.1", "prometheus_port": metrics_port,

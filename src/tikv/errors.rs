@@ -64,6 +64,8 @@ pub const REDIS_NO_SUCH_KEY_ERR: RTError = RTError::String("ERR no such key");
 pub const REDIS_INDEX_OUT_OF_RANGE_ERR: RTError = RTError::String("ERR index out of range");
 pub const REDIS_VALUE_IS_NOT_INTEGER_ERR: RTError =
     RTError::String("ERR value is not an integer or out of range");
+pub const REDIS_INCREMENT_OVERFLOW_ERR: RTError =
+    RTError::String("ERR increment or decrement would overflow");
 pub const REDIS_VALUE_IS_NOT_VALID_FLOAT_ERR: RTError =
     RTError::String("ERR value is not a valid float");
 pub const REDIS_BACKEND_NOT_CONNECTED_ERR: RTError = RTError::String("ERR backend not connected");

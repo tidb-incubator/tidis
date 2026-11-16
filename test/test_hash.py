@@ -1,6 +1,8 @@
 import time
 import unittest
 
+from redis.exceptions import ResponseError
+
 from rediswrap import RedisWrapper
 from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs, CmdType, trigger_async_del_size
 
@@ -103,6 +105,45 @@ class HashTest(unittest.TestCase):
         self.assertEqual(self.r.hincrby(self.k1, self.f1), 1)
         self.assertEqual(self.r.hincrby(self.k1, self.f1, 9), 10)
         self.assertEqual(self.r.hincrby(self.k1, self.f1, -15), -5)
+
+    def test_hincrby_boundaries(self):
+        lo, hi = -(2 ** 63), 2 ** 63 - 1
+        for initial, step, expected in [
+            (hi, 1, None), (lo, -1, None),
+            (1, hi, None), (-1, lo, None), ("invalid", 1, None),
+            (hi - 1, 1, hi), (lo + 1, -1, lo), (lo, hi, -1),
+        ]:
+            with self.subTest(initial=initial, step=step):
+                self.r.hset(self.k1, self.f1, initial)
+                self.r.pexpire(self.k1, 60000)
+                before = self.r.pttl(self.k1)
+                if expected is None:
+                    with self.assertRaises(ResponseError):
+                        self.r.hincrby(self.k1, self.f1, step)
+                    expected = initial
+                else:
+                    self.assertEqual(self.r.hincrby(self.k1, self.f1, step), expected)
+                self.assertEqual(self.r.hgetall(self.k1), {self.f1: str(expected)})
+                self.assertEqual(self.r.hlen(self.k1), 1)
+                self.assertTrue(0 < self.r.pttl(self.k1) <= before)
+
+    def test_hincrby_cardinality_and_expiry(self):
+        self.r.hset(self.k1, self.f1, 1)
+        self.r.pexpire(self.k1, 60000)
+        before = self.r.pttl(self.k1)
+        self.assertEqual(self.r.hincrby(self.k1, self.f2, 2), 2)
+        # The CI fixture uses one sub-meta bucket to make collisions deterministic.
+        self.assertEqual(self.r.hlen(self.k1), 2)
+        self.assertEqual(self.r.hincrby(self.k1, self.f2, 3), 5)
+        self.assertEqual(self.r.hlen(self.k1), 2)
+        self.assertEqual(self.r.hgetall(self.k1), {self.f1: "1", self.f2: "5"})
+        self.assertTrue(0 < self.r.pttl(self.k1) <= before)
+        self.r.pexpire(self.k1, 1)
+        time.sleep(0.01)
+        self.assertEqual(self.r.hincrby(self.k1, self.f2, 7), 7)
+        self.assertEqual(self.r.hgetall(self.k1), {self.f2: "7"})
+        self.assertEqual(self.r.hlen(self.k1), 1)
+        self.assertEqual(self.r.pttl(self.k1), -1)
 
     def test_del(self):
         self.assertTrue(self.r.hmset(self.k1, {self.f1: self.v1, self.f2: self.v2, self.f3: self.v3}))

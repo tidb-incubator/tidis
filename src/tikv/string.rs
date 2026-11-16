@@ -467,7 +467,9 @@ impl StringCommandCtx {
                 }
             }
 
-            new_int = prev_int + step;
+            new_int = prev_int
+                .checked_add(step)
+                .ok_or(REDIS_INCREMENT_OVERFLOW_ERR)?;
             let new_val = new_int.to_string();
             let (_, ret) = client
                 .compare_and_swap(ekey.clone(), prev, new_val.into())
@@ -497,10 +499,14 @@ impl StringCommandCtx {
                         self.txn = Some(txn_rc.clone())
                     }
                     let prev_int;
+                    let mut ttl = 0;
                     let mut txn = txn_rc.lock().await;
                     match txn.get(ekey.clone()).await? {
                         Some(val) => {
-                            let ttl = KeyDecoder::decode_key_ttl(&val);
+                            if !matches!(KeyDecoder::decode_key_type(&val), DataType::String) {
+                                return Err(REDIS_WRONG_TYPE_ERR);
+                            }
+                            ttl = KeyDecoder::decode_key_ttl(&val);
                             if key_is_expired(ttl) {
                                 drop(txn);
                                 self.clone()
@@ -508,6 +514,7 @@ impl StringCommandCtx {
                                     .await?;
                                 txn = txn_rc.lock().await;
                                 prev_int = 0;
+                                ttl = 0;
                             } else {
                                 let real_value = KeyDecoder::decode_key_string_slice(&val);
                                 prev_int = str::from_utf8(real_value)
@@ -520,10 +527,12 @@ impl StringCommandCtx {
                         }
                     }
 
-                    let new_int = prev_int + step;
+                    let new_int = prev_int
+                        .checked_add(step)
+                        .ok_or(REDIS_INCREMENT_OVERFLOW_ERR)?;
                     let new_val = new_int.to_string();
-                    let eval =
-                        KEY_ENCODER.encode_txnkv_string_value(&mut new_val.as_bytes().to_vec(), 0);
+                    let eval = KEY_ENCODER
+                        .encode_txnkv_string_value(&mut new_val.as_bytes().to_vec(), ttl);
                     txn.put(ekey, eval).await?;
                     Ok(new_int)
                 }

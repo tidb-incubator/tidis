@@ -670,7 +670,7 @@ impl<'a> HashCommandCtx {
     }
 
     pub async fn do_async_txnkv_hincrby(
-        self,
+        mut self,
         key: &str,
         field: &str,
         step: i64,
@@ -684,6 +684,9 @@ impl<'a> HashCommandCtx {
         let resp = client
             .exec_in_txn(self.txn.clone(), |txn_rc| {
                 async move {
+                    if self.txn.is_none() {
+                        self.txn = Some(txn_rc.clone());
+                    }
                     let prev_int;
                     let data_key;
                     let mut txn = txn_rc.lock().await;
@@ -696,12 +699,15 @@ impl<'a> HashCommandCtx {
 
                             let mut expired = false;
 
-                            let (ttl, mut version, _meta_size) =
+                            let (mut ttl, mut version, _meta_size) =
                                 KeyDecoder::decode_key_meta(&meta_value);
                             if key_is_expired(ttl) {
                                 drop(txn);
-                                self.do_async_txnkv_hash_expire_if_needed(&key).await?;
+                                self.clone()
+                                    .do_async_txnkv_hash_expire_if_needed(&key)
+                                    .await?;
                                 expired = true;
+                                ttl = 0;
                                 version = get_version_for_new(&key, txn_rc.clone()).await?;
                                 // regain txn mutexguard
                                 txn = txn_rc.lock().await;
@@ -732,7 +738,9 @@ impl<'a> HashCommandCtx {
                                     let sub_size =
                                         txn.get(sub_meta_key.clone()).await?.map_or_else(
                                             || 1,
-                                            |value| i64::from_be_bytes(value.try_into().unwrap()),
+                                            |value| {
+                                                i64::from_be_bytes(value.try_into().unwrap()) + 1
+                                            },
                                         );
 
                                     // add or update sub meta key
@@ -770,7 +778,9 @@ impl<'a> HashCommandCtx {
                                 KEY_ENCODER.encode_txnkv_hash_data_key(&key, &field, version);
                         }
                     }
-                    let new_int = prev_int + step;
+                    let new_int = prev_int
+                        .checked_add(step)
+                        .ok_or(REDIS_INCREMENT_OVERFLOW_ERR)?;
                     // update data key
                     txn.put(data_key, new_int.to_string().as_bytes().to_vec())
                         .await?;

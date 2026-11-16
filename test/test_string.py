@@ -1,6 +1,8 @@
 import time
 import unittest
 
+from redis.exceptions import ResponseError
+
 from rediswrap import RedisWrapper
 from test_util import sec_ts_after_five_secs, msec_ts_after_five_secs, NOT_EXISTS_LITERAL, CmdType, \
     trigger_async_del_size, random_string
@@ -150,6 +152,67 @@ class StringTest(unittest.TestCase):
             self.assertEqual(self.r.decrby(self.k2, 1), 1)
         err = cm.exception
         self.assertEqual(str(err), 'value is not an integer or out of range')
+
+    def test_numeric_boundaries(self):
+        lo, hi = -(2 ** 63), 2 ** 63 - 1
+        for initial, command, args, expected in [
+            (hi, "INCR", (), None), (lo, "DECR", (), None),
+            (1, "INCRBY", (hi,), None), (-1, "INCRBY", (lo,), None),
+            (-2, "DECRBY", (hi,), None),
+            (hi - 1, "INCR", (), hi), (lo + 1, "DECR", (), lo),
+            (0, "INCRBY", (lo,), lo), (lo, "INCRBY", (hi,), -1),
+            (hi, "DECRBY", (hi,), 0),
+        ]:
+            with self.subTest(initial=initial, command=command, args=args):
+                self.r.set(self.k1, initial)
+                if expected is None:
+                    with self.assertRaisesRegex(ResponseError, "overflow"):
+                        self.r.execute_command(command, self.k1, *args)
+                    expected = initial
+                else:
+                    self.assertEqual(self.r.execute_command(command, self.k1, *args), expected)
+                self.assertEqual(self.r.get(self.k1), str(expected))
+        for value in ["invalid", str(hi + 1), str(lo - 1)]:
+            self.r.set(self.k1, value)
+            with self.assertRaises(ResponseError):
+                self.r.incr(self.k1)
+            self.assertEqual(self.r.get(self.k1), value)
+
+    def test_numeric_ttl_and_errors(self):
+        self.r.set(self.k1, 1, px=60000)
+        for command, args in [("INCR", ()), ("DECR", ()),
+                              ("INCRBY", (2,)), ("DECRBY", (2,))]:
+            before = self.r.pttl(self.k1)
+            self.r.execute_command(command, self.k1, *args)
+            self.assertTrue(0 < self.r.pttl(self.k1) <= before)
+        for value in [str(2 ** 63 - 1), "not-an-integer"]:
+            self.r.set(self.k1, value, px=60000)
+            before = self.r.pttl(self.k1)
+            with self.assertRaises(ResponseError):
+                self.r.incr(self.k1)
+            self.assertEqual(self.r.get(self.k1), value)
+            self.assertTrue(0 < self.r.pttl(self.k1) <= before)
+        self.r.pexpire(self.k1, 1)
+        time.sleep(0.01)
+        self.assertEqual(self.r.incr(self.k1), 1)
+        self.assertEqual(self.r.pttl(self.k1), -1)
+
+    def test_numeric_wrongtype(self):
+        for command, args, datatype in [
+            ("HSET", ("f", "1"), "hash"), ("LPUSH", ("1",), "list"),
+            ("SADD", ("1",), "set"), ("ZADD", (1, "m"), "zset"),
+        ]:
+            with self.subTest(command=command):
+                self.r.delete(self.k1)
+                self.r.execute_command(command, self.k1, *args)
+                self.r.pexpire(self.k1, 60000)
+                before = self.r.pttl(self.k1)
+                for numeric, step in [("INCR", ()), ("DECR", ()),
+                                      ("INCRBY", (2,)), ("DECRBY", (2,))]:
+                    with self.assertRaisesRegex(ResponseError, "WRONGTYPE"):
+                        self.r.execute_command(numeric, self.k1, *step)
+                self.assertTrue(0 < self.r.pttl(self.k1) <= before)
+                self.assertEqual(self.r.type(self.k1), datatype)
 
     def test_strlen(self):
         self.assertEqual(self.r.strlen(self.k1), 0)

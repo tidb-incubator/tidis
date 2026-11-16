@@ -1,0 +1,2 @@
+# CMake 4 removes compatibility needed by the locked grpcio-sys build.
+cmake==3.31.6

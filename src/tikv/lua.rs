@@ -84,7 +84,14 @@ impl<'a> LuaCommandCtx<'a> {
                     }
                 }
 
-                let cmd = Command::from_argv(&cmd_name, &argv).unwrap();
+                let cmd = match Command::from_argv(&cmd_name, &argv) {
+                    Ok(cmd) => cmd,
+                    Err(err) => {
+                        let table = _lua.create_table()?;
+                        table.raw_set("err", err.to_string())?;
+                        return Ok(LuaValue::Table(table));
+                    }
+                };
                 let txn_rc1 = txn_rc.clone().unwrap();
                 let txn = txn_rc1.lock().await;
                 let txn_ts = txn.start_timestamp();

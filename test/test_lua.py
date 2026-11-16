@@ -84,6 +84,77 @@ class LuaTest(unittest.TestCase):
         '''
         self.assertEqual(self.run_script(script, 1, self.k1), ['table', 'OK'])
 
+    def test_invalid_set_expiration(self):
+        options = []
+        for flag in ('EX', 'PX'):
+            options.append((flag,))
+            for value in ('', 'NaN', '1.5', '-1', '0', str(2**63), str(2**64)):
+                options.append((flag, value))
+        options.extend([
+            ('EX', str((2**63 - 1) // 1000 + 1)),
+            ('NX', 'EX'),
+            ('PX', '5000', 'EX'),
+        ])
+        # Use a checked-out connection directly so a reconnect cannot hide a panic.
+        conn = self.r.connection_pool.get_connection('SET')
+        try:
+            def execute(*args):
+                conn.send_command(*args)
+                return conn.read_response()
+
+            sock = conn._sock
+            for entry in ('network', 'call', 'pcall'):
+                for option in options:
+                    for original in (None, self.v1):
+                        with self.subTest(entry=entry, option=option, original=original):
+                            execute('DEL', self.k1)
+                            if original is not None:
+                                execute('SET', self.k1, original, 'PX', '60000')
+                            command = ('SET', self.k1, self.v2, *option)
+                            if entry != 'network':
+                                script = "return redis.%s('SET', KEYS[1], unpack(ARGV))" % entry
+                                command = ('EVAL', script, 1, self.k1, self.v2, *option)
+                            with self.assertRaisesRegex(redis.ResponseError, '^Invalid arguments$'):
+                                execute(*command)
+                            self.assertEqual(execute('PING'), 'PONG')
+                            self.assertIs(conn._sock, sock)
+                            self.assertEqual(execute('GET', self.k1), original)
+                            ttl = execute('PTTL', self.k1)
+                            if original is None:
+                                self.assertEqual(ttl, -2)
+                            else:
+                                self.assertTrue(0 < ttl <= 60000)
+        finally:
+            self.r.connection_pool.release(conn)
+
+    def test_valid_set_options(self):
+        for entry in ('network', 'call', 'pcall'):
+            for option, ttl in [
+                ((), None), (('NX',), None), (('ex', '5'), 5000),
+                (('px', '5000'), 5000),
+                (('EX', str((2**63 - 1) // 1000)), ((2**63 - 1) // 1000) * 1000),
+                (('PX', str(2**63 - 1)), 2**63 - 1),
+            ]:
+                with self.subTest(entry=entry, option=option):
+                    self.r.delete(self.k1)
+                    if entry == 'network':
+                        self.assertTrue(self.r.execute_command('SET', self.k1, self.v1, *option))
+                    else:
+                        script = "return redis.%s('SET', KEYS[1], unpack(ARGV))" % entry
+                        self.assertEqual(self.run_script(script, 1, self.k1, self.v1, *option), 'OK')
+                    self.assertEqual(self.r.get(self.k1), self.v1)
+                    pttl = self.r.pttl(self.k1)
+                    if ttl is None:
+                        self.assertEqual(pttl, -1)
+                    else:
+                        self.assertTrue(0 < pttl <= ttl)
+                    if option == ('NX',):
+                        if entry == 'network':
+                            self.assertIsNone(self.r.execute_command('SET', self.k1, self.v2, 'NX'))
+                        else:
+                            self.assertIsNone(self.run_script(script, 1, self.k1, self.v2, 'NX'))
+                        self.assertEqual(self.r.get(self.k1), self.v1)
+
     def test_error_conversion(self):
         script = '''
         redis.call('set', KEYS[1], 'a')

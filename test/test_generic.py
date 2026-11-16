@@ -108,6 +108,71 @@ class GenericTest(unittest.TestCase):
             keys.append('zset:' + str(i))
         self.r.delete(*keys)
 
+    def test_scan_invalid_arguments(self):
+        self.r.set(self.k1, 'unchanged')
+        invalid = [
+            (), ('', 'COUNT'), ('', 'MATCH'), ('', 'UNKNOWN'),
+            ('', 'UNKNOWN', 'value'), ('', 'COUNT', '-1'),
+            ('', 'COUNT', '0'), ('', 'COUNT', '4294967296'),
+            ('', 'COUNT', '9223372036854775808'), ('', 'COUNT', ''),
+            ('', 'COUNT', 'abc'), ('', 'COUNT', '1.5'),
+            ('', b'\xff', 'value'),
+            ('', 'COUNT', '1', 'MATCH'), ('', 'MATCH', '.*', 'COUNT'),
+            ('', 'MATCH', '.*', 'UNKNOWN', 'value'),
+            ('', 'COUNT', '-1', 'COUNT', '1'),
+            ('', 'MATCH', '['), ('', 'COUNT', '1', 'MATCH', '['),
+        ]
+        conn = self.r.connection_pool.get_connection('SCAN')
+        try:
+            conn.connect()
+            sock = conn._sock
+            for command in ('SCAN', 'XSCAN'):
+                for mode in ('tcp', 'call', 'pcall'):
+                    for args in invalid:
+                        with self.subTest(command=command, mode=mode, args=args):
+                            if mode == 'tcp':
+                                conn.send_command(command, *args)
+                            else:
+                                script = 'return redis.{}(unpack(ARGV))'.format(mode)
+                                conn.send_command('EVAL', script, 0, command, *args)
+                            with self.assertRaises(exceptions.ResponseError) as error:
+                                conn.read_response()
+                            expected = ('invalid regular expression' if args and args[-1] == '['
+                                        else 'Invalid arguments')
+                            self.assertEqual(str(error.exception), expected)
+                            self.assertIs(conn._sock, sock)
+                            conn.send_command('PING')
+                            self.assertEqual(conn.read_response(), 'PONG')
+                            self.assertIs(conn._sock, sock)
+                            conn.send_command('GET', self.k1)
+                            self.assertEqual(conn.read_response(), 'unchanged')
+        finally:
+            self.r.connection_pool.release(conn)
+
+    def test_scan_option_boundaries(self):
+        self.r.set(self.k1, 'unchanged')
+        options = [
+            (), ('cOuNt', '1'), ('COUNT', '4294967295'),
+            ('MATCH', '^__key1__$', 'COUNT', '10'),
+            ('COUNT', '10', 'MATCH', '^__key1__$'),
+        ]
+        # SCAN's cursor is a key string; bypass redis-py's integer conversion.
+        conn = self.r.connection_pool.get_connection('SCAN')
+        try:
+            for command in ('SCAN', 'XSCAN'):
+                for args in options:
+                    expected = [self.k1 if args == ('cOuNt', '1') else '', [self.k1]]
+                    for mode in ('tcp', 'call', 'pcall'):
+                        with self.subTest(command=command, mode=mode, args=args):
+                            if mode == 'tcp':
+                                conn.send_command(command, '', *args)
+                            else:
+                                script = 'return redis.{}(unpack(ARGV))'.format(mode)
+                                conn.send_command('EVAL', script, 0, command, '', *args)
+                            self.assertEqual(conn.read_response(), expected)
+        finally:
+            self.r.connection_pool.release(conn)
+
     def tearDown(self):
         pass
 

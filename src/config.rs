@@ -4,6 +4,7 @@ use crate::{DEFAULT_PORT, DEFAULT_TLS_PORT};
 
 use slog::{self, Drain};
 use slog_term;
+use std::fmt;
 use std::fs::OpenOptions;
 
 lazy_static! {
@@ -24,12 +25,24 @@ lazy_static! {
     );
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Deserialize, Clone)]
 pub struct Config {
     server: Server,
     backend: Backend,
 }
-#[derive(Debug, Deserialize, Clone)]
+
+impl fmt::Debug for Config {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Only include explicitly safe fields, even if new secrets are added.
+        f.debug_struct("Config")
+            .field("listen", &self.server.listen)
+            .field("port", &self.server.port)
+            .field("authentication_enabled", &self.server.password.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Deserialize, Clone)]
 struct Server {
     listen: Option<String>,
     port: Option<u16>,

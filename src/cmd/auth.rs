@@ -1,10 +1,20 @@
 use crate::cmd::Invalid;
 use crate::Parse;
+use std::fmt;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Auth {
     passwd: String,
     valid: bool,
+}
+
+impl fmt::Debug for Auth {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Auth")
+            .field("passwd", &"[REDACTED]")
+            .field("valid", &self.valid)
+            .finish()
+    }
 }
 
 impl Auth {

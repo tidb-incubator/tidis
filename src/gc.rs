@@ -1,4 +1,5 @@
-use futures::{FutureExt, StreamExt};
+use crate::tikv::scan;
+use futures::FutureExt;
 use slog::{debug, error, info};
 use std::collections::HashSet;
 use std::convert::TryInto;
@@ -21,6 +22,10 @@ use crate::{
 };
 
 const CRC16: Crc<u16> = Crc::<u16>::new(&CRC_16_XMODEM);
+
+#[cfg(test)]
+#[path = "gc_tests.rs"]
+mod tests;
 
 #[derive(Debug, Clone)]
 pub struct GcTask {
@@ -107,7 +112,7 @@ impl GcMaster {
             let bound_range = KEY_ENCODER.encode_txnkv_gc_version_key_range();
 
             // TODO scan speed throttling
-            let iter_res = txn.scan_stream(bound_range, u32::MAX).await;
+            let iter_res = scan::scan(&mut txn, bound_range, u32::MAX).await;
             if iter_res.is_err() {
                 error!(
                     LOGGER,
@@ -119,8 +124,8 @@ impl GcMaster {
                 continue;
             }
 
-            let mut iter = iter_res.unwrap();
-            while let Some(kv) = iter.next().await {
+            let iter = iter_res.unwrap();
+            for kv in iter {
                 let (user_key, version) = KeyDecoder::decode_key_gc_userkey_version(kv.0);
 
                 let (slot_range_left, slot_range_right) = self.topo.myself_owned_slots();
@@ -248,8 +253,8 @@ impl GcWorker {
                             // delete all data key of this key and version
                             let bound_range =
                                 KEY_ENCODER.encode_txnkv_hash_data_key_range(&user_key, version);
-                            let mut iter = txn.scan_keys_stream(bound_range, u32::MAX).await?;
-                            while let Some(k) = iter.next().await {
+                            let iter = scan::scan_keys(&mut txn, bound_range, u32::MAX).await?;
+                            for k in iter {
                                 txn.delete(k).await?;
                             }
                         }
@@ -261,8 +266,8 @@ impl GcWorker {
                             // delete all data key of this key and version
                             let bound_range =
                                 KEY_ENCODER.encode_txnkv_list_data_key_range(&user_key, version);
-                            let mut iter = txn.scan_keys_stream(bound_range, u32::MAX).await?;
-                            while let Some(k) = iter.next().await {
+                            let iter = scan::scan_keys(&mut txn, bound_range, u32::MAX).await?;
+                            for k in iter {
                                 txn.delete(k).await?;
                             }
                         }
@@ -281,8 +286,8 @@ impl GcWorker {
                             // delete all data key of this key and version
                             let bound_range =
                                 KEY_ENCODER.encode_txnkv_set_data_key_range(&user_key, version);
-                            let mut iter = txn.scan_keys_stream(bound_range, u32::MAX).await?;
-                            while let Some(k) = iter.next().await {
+                            let iter = scan::scan_keys(&mut txn, bound_range, u32::MAX).await?;
+                            for k in iter {
                                 txn.delete(k).await?;
                             }
                         }
@@ -304,16 +309,16 @@ impl GcWorker {
                                 &String::from_utf8_lossy(&task.user_key),
                                 task.version,
                             );
-                            let mut iter = txn.scan_keys_stream(bound_range, u32::MAX).await?;
-                            while let Some(k) = iter.next().await {
+                            let iter = scan::scan_keys(&mut txn, bound_range, u32::MAX).await?;
+                            for k in iter {
                                 txn.delete(k).await?;
                             }
 
                             // delete all data key of this key and version
                             let bound_range =
                                 KEY_ENCODER.encode_txnkv_zset_data_key_range(&user_key, version);
-                            let mut iter = txn.scan_keys_stream(bound_range, u32::MAX).await?;
-                            while let Some(k) = iter.next().await {
+                            let iter = scan::scan_keys(&mut txn, bound_range, u32::MAX).await?;
+                            for k in iter {
                                 txn.delete(k).await?;
                             }
                         }

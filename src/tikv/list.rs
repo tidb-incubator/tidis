@@ -10,13 +10,12 @@ use crate::async_del_list_threshold_or_default;
 use crate::cmd_linsert_length_limit_or_default;
 use crate::cmd_lrem_length_limit_or_default;
 use crate::metrics::REMOVED_EXPIRED_KEY_COUNTER;
+use crate::tikv::scan;
 use crate::utils::{resp_array, resp_bulk, resp_err, resp_int, resp_nil, resp_ok};
 use crate::{utils::key_is_expired, Frame};
 use bytes::Bytes;
 use core::ops::RangeFrom;
-use futures::future;
 use futures::future::FutureExt;
-use futures::StreamExt;
 use std::convert::TryInto;
 use std::sync::Arc;
 use tikv_client::{BoundRange, Key, Transaction};
@@ -656,17 +655,12 @@ impl<'a> ListCommandCtx {
                             let bound_range =
                                 KEY_ENCODER.encode_txnkv_list_data_key_range(&key, version);
 
-                            // iter will only return the matched kvpair
-                            let mut iter =
-                                txn.scan_stream(bound_range, u32::MAX).await?.filter(|kv| {
-                                    if kv.1 == pivot.to_vec() {
-                                        return future::ready(true);
-                                    }
-                                    future::ready(false)
-                                });
+                            let pivot = scan::find(&mut txn, bound_range, |kv| {
+                                kv.1.as_slice() == pivot.as_ref()
+                            })
+                            .await?;
 
-                            // yeild the first matched kvpair
-                            if let Some(kv) = iter.next().await {
+                            if let Some(kv) = pivot {
                                 // decode the idx from data key
                                 let idx = KeyDecoder::decode_key_list_idx_from_datakey(&key, kv.0);
 
@@ -683,10 +677,10 @@ impl<'a> ListCommandCtx {
                                             .encode_txnkv_list_data_key_idx_range(
                                                 &key, left, idx_op, version,
                                             );
-                                        let mut iter =
-                                            txn.scan_stream(left_range, u32::MAX).await?;
+                                        let iter =
+                                            scan::scan(&mut txn, left_range, u32::MAX).await?;
 
-                                        while let Some(kv) = iter.next().await {
+                                        for kv in iter {
                                             let key_idx =
                                                 KeyDecoder::decode_key_list_idx_from_datakey(
                                                     &key, kv.0,
@@ -715,10 +709,10 @@ impl<'a> ListCommandCtx {
                                                 right - 1,
                                                 version,
                                             );
-                                        let mut iter =
-                                            txn.scan_stream(right_range, u32::MAX).await?;
+                                        let iter =
+                                            scan::scan(&mut txn, right_range, u32::MAX).await?;
 
-                                        while let Some(kv) = iter.next().await {
+                                        for kv in iter {
                                             let key_idx =
                                                 KeyDecoder::decode_key_list_idx_from_datakey(
                                                     &key, kv.0,
@@ -818,21 +812,14 @@ impl<'a> ListCommandCtx {
                                 KEY_ENCODER.encode_txnkv_list_data_key_range(&key, version);
 
                             // iter will only return the matched kvpair
-                            let iter = txn
-                                .scan_stream(bound_range.clone(), u32::MAX)
+                            let iter = scan::scan(&mut txn, bound_range.clone(), u32::MAX)
                                 .await?
-                                .filter(|kv| {
-                                    if kv.1 == ele.to_vec() {
-                                        return future::ready(true);
-                                    }
-                                    future::ready(false)
-                                });
+                                .filter(|kv| kv.1.as_slice() == ele.as_ref());
 
                             // hole saves the elements to be removed in order
                             let mut hole: Vec<u64> = iter
                                 .map(|kv| KeyDecoder::decode_key_list_idx_from_datakey(&key, kv.0))
-                                .collect()
-                                .await;
+                                .collect();
 
                             // no matched element, return 0
                             if hole.is_empty() {
@@ -846,9 +833,9 @@ impl<'a> ListCommandCtx {
                             let mut removed_count = 0;
 
                             if from_head {
-                                let mut iter = txn.scan_stream(bound_range, u32::MAX).await?;
+                                let iter = scan::scan(&mut txn, bound_range, u32::MAX).await?;
 
-                                while let Some(kv) = iter.next().await {
+                                for kv in iter {
                                     let key_idx = KeyDecoder::decode_key_list_idx_from_datakey(
                                         &key,
                                         kv.0.clone(),
@@ -891,10 +878,10 @@ impl<'a> ListCommandCtx {
                                     txn.put(meta_key, new_meta_value).await?;
                                 }
                             } else {
-                                let mut iter =
-                                    txn.scan_reverse_stream(bound_range, u32::MAX).await?;
+                                let iter =
+                                    scan::scan_reverse(&mut txn, bound_range, u32::MAX).await?;
 
-                                while let Some(kv) = iter.next().await {
+                                for kv in iter {
                                     let key_idx = KeyDecoder::decode_key_list_idx_from_datakey(
                                         &key,
                                         kv.0.clone(),
@@ -991,9 +978,9 @@ impl<'a> ListCommandCtx {
                             } else {
                                 let bound_range =
                                     KEY_ENCODER.encode_txnkv_list_data_key_range(&key, version);
-                                let mut iter = txn.scan_keys_stream(bound_range, u32::MAX).await?;
+                                let iter = scan::scan_keys(&mut txn, bound_range, u32::MAX).await?;
 
-                                while let Some(k) = iter.next().await {
+                                for k in iter {
                                     txn.delete(k).await?;
                                 }
                                 txn.delete(meta_key).await?;
@@ -1047,9 +1034,9 @@ impl<'a> ListCommandCtx {
                             } else {
                                 let bound_range =
                                     KEY_ENCODER.encode_txnkv_list_data_key_range(&key, version);
-                                let mut iter = txn.scan_keys_stream(bound_range, u32::MAX).await?;
+                                let iter = scan::scan_keys(&mut txn, bound_range, u32::MAX).await?;
 
-                                while let Some(v) = iter.next().await {
+                                for v in iter {
                                     txn.delete(v).await?;
                                 }
                                 txn.delete(meta_key).await?;

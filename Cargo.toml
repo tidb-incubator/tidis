@@ -41,6 +41,8 @@ regex = "1"
 toml = { version = "0.5.8" }
 serde = { version = "1.0", features = ["derive"] }
 futures = { version = "0.3", default-features = false }
+grpcio = { version = "0.10", default-features = false, features = ["prost-codec", "openssl-vendored"] }
+tikv-client-pd = { git = "https://github.com/yongman/client-rust.git", branch = "dev-scanner" }
 mlua = { version = "0.7.4", features = ["lua51", "async", "vendored", "macros", "send"]}
 sha1 = "0.10.0"
 hex = "0.4.3"

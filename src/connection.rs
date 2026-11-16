@@ -1,4 +1,4 @@
-use crate::frame::{self, Frame};
+use crate::frame::{self, Frame, MAX_FRAME_BYTES};
 use crate::metrics::{DATA_TRAFFIC_IN, DATA_TRAFFIC_OUT};
 
 use async_std::io::{BufReader, BufWriter, WriteExt};
@@ -142,8 +142,12 @@ impl Connection {
             //
             // On success, the number of bytes is returned. `0` indicates "end
             // of stream".
-            let mut buf = vec![0; 1024];
-            let len = self.read(&mut buf).await?;
+            if self.buffer.len() >= MAX_FRAME_BYTES {
+                return Err("protocol error; frame byte limit exceeded".into());
+            }
+            let mut buf = [0; 1024];
+            let available = buf.len().min(MAX_FRAME_BYTES - self.buffer.len());
+            let len = self.read(&mut buf[..available]).await?;
             if 0 == len {
                 // The remote closed the connection. For this to be a clean
                 // shutdown, there should be no data in the read buffer. If
@@ -340,3 +344,7 @@ impl Connection {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "connection_tests.rs"]
+mod tests;

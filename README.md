@@ -48,6 +48,16 @@ Of course we are not the only ones who have similar ideas. Both `Titan` and `Tid
 
 ## Running
 
+Inbound RESP frames have fixed limits on both TCP and TLS, including before
+`AUTH`: 16 MiB of encoded bytes per frame, 8 MiB per bulk string, 65,536 total
+declared array elements across a frame (including nested arrays), and 32 nested
+array levels. These limits are defined in `src/frame.rs` and are not configurable
+at runtime. Pipelined frames each receive their own budget. Malformed or
+over-limit input closes the offending connection; other clients remain usable.
+RESP integers accept an optional sign followed by decimal digits in the signed
+64-bit range. Lengths accept decimal digits or exactly `-1` for null, and all
+line and bulk terminators must be CRLF.
+
 - Start `PD`, `TiKV` and one `TiDB` (for trigger GC) using `TiUP`, you can follow the official instructions [English](https://docs.pingcap.com/tidb/stable/production-deployment-using-tiup) or [中文](https://docs.pingcap.com/zh/tidb/stable/production-deployment-using-tiup).
 
 - Build the Tidis server

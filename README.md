@@ -467,7 +467,16 @@ tls_key_file = "path/server.key"
 tls_cert_file = "path/server.crt"
 tls_auth_client = false           # tls_ca_cert_file must be specified if tls_auth_client is true
 tls_ca_cert_file = "path/ca.crt"
+tls_max_concurrent_handshakes = 128 # maximum pending handshakes
+tls_handshake_timeout_ms = 10000   # deadline from socket acceptance
 ```
+
+Both handshake settings are optional and must be positive integers; the values
+above are the defaults. TLS handshakes run concurrently. When all handshake
+slots are occupied, new connections wait in the operating system's listen
+backlog until a handshake succeeds, fails, or times out. Established clients
+release their handshake slot and are registered only after TLS succeeds.
+Shutdown cancels pending handshakes and waits for their tasks to finish.
 
 - Client-side
 

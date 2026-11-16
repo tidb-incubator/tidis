@@ -7,6 +7,9 @@ tls_key_file = ""
 tls_cert_file = ""
 tls_auth_client = false
 tls_ca_cert_file = ""
+# Positive limits for pending TLS handshakes (established clients use no slot).
+tls_max_concurrent_handshakes = 128
+tls_handshake_timeout_ms = 10000
 pd_addrs = "127.0.0.1:2379"
 instance_id = "1"
 prometheus_listen = "0.0.0.0"

@@ -73,6 +73,13 @@ impl Set {
         self.expire
     }
 
+    fn expiration_millis(value: i64, multiplier: i64) -> crate::Result<i64> {
+        value
+            .checked_mul(multiplier)
+            .filter(|millis| *millis > 0)
+            .ok_or_else(|| "Invalid arguments".into())
+    }
+
     /// Parse a `Set` instance from a received frame.
     ///
     /// The `Parse` argument provides a cursor-like API to read fields from the
@@ -114,13 +121,13 @@ impl Set {
                 // An expiration is specified in seconds. The next value is an
                 // integer.
                 let secs = parse.next_int()?;
-                expire = Some(secs * 1000);
+                expire = Some(Self::expiration_millis(secs, 1000)?);
             }
             Ok(s) if s.to_uppercase() == "PX" => {
                 // An expiration is specified in milliseconds. The next value is
                 // an integer.
                 let ms = parse.next_int()?;
-                expire = Some(ms);
+                expire = Some(Self::expiration_millis(ms, 1)?);
             }
             Ok(s) if s.to_uppercase() == "NX" => {
                 // Only set if key not present
@@ -159,20 +166,16 @@ impl Set {
                 break;
             }
             let flag = String::from_utf8_lossy(&argv[idx]).to_uppercase();
-            if flag == "EX" {
+            if flag == "EX" || flag == "PX" {
                 idx += 1;
-                let secs = String::from_utf8_lossy(&argv[idx]).parse::<i64>();
-                if let Ok(v) = secs {
-                    expire = Some(v * 1000);
-                } else {
-                    return Ok(Set::new_invalid());
-                }
-            } else if flag == "PX" {
-                idx += 1;
-                let ms = String::from_utf8_lossy(&argv[idx]).parse::<i64>();
-                if let Ok(v) = ms {
-                    expire = Some(v);
-                }
+                let value = argv.get(idx).ok_or("Invalid arguments")?;
+                let value = String::from_utf8_lossy(value)
+                    .parse::<i64>()
+                    .map_err(|_| "Invalid arguments")?;
+                expire = Some(Self::expiration_millis(
+                    value,
+                    if flag == "EX" { 1000 } else { 1 },
+                )?);
             } else if flag == "NX" {
                 nx = Some(true);
             } else {

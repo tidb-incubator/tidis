@@ -855,9 +855,12 @@ impl StringCommandCtx {
         count: u32,
         regex: &str,
     ) -> AsyncResult<Frame> {
+        let re = match Regex::new(regex) {
+            Ok(re) => re,
+            Err(_) => return Ok(resp_err("ERR invalid regular expression".into())),
+        };
         let mut client = get_txn_client()?;
         let ekey = KEY_ENCODER.encode_txnkv_string(start);
-        let re = Regex::new(regex).unwrap();
 
         client
             .exec_in_txn(self.txn.clone(), |txn_rc| {

@@ -3,6 +3,7 @@ use futures::FutureExt;
 use slog::{debug, error, info};
 use std::collections::HashSet;
 use std::convert::TryInto;
+use std::future::Future;
 use std::sync::Arc;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::Mutex;
@@ -189,7 +190,7 @@ struct GcWorker {
     rx: Arc<Mutex<Receiver<GcTask>>>,
     tx: Sender<GcTask>,
 
-    // check task already in queue, avoid duplicate task
+    // Includes queued and running tasks; failures are rediscovered by the master.
     task_sets: Arc<Mutex<HashSet<Vec<u8>>>>,
 }
 
@@ -206,19 +207,23 @@ impl GcWorker {
     // queue task to channel
     pub async fn add_task(&mut self, task: GcTask) -> AsyncResult<()> {
         let bytes = task.to_bytes();
-        let mut task_sets = self.task_sets.lock().await;
-        if !task_sets.contains(&bytes) {
+        if self.task_sets.lock().await.contains(&bytes) {
+            return Ok(());
+        }
+
+        // Wait without the deduplication lock or a task reservation. A failed
+        // or cancelled enqueue then has no bookkeeping to undo.
+        let permit = self.tx.reserve().await.map_err(|e| {
+            error!(LOGGER, "[GC] send task to channel failed"; "error" => ?e);
+            RTError::Owned(e.to_string())
+        })?;
+        // Another producer may have queued this task while we waited.
+        if self.task_sets.lock().await.insert(bytes) {
             debug!(LOGGER, "[GC] add task: {:?}", task);
-            task_sets.insert(bytes);
-            if let Err(e) = self.tx.send(task).await {
-                error!(LOGGER, "[GC] send task to channel failed"; "error" => ?e);
-                return Err(RTError::Owned(e.to_string()));
-            } else {
-                GC_TASK_QUEUE_COUNTER
-                    .with_label_values(&[&self.id.to_string()])
-                    .inc();
-                return Ok(());
-            }
+            GC_TASK_QUEUE_COUNTER
+                .with_label_values(&[&self.id.to_string()])
+                .inc();
+            permit.send(task);
         }
         Ok(())
     }
@@ -226,13 +231,22 @@ impl GcWorker {
     pub async fn handle_task(&self, task: GcTask) -> AsyncResult<()> {
         let mut txn_client = get_txn_client()?;
 
-        txn_client
+        let deleted = txn_client
             .exec_in_txn(None, |txn_rc| {
                 let task = task.clone();
                 async move {
                     let mut txn = txn_rc.lock().await;
                     let user_key = String::from_utf8_lossy(&task.user_key);
                     let version = task.version;
+                    let gc_version_key =
+                        KEY_ENCODER.encode_txnkv_gc_version_key(&user_key, version);
+                    // A completed task may be dispatched again from an older
+                    // master snapshot, after this version has been reused.
+                    if txn.get(gc_version_key.clone()).await?
+                        != Some(vec![KEY_ENCODER.get_type_bytes(task.key_type.clone())])
+                    {
+                        return Ok(false);
+                    }
                     match task.key_type {
                         DataType::String => {
                             panic!("string not support async deletion");
@@ -328,15 +342,16 @@ impl GcWorker {
                     }
 
                     // delete gc version key
-                    let gc_version_key =
-                        KEY_ENCODER.encode_txnkv_gc_version_key(&user_key, version);
                     txn.delete(gc_version_key).await?;
 
-                    Ok(())
+                    Ok(true)
                 }
                 .boxed()
             })
             .await?;
+        if !deleted {
+            return Ok(());
+        }
 
         // check the gc key in a small txn, avoid transaction confliction
         txn_client
@@ -367,24 +382,32 @@ impl GcWorker {
             .await
     }
 
-    pub async fn run(self) {
-        tokio::spawn(async move {
-            info!(LOGGER, "[GC] start gc worker thread: {}", self.id);
-            while let Some(task) = self.rx.lock().await.recv().await {
-                match self.handle_task(task.clone()).await {
-                    Ok(_) => {
-                        debug!(LOGGER, "[GC] gc task done: {:?}", task);
-                        self.task_sets.lock().await.remove(&task.to_bytes());
-                        GC_TASK_QUEUE_COUNTER
-                            .with_label_values(&[&self.id.to_string()])
-                            .dec();
-                    }
-                    Err(e) => {
-                        error!(LOGGER, "[GC] handle task error: {:?}", e);
-                    }
+    async fn run_tasks<F, Fut>(&self, mut handle_task: F)
+    where
+        F: FnMut(GcTask) -> Fut,
+        Fut: Future<Output = AsyncResult<()>>,
+    {
+        info!(LOGGER, "[GC] start gc worker thread: {}", self.id);
+        while let Some(task) = self.rx.lock().await.recv().await {
+            match handle_task(task.clone()).await {
+                Ok(_) => {
+                    debug!(LOGGER, "[GC] gc task done: {:?}", task);
+                }
+                Err(e) => {
+                    error!(LOGGER, "[GC] handle task error: {:?}", e);
                 }
             }
-            info!(LOGGER, "[GC] gc worker thread exit: {}", self.id);
+            self.task_sets.lock().await.remove(&task.to_bytes());
+            GC_TASK_QUEUE_COUNTER
+                .with_label_values(&[&self.id.to_string()])
+                .dec();
+        }
+        info!(LOGGER, "[GC] gc worker thread exit: {}", self.id);
+    }
+
+    pub async fn run(self) {
+        tokio::spawn(async move {
+            self.run_tasks(|task| self.handle_task(task)).await;
         });
     }
 }

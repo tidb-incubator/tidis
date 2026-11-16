@@ -1,4 +1,5 @@
-//! Run only against a disposable PD/TiKV API-v1 cluster:
+//! Queue tests need no backend. Run the ignored scan regression only against
+//! a disposable PD/TiKV API-v1 cluster:
 //! TIDIS_TEST_PD=127.0.0.1:2379 cargo test --locked scan_failure_contract -- --ignored
 //! This test writes data and splits regions through PD's HTTP API.
 
@@ -10,6 +11,109 @@ use bytes::Bytes;
 use std::collections::BTreeMap;
 use std::ops::{Bound, RangeBounds};
 use tikv_client::{Key, KvPair, TransactionClient};
+
+#[tokio::test]
+async fn gc_queue_drains_under_backpressure() {
+    let (tx, rx) = mpsc::channel(1);
+    let worker = GcWorker::new(1001, rx, tx);
+    let mut producer = worker.clone();
+    let mut duplicate_producer = worker.clone();
+    let task = |n| GcTask::new(DataType::List, vec![n], 0);
+    producer.add_task(task(1)).await.unwrap();
+    let first = tokio::sync::Notify::new();
+    let third = tokio::sync::Notify::new();
+    let completed = std::cell::RefCell::new(Vec::new());
+    let mut run = Box::pin(worker.run_tasks(|task| {
+        let (first, third, completed) = (&first, &third, &completed);
+        async move {
+            match task.user_key[0] {
+                1 => first.notified().await,
+                3 => third.notified().await,
+                _ => {}
+            }
+            completed.borrow_mut().push(task.user_key[0]);
+            Ok(())
+        }
+    }));
+    assert!(futures::poll!(&mut run).is_pending()); // First task is running.
+    producer.add_task(task(1)).await.unwrap(); // Running duplicate.
+    producer.add_task(task(2)).await.unwrap(); // Fill the only queue slot.
+    producer.add_task(task(2)).await.unwrap(); // Queued duplicate.
+    let mut enqueue = Box::pin(producer.add_task(task(3)));
+    let mut duplicate = Box::pin(duplicate_producer.add_task(task(3)));
+    assert!(futures::poll!(&mut enqueue).is_pending());
+    assert!(futures::poll!(&mut duplicate).is_pending());
+    first.notify_one();
+    time::timeout(Duration::from_secs(1), async {
+        tokio::select! {
+            _ = &mut run => panic!("worker exited before the queue closed"),
+            results = async { tokio::join!(enqueue, duplicate) } => {
+                results.0.unwrap();
+                results.1.unwrap();
+            }
+        }
+    })
+    .await
+    .expect("full queue must not block completion bookkeeping");
+    third.notify_one();
+    assert!(futures::poll!(&mut run).is_pending());
+    assert_eq!(*completed.borrow(), vec![1, 2, 3]);
+    assert!(worker.task_sets.lock().await.is_empty());
+    assert_eq!(GC_TASK_QUEUE_COUNTER.with_label_values(&["1001"]).get(), 0);
+}
+
+#[tokio::test]
+async fn gc_failed_task_can_be_rediscovered() {
+    let (tx, rx) = mpsc::channel(1);
+    let mut worker = GcWorker::new(1002, rx, tx);
+    let consumer = worker.clone();
+    let task = GcTask::new(DataType::List, b"retry".to_vec(), 0);
+    let attempts = std::cell::Cell::new(0);
+    let mut run = Box::pin(consumer.run_tasks(|_| {
+        attempts.set(attempts.get() + 1);
+        std::future::ready(if attempts.get() == 1 {
+            Err(RTError::Owned("one-time failure".into()))
+        } else {
+            Ok(())
+        })
+    }));
+    for attempt in 1..=2 {
+        worker.add_task(task.clone()).await.unwrap();
+        assert!(futures::poll!(&mut run).is_pending());
+        assert_eq!(attempts.get(), attempt);
+        assert!(worker.task_sets.lock().await.is_empty());
+        assert_eq!(GC_TASK_QUEUE_COUNTER.with_label_values(&["1002"]).get(), 0);
+    }
+}
+
+#[tokio::test]
+async fn gc_closed_queue_and_cancelled_enqueue_leave_no_reservation() {
+    let (tx, rx) = mpsc::channel(1);
+    let mut worker = GcWorker::new(1003, rx, tx);
+    let task = GcTask::new(DataType::List, b"closed".to_vec(), 0);
+    worker.add_task(task.clone()).await.unwrap();
+    let mut producer = worker.clone();
+    let mut cancelled =
+        Box::pin(producer.add_task(GcTask::new(DataType::List, b"cancelled".to_vec(), 0)));
+    assert!(futures::poll!(&mut cancelled).is_pending());
+    drop(cancelled);
+    let mut enqueue =
+        Box::pin(producer.add_task(GcTask::new(DataType::List, b"rejected".to_vec(), 0)));
+    assert!(futures::poll!(&mut enqueue).is_pending());
+    worker.rx.lock().await.close();
+    assert!(enqueue.await.is_err());
+    assert_eq!(worker.task_sets.lock().await.len(), 1);
+    assert_eq!(GC_TASK_QUEUE_COUNTER.with_label_values(&["1003"]).get(), 1);
+    time::timeout(
+        Duration::from_secs(1),
+        worker.run_tasks(|_| std::future::ready(Ok(()))),
+    )
+    .await
+    .unwrap();
+    assert!(worker.add_task(task).await.is_err());
+    assert!(worker.task_sets.lock().await.is_empty());
+    assert_eq!(GC_TASK_QUEUE_COUNTER.with_label_values(&["1003"]).get(), 0);
+}
 
 async fn contents(client: &TransactionClient, range: tikv_client::BoundRange) -> Vec<KvPair> {
     let mut txn = client.begin_optimistic().await.unwrap();
@@ -403,11 +507,81 @@ async fn scan_failure_contract() {
             );
             txn.rollback().await.unwrap();
         }
-        worker.handle_task(task).await.unwrap();
+        // Recreate the same user key in a newer generation before retrying GC.
+        let mut txn = client.begin_optimistic().await.unwrap();
+        let recreated_key = |version| match kind {
+            DataType::Hash => (
+                KEY_ENCODER.encode_txnkv_hash_data_key(&key, "new", version),
+                KEY_ENCODER.encode_txnkv_hash_meta_value(0, version, 1),
+            ),
+            DataType::List => (
+                KEY_ENCODER.encode_txnkv_list_data_key(&key, left, version),
+                KEY_ENCODER.encode_txnkv_list_meta_value(0, version, left, left + 1),
+            ),
+            DataType::Set => (
+                KEY_ENCODER.encode_txnkv_set_data_key(&key, "new", version),
+                KEY_ENCODER.encode_txnkv_set_meta_value(0, version, 1),
+            ),
+            DataType::Zset => (
+                KEY_ENCODER.encode_txnkv_zset_data_key(&key, "new", version),
+                KEY_ENCODER.encode_txnkv_zset_meta_value(0, version, 1),
+            ),
+            _ => unreachable!(),
+        };
+        let (new_data, new_meta) = recreated_key(1);
+        let mut recreated = vec![
+            KvPair::new(new_data, b"new".to_vec()),
+            KvPair::new(KEY_ENCODER.encode_txnkv_meta_key(&key), new_meta),
+            KvPair::new(gc_key.clone(), 1u16.to_be_bytes().to_vec()),
+        ];
+        if !matches!(kind, DataType::List) {
+            recreated.push(KvPair::new(
+                KEY_ENCODER.encode_txnkv_sub_meta_key(&key, 1, 0),
+                1i64.to_be_bytes().to_vec(),
+            ));
+        }
+        if matches!(kind, DataType::Zset) {
+            recreated.push(KvPair::new(
+                KEY_ENCODER.encode_txnkv_zset_score_key(&key, 1.0, "new", 1),
+                vec![0],
+            ));
+        }
+        for row in &recreated {
+            txn.put(row.0.clone(), row.1.clone()).await.unwrap();
+        }
+        txn.commit().await.unwrap();
+        // Successful retry and an idempotent replay must preserve newer data,
+        // metadata and the newer GC-key version in the second transaction.
+        worker.handle_task(task.clone()).await.unwrap();
+        worker.handle_task(task.clone()).await.unwrap();
         let mut txn = client.begin_optimistic().await.unwrap();
         assert!(txn.get(marker).await.unwrap().is_none());
-        assert!(txn.get(gc_key).await.unwrap().is_none());
         assert_eq!(txn.batch_get(keys).await.unwrap().count(), 0);
+        for row in recreated {
+            assert_eq!(txn.get(row.0).await.unwrap(), Some(row.1));
+        }
+        txn.rollback().await.unwrap();
+
+        // After GC bookkeeping is gone, the allocator can reuse version zero.
+        // A stale dispatch must not interpret its unmarked data as garbage.
+        let (reused_data, reused_meta) = recreated_key(0);
+        let meta_key = KEY_ENCODER.encode_txnkv_meta_key(&key);
+        let mut txn = client.begin_optimistic().await.unwrap();
+        txn.delete(gc_key.clone()).await.unwrap();
+        txn.put(reused_data.clone(), b"reused".to_vec())
+            .await
+            .unwrap();
+        txn.put(meta_key.clone(), reused_meta.clone())
+            .await
+            .unwrap();
+        txn.commit().await.unwrap();
+        worker.handle_task(task).await.unwrap();
+        let mut txn = client.begin_optimistic().await.unwrap();
+        assert_eq!(
+            txn.get(reused_data).await.unwrap(),
+            Some(b"reused".to_vec())
+        );
+        assert_eq!(txn.get(meta_key).await.unwrap(), Some(reused_meta));
         txn.rollback().await.unwrap();
     }
 }

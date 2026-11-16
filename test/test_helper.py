@@ -22,6 +22,4 @@ if __name__ == '__main__':
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(LuaTest))
 
     runner = unittest.TextTestRunner(verbosity=2)
-    errors = runner.run(suite).errors
-    if len(errors) > 0:
-        sys.exit(1)
+    sys.exit(0 if runner.run(suite).wasSuccessful() else 1)

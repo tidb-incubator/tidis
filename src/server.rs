@@ -27,12 +27,15 @@ use async_std::prelude::StreamExt;
 use async_tls::TlsAcceptor;
 use rand::Rng;
 use slog::{debug, error, info, warn};
-use tokio::sync::{broadcast, mpsc, Mutex};
+use tokio::sync::{broadcast, mpsc, Mutex, Semaphore};
 use tokio::time::{self, Duration, Instant, MissedTickBehavior};
 
 use mlua::{HookTriggers, Lua};
 
-use crate::config::LOGGER;
+use crate::config::{
+    config_tls_handshake_timeout_ms_or_default, config_tls_max_concurrent_handshakes_or_default,
+    LOGGER,
+};
 
 use crate::client::Client;
 use tokio_util::task::LocalPoolHandle;
@@ -105,6 +108,8 @@ struct TlsListener {
     clients: Arc<Mutex<HashMap<u64, Arc<Mutex<Client>>>>>,
     tls_listener: TcpListener,
     tls_acceptor: TlsAcceptor,
+    limit_handshakes: Arc<Semaphore>,
+    handshake_timeout: Duration,
     tls_notify_shutdown: broadcast::Sender<()>,
     tls_shutdown_complete_rx: mpsc::Receiver<()>,
     tls_shutdown_complete_tx: mpsc::Sender<()>,
@@ -286,6 +291,10 @@ pub async fn run(
             topo_holder: topo_holder.clone(),
             clients: Arc::new(Mutex::new(HashMap::new())),
             tls_acceptor: tls_acceptor.unwrap(),
+            limit_handshakes: Arc::new(Semaphore::new(
+                config_tls_max_concurrent_handshakes_or_default(),
+            )),
+            handshake_timeout: Duration::from_millis(config_tls_handshake_timeout_ms_or_default()),
             tls_notify_shutdown,
             tls_shutdown_complete_tx,
             tls_shutdown_complete_rx,
@@ -343,6 +352,10 @@ pub async fn run(
             topo_holder: topo_holder.clone(),
             clients: Arc::new(Mutex::new(HashMap::new())),
             tls_acceptor: tls_acceptor.unwrap(),
+            limit_handshakes: Arc::new(Semaphore::new(
+                config_tls_max_concurrent_handshakes_or_default(),
+            )),
+            handshake_timeout: Duration::from_millis(config_tls_handshake_timeout_ms_or_default()),
             tls_notify_shutdown,
             tls_shutdown_complete_tx,
             tls_shutdown_complete_rx,
@@ -379,7 +392,6 @@ pub async fn run(
 
         drop(notify_shutdown);
         drop(shutdown_complete_tx);
-        shutdown_complete_rx.recv().await;
 
         let TlsListener {
             mut tls_shutdown_complete_rx,
@@ -387,8 +399,10 @@ pub async fn run(
             tls_notify_shutdown,
             ..
         } = tls_server;
+        // Cancel both listeners' tasks before waiting for either to drain.
         drop(tls_notify_shutdown);
         drop(tls_shutdown_complete_tx);
+        shutdown_complete_rx.recv().await;
         tls_shutdown_complete_rx.recv().await;
     } else {
         error!(LOGGER, "no listener enabled for tcp or tls");
@@ -536,53 +550,68 @@ impl TlsListener {
         let local_pool = LocalPoolHandle::new(local_pool_number);
 
         let mut incoming = self.tls_listener.incoming();
-        while let Some(stream) = incoming.next().await {
+        loop {
+            // Acquire before accepting so neither sockets nor queued handshake tasks
+            // can grow beyond the configured limit. Release as soon as TLS is ready.
+            let permit = self.limit_handshakes.clone().acquire_owned().await.unwrap();
+            let stream = match incoming.next().await {
+                Some(stream) => stream?,
+                None => return Ok(()),
+            };
+            let deadline = Instant::now() + self.handshake_timeout;
             let acceptor = self.tls_acceptor.clone();
-            let stream = stream?;
             let (kill_tx, kill_rx) = mpsc::channel(1);
-            let client = Client::new(stream.clone(), kill_tx);
-            let client_id = client.id();
-            let arc_client = Arc::new(Mutex::new(client));
-            self.clients
-                .lock()
-                .await
-                .insert(client_id, arc_client.clone());
+            // Subscribe and track completion before spawning, including tasks that
+            // have not started when the listener receives shutdown.
+            let mut shutdown = Shutdown::new(self.tls_notify_shutdown.subscribe(), kill_rx);
+            let shutdown_complete = self.tls_shutdown_complete_tx.clone();
+            let db = self.db_holder.db();
+            let topo = self.topo_holder.clone();
+            let clients = self.clients.clone();
+            let task_pool = local_pool.clone();
 
-            let local_addr = stream.local_addr().unwrap().to_string();
-            let peer_addr = stream.peer_addr().unwrap().to_string();
+            let local_addr = stream.local_addr()?.to_string();
+            let peer_addr = stream.peer_addr()?.to_string();
 
-            // start tls handshake
-            let handshake = acceptor.accept(stream);
-            // handshake is a future, await to get an encrypted stream back
-            let tls_stream = match handshake.await {
-                Ok(stream) => stream,
-                Err(e) => {
-                    error!(
-                        LOGGER,
-                        "{} -> {} handshake failed, {}",
-                        peer_addr,
-                        local_addr,
-                        e.to_string()
-                    );
-                    continue;
-                }
-            };
+            local_pool.spawn_pinned(move || async move {
+                // Keep the pool alive until shutdown has drained its tasks.
+                let _task_pool = task_pool;
+                let tls_stream = tokio::select! {
+                    biased;
+                    _ = shutdown.recv() => return,
+                    result = time::timeout_at(deadline, acceptor.accept(stream.clone())) => {
+                        match result {
+                            Ok(Ok(stream)) => stream,
+                            Ok(Err(err)) => {
+                                error!(LOGGER, "{} -> {} handshake failed, {}", peer_addr, local_addr, err);
+                                return;
+                            }
+                            Err(_) => {
+                                warn!(LOGGER, "{} -> {} handshake timed out", peer_addr, local_addr);
+                                return;
+                            }
+                        }
+                    }
+                };
+                drop(permit);
+                let client = Client::new(stream, kill_tx);
+                let client_id = client.id();
+                let arc_client = Arc::new(Mutex::new(client));
+                clients.lock().await.insert(client_id, arc_client.clone());
 
-            let mut handler = Handler {
-                db: self.db_holder.db(),
-                topo: self.topo_holder.clone(),
-                cur_client: arc_client.clone(),
-                clients: self.clients.clone(),
-                connection: Connection::new_tls(&local_addr, &peer_addr, tls_stream),
-                inner_txn: false,
-                queued_commands: vec![],
-                shutdown: Shutdown::new(self.tls_notify_shutdown.subscribe(), kill_rx),
-                authorized: !is_auth_enabled(),
-                lua: None,
-                _shutdown_complete: self.tls_shutdown_complete_tx.clone(),
-            };
-
-            local_pool.spawn_pinned(|| async move {
+                let mut handler = Handler {
+                    db,
+                    topo,
+                    cur_client: arc_client,
+                    clients,
+                    connection: Connection::new_tls(&local_addr, &peer_addr, tls_stream),
+                    inner_txn: false,
+                    queued_commands: vec![],
+                    shutdown,
+                    authorized: !is_auth_enabled(),
+                    lua: None,
+                    _shutdown_complete: shutdown_complete,
+                };
                 // Process the connection. If an error is encountered, log it.
                 CURRENT_TLS_CONNECTION_COUNTER.inc();
                 TOTAL_CONNECTION_PROCESSED.inc();
@@ -593,14 +622,16 @@ impl TlsListener {
                     .clients
                     .lock()
                     .await
-                    .remove(&handler.cur_client.lock().await.id());
+                    .remove(&client_id);
                 CURRENT_TLS_CONNECTION_COUNTER.dec();
             });
         }
-
-        Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "tls_tests.rs"]
+mod tls_tests;
 
 impl TopologyManager {
     async fn run(self) -> crate::Result<()> {

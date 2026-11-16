@@ -6,6 +6,7 @@ use slog::{self, Drain};
 use slog_term;
 use std::fmt;
 use std::fs::OpenOptions;
+use std::num::{NonZeroU64, NonZeroUsize};
 
 lazy_static! {
     pub static ref LOGGER: slog::Logger = slog::Logger::root(
@@ -52,6 +53,8 @@ struct Server {
     tls_cert_file: Option<String>,
     tls_auth_client: Option<bool>,
     tls_ca_cert_file: Option<String>,
+    tls_max_concurrent_handshakes: Option<NonZeroUsize>,
+    tls_handshake_timeout_ms: Option<NonZeroU64>,
     pd_addrs: Option<String>,
     instance_id: Option<String>,
     prometheus_listen: Option<String>,
@@ -247,6 +250,24 @@ pub fn config_tls_ca_cert_file_or_default() -> String {
     }
 
     "".to_owned()
+}
+
+pub fn config_tls_max_concurrent_handshakes_or_default() -> usize {
+    unsafe {
+        SERVER_CONFIG
+            .as_ref()
+            .and_then(|c| c.server.tls_max_concurrent_handshakes)
+            .map_or(128, NonZeroUsize::get)
+    }
+}
+
+pub fn config_tls_handshake_timeout_ms_or_default() -> u64 {
+    unsafe {
+        SERVER_CONFIG
+            .as_ref()
+            .and_then(|c| c.server.tls_handshake_timeout_ms)
+            .map_or(10_000, NonZeroU64::get)
+    }
 }
 
 pub fn config_pd_addrs_or_default() -> String {

@@ -518,7 +518,16 @@ In addition, the `1pc` and `async commit` options are helpful for better perform
 
 `Tidis` use `mlua` library to interpret lua scripts. We can use `EVAL/EVALSHA` to execute lua script with global transaction support, without caring about the `CROSSSLOT` error either.
 
-The lua script will be running in a new transaction context, so all read and writes in the lua script are guaranteed to be atomic.
+Standalone Lua scripts run in a new transaction context. Inside `MULTI`,
+`EVAL` and `EVALSHA` return `QUEUED` and execute in order within the shared
+transaction at `EXEC`. Scripts can read earlier queued writes, and later
+commands can read script writes. No queued writes are visible before `EXEC`;
+`DISCARD` drops them. Script lookup for `EVALSHA` also happens at `EXEC`.
+
+Tidis retains its existing all-or-nothing `EXEC` policy: an error response from
+a queued command or a Lua runtime error aborts and rolls back the entire
+transaction. This includes a missing script or a script returning an error
+reply, and differs from Redis's treatment of runtime errors inside `EXEC`.
 
 All lua script e2e test cases are located in [test/test_lua.py](https://github.com/tidb-incubator/tidis/blob/master/test/test_lua.py).
 

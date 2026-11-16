@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
+use mlua::Lua;
 use slog::{debug, error};
 use tokio::sync::Mutex;
 
 use crate::{
     config::LOGGER,
+    db::Db,
     tikv::{errors::REDIS_EXEC_ERR, get_txn_client},
     utils::{resp_array, resp_err, resp_invalid_arguments, resp_nil},
     Command, Connection, Frame,
@@ -18,7 +20,13 @@ impl Multi {
         Multi {}
     }
 
-    pub async fn exec(self, dst: &mut Connection, cmds: Vec<Command>) -> crate::Result<()> {
+    pub async fn exec(
+        self,
+        dst: &mut Connection,
+        cmds: Vec<Command>,
+        db: &Db,
+        lua: &Option<Lua>,
+    ) -> crate::Result<()> {
         let mut resp_arr = Vec::with_capacity(cmds.len());
 
         // create new txn
@@ -31,6 +39,8 @@ impl Multi {
 
         for cmd in cmds {
             let result = match cmd {
+                Command::Eval(cmd) => cmd.eval(txn_rc.clone(), false, db, lua).await,
+                Command::Evalsha(cmd) => cmd.eval(txn_rc.clone(), true, db, lua).await,
                 Command::Incr(mut cmd) => cmd.incr_by(txn_rc.clone(), true).await,
                 Command::IncrBy(mut cmd) => cmd.incr_by(txn_rc.clone(), true).await,
                 Command::Decr(mut cmd) => cmd.incr_by(txn_rc.clone(), false).await,

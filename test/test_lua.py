@@ -60,6 +60,94 @@ class LuaTest(unittest.TestCase):
         with self.assertRaisesRegex(Exception, "No matching script"):
             self.r.execute_command('evalsha', 'not-exist-sha', 0)
 
+    def test_multi_eval_discard(self):
+        script = "return redis.call('SET', KEYS[1], ARGV[1])"
+        sha = self.r.execute_command('SCRIPT', 'LOAD', script)
+        for command, source in (('EVAL', script), ('EVALSHA', sha)):
+            for original in (None, self.v1):
+                with self.subTest(command=command, original=original):
+                    self.r.delete(self.k1)
+                    if original is not None:
+                        self.r.set(self.k1, original)
+                    conn = self.r.connection_pool.get_connection('MULTI')
+                    try:
+                        conn.send_command('MULTI')
+                        self.assertEqual(conn.read_response(), 'OK')
+                        conn.send_command(command, source, 1, self.k1, self.v2)
+                        self.assertEqual(conn.read_response(), 'QUEUED')
+                        self.assertEqual(self.r.get(self.k1), original)
+                        conn.send_command('DISCARD')
+                        self.assertEqual(conn.read_response(), 'OK')
+                        self.assertEqual(self.r.get(self.k1), original)
+                    finally:
+                        conn.disconnect()
+                        self.r.connection_pool.release(conn)
+
+    def test_multi_eval_exec(self):
+        script = "return {redis.call('GET', KEYS[1]), redis.call('INCRBY', KEYS[1], ARGV[1])}"
+        sha = self.r.execute_command('SCRIPT', 'LOAD', script)
+        for command, source in (('EVAL', script), ('EVALSHA', sha)):
+            with self.subTest(command=command):
+                self.r.delete(self.k1)
+                conn = self.r.connection_pool.get_connection('MULTI')
+                try:
+                    conn.send_command('MULTI')
+                    self.assertEqual(conn.read_response(), 'OK')
+                    for args in (('SET', self.k1, '10'),
+                                 (command, source, 1, self.k1, '2'),
+                                 ('GET', self.k1)):
+                        conn.send_command(*args)
+                        self.assertEqual(conn.read_response(), 'QUEUED')
+                    self.assertIsNone(self.r.get(self.k1))
+                    conn.send_command('EXEC')
+                    self.assertEqual(conn.read_response(), ['OK', ['10', 12], '12'])
+                    self.assertEqual(self.r.get(self.k1), '12')
+                    conn.send_command('EVAL', "return redis.call('GET', KEYS[1])", 1, self.k1)
+                    self.assertEqual(conn.read_response(), '12')
+                finally:
+                    conn.disconnect()
+                    self.r.connection_pool.release(conn)
+
+    def test_multi_eval_error_rollback(self):
+        scripts = [
+            ("redis.call('SET', KEYS[1], ARGV[1]); error('script failed')",
+             ('SET', self.k3, self.v3)),
+            ("redis.call('SET', KEYS[1], ARGV[1]); return redis.error_reply('ERR script failed')",
+             ('SET', self.k3, self.v3)),
+            ("return redis.call('SET', KEYS[1], ARGV[1])",
+             ('LPUSH', self.k2, self.v3)),
+        ]
+        commands = [('EVALSHA', 'missing-script', ('SET', self.k3, self.v3))]
+        for script, later_command in scripts:
+            commands.extend([
+                ('EVAL', script, later_command),
+                ('EVALSHA', self.r.execute_command('SCRIPT', 'LOAD', script), later_command),
+            ])
+        for command, source, later_command in commands:
+            with self.subTest(command=command, source=source):
+                self.r.set(self.k1, self.v1)
+                self.r.delete(self.k2, self.k3)
+                conn = self.r.connection_pool.get_connection('MULTI')
+                try:
+                    conn.send_command('MULTI')
+                    self.assertEqual(conn.read_response(), 'OK')
+                    for args in (('SET', self.k2, self.v2),
+                                 (command, source, 1, self.k1, self.v3),
+                                 later_command):
+                        conn.send_command(*args)
+                        self.assertEqual(conn.read_response(), 'QUEUED')
+                    conn.send_command('EXEC')
+                    with self.assertRaises(redis.exceptions.ExecAbortError):
+                        conn.read_response()
+                    self.assertEqual(self.r.mget(self.k1, self.k2, self.k3), [self.v1, None, None])
+                    sock = conn._sock
+                    conn.send_command('PING')
+                    self.assertEqual(conn.read_response(), 'PONG')
+                    self.assertIs(conn._sock, sock)
+                finally:
+                    conn.disconnect()
+                    self.r.connection_pool.release(conn)
+
     def test_integer_conversion(self):
         script = '''
         redis.call('set', KEYS[1], 0)

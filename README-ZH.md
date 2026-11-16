@@ -499,7 +499,13 @@ tls_ca_cert_file = "path/ca.crt"
 
 `Tidis` 使用 `mlua` 库来转译 lua 脚本。 我们可以使用 `EVAL/EVALSHA` 来执行在全局事务支持下的 lua 脚本。同样我们不会遇到使用 `Redis Cluster` 时会遇到的 `CROSSSLOT` 错误。
 
-Lua 脚本将会在一个新的事务上下文中运行，脚本中所有的读、写操作都是可以保证原子性。
+独立执行的 Lua 脚本使用新的事务上下文。在 `MULTI` 中，`EVAL` 和 `EVALSHA`
+返回 `QUEUED`，并在 `EXEC` 时按顺序使用同一个共享事务执行。脚本可以读取前面排队命令的写入，
+后续命令也可以读取脚本的写入。`EXEC` 前排队的写入对外不可见，`DISCARD` 会丢弃它们。
+`EVALSHA` 也在 `EXEC` 时查找缓存脚本。
+
+Tidis 保留现有的 `EXEC` 全部成功或全部回滚策略：命令错误（包括脚本不存在、Lua 运行错误、
+脚本返回错误响应）会中止并回滚整个事务。此行为与 Redis 在 `EXEC` 中处理运行错误的方式不同。
 
 所有 lua 脚本的端到端测试用例位于 [test/test_lua.py](https://github.com/tidb-incubator/tidis/blob/master/test/test_lua.py) 。
 

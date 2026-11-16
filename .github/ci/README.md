@@ -18,6 +18,12 @@ needed by the locked gRPC build. All dependency-resolving Cargo commands use
 `--locked`; format checking does not resolve dependencies. Git dependencies are
 public and do not require a private repository token.
 
+Keep `Cargo.lock` at format version 3, which the pinned Cargo can read. The
+compatible dependency refresh selects `bytes 1.12.1`, `sha1 0.10.7`, and
+`digest 0.10.7` while retaining the locked TiKV fork revision. Avoid unrestricted
+`cargo update`: broader dependency or toolchain changes need separate
+compatibility validation.
+
 The native build in GitHub Actions run 43728224569 failed under floating GNU
 15.2.0/CMake 4 at c-ares' old minimum-policy declaration. CI installs the Ubuntu
 22.04 GCC 12 packages and checks both compiler versions before building, and

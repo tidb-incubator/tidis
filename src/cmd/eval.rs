@@ -10,6 +10,7 @@ use crate::{Connection, Frame, Parse};
 
 use bytes::Bytes;
 use mlua::Lua;
+use tikv_client::Transaction;
 use tokio::sync::Mutex;
 
 use crate::cmd::Invalid;
@@ -79,7 +80,7 @@ impl Eval {
         db: &Db,
         lua: &Option<Lua>,
     ) -> crate::Result<()> {
-        let response = self.eval(is_sha, db, lua).await?;
+        let response = self.eval(None, is_sha, db, lua).await?;
 
         debug!(
             LOGGER,
@@ -94,7 +95,13 @@ impl Eval {
         Ok(())
     }
 
-    async fn eval(&self, is_sha: bool, db: &Db, lua: &Option<Lua>) -> AsyncResult<Frame> {
+    pub async fn eval(
+        &self,
+        txn: Option<Arc<Mutex<Transaction>>>,
+        is_sha: bool,
+        db: &Db,
+        lua: &Option<Lua>,
+    ) -> AsyncResult<Frame> {
         if !self.valid {
             return Ok(resp_invalid_arguments());
         }
@@ -103,10 +110,12 @@ impl Eval {
             return Ok(resp_err(REDIS_NOT_SUPPORTED_ERR));
         }
 
-        // create new txn
-        let client = get_txn_client()?;
-        let txn = client.begin().await?;
-        let txn_rc = Arc::new(Mutex::new(txn));
+        // EXEC owns the shared transaction; standalone scripts own a new one.
+        let shared_txn = txn.is_some();
+        let txn_rc = match txn {
+            Some(txn) => txn,
+            None => Arc::new(Mutex::new(get_txn_client()?.begin().await?)),
+        };
 
         let ctx = LuaCommandCtx::new(Some(txn_rc.clone()), lua);
 
@@ -119,11 +128,15 @@ impl Eval {
         };
         match resp {
             Ok(r) => {
-                txn_rc.lock().await.commit().await?;
+                if !shared_txn {
+                    txn_rc.lock().await.commit().await?;
+                }
                 Ok(r)
             }
             Err(e) => {
-                txn_rc.lock().await.rollback().await?;
+                if !shared_txn {
+                    txn_rc.lock().await.rollback().await?;
+                }
                 Ok(resp_err(e))
             }
         }

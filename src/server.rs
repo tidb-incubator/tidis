@@ -819,6 +819,11 @@ impl Handler {
 
                                     self.lua = Some(lua);
                                 }
+                                if self.inner_txn {
+                                    self.queued_commands.push(cmd);
+                                    self.connection.write_frame(&resp_queued()).await?;
+                                    continue;
+                                }
                             }
                             Command::Multi(_) => {
                                 if self.inner_txn {
@@ -839,7 +844,12 @@ impl Handler {
                                 } else {
                                     self.inner_txn = false;
                                     c.clone()
-                                        .exec(&mut self.connection, self.queued_commands.clone())
+                                        .exec(
+                                            &mut self.connection,
+                                            std::mem::take(&mut self.queued_commands),
+                                            &self.db,
+                                            &self.lua,
+                                        )
                                         .await?;
                                 }
 

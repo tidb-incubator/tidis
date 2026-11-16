@@ -1,0 +1,25 @@
+memory-usage-limit = "1GB"
+
+[storage]
+api-version = 1
+reserve-space = "0MB"
+
+[storage.block-cache]
+capacity = "128MB"
+
+# Keep the disposable fixture's engine file budgets below the CI nofile limit.
+[rocksdb]
+max-open-files = 1024
+
+[raftdb]
+max-open-files = 1024
+
+[server]
+grpc-concurrency = 2
+
+[readpool.unified]
+max-thread-count = 2
+
+[raftstore]
+store-pool-size = 1
+apply-pool-size = 1
